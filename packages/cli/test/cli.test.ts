@@ -141,14 +141,25 @@ describe("--agent-md", () => {
 });
 
 describe("codeflow check", () => {
-  it("says it needs the analyzer and exits non-zero", async () => {
+  it("fails a workspace whose generated artifacts were never produced", async () => {
     const root = await tempDir();
     await init({ cwd: root });
-    const { err, io } = captureIo();
+    const { out, io } = captureIo();
 
-    // Not implemented must never be mistaken for "checked, nothing wrong".
+    // `init` scaffolds but never writes generated/ — that is `generate`'s job, so
+    // a workspace checked before generating is stale, not silently fine.
     expect(await run(["check", "--cwd", root], io)).toBe(1);
-    expect(err.join("\n")).toContain("requires analyzer (coming)");
+    expect(out.join("\n")).toContain("stale-generated-artifacts");
+  });
+
+  it("passes once the workspace has been generated", async () => {
+    const root = await tempDir();
+    await init({ cwd: root });
+    await generate({ cwd: root });
+    const { out, io } = captureIo();
+
+    expect(await run(["check", "--cwd", root], io)).toBe(0);
+    expect(out.join("\n")).toContain("ok — 0 flows checked");
   });
 });
 

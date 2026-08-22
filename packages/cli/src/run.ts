@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CodeFlowError } from "@codeflow/core";
 import { flagBoolean, flagString, parseArgs } from "./args.js";
-import { check } from "./commands/check.js";
+import { check, checkToJson, formatCheck } from "./commands/check.js";
 import { generate } from "./commands/generate.js";
 import { init } from "./commands/init.js";
 import { CliError } from "./errors.js";
@@ -35,9 +35,12 @@ Usage
       --agent-md also prints the CLAUDE.md / AGENTS.md section that points an
       agent at those files.
 
-  codeflow check [--cwd <dir>]
-      Analyze every flow in flows/ and report workspace-wide diagnostics.
-      Not implemented yet — it needs the semantic analyzer.
+  codeflow check [--json] [--cwd <dir>]
+      Analyze every flow in flows/ against the current registry and report
+      workspace-wide diagnostics, flag generated/*.d.ts that no longer match
+      the registry, and print which flow uses which library function.
+      Exits 1 on any error diagnostic or stale artifact.
+      --json prints the same result machine-readably for CI.
 
   codeflow init [dir] [--force]
       Scaffold the standard workspace layout: codeflow.config.ts, flows/, lib/,
@@ -45,6 +48,7 @@ Usage
 
 Options
   --cwd, -C <dir>   Run as if from <dir> (default: the current directory)
+  --json            Machine-readable output (check only)
   --force, -f       Overwrite existing files (init only)
   --help, -h        Show this help
   --version, -v     Show the version`;
@@ -111,8 +115,15 @@ export async function run(argv: readonly string[], io: Io = defaultIo): Promise<
         return 0;
       }
       case "check": {
-        await check(cwd === undefined ? {} : { cwd });
-        return 0;
+        const result = await check(cwd === undefined ? {} : { cwd });
+        if (flagBoolean(args, "json")) {
+          io.out(JSON.stringify(checkToJson(result), null, 2));
+        } else {
+          for (const line of formatCheck(result)) io.out(line);
+        }
+        // Diagnostics are not CLI failures — the command ran fine and found
+        // something. Exit 1 anyway: CI must not treat "flows are broken" as ok.
+        return result.ok ? 0 : 1;
       }
       default:
         io.err(`codeflow: unknown command "${args.command}"\n`);

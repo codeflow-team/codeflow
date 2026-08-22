@@ -11,6 +11,13 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 - **Quyết định specs t tự đưa** (theo phân tích của agent, t đồng ý và đã sửa 04 §1.4): hidden-call rule chỉ áp cho `await` + tool call (bắt rễ `tools`), KHÔNG áp cho sync library/local call trong expression — vì áp nguyên văn sẽ mâu thuẫn chính §2.2b/§2.6, và mục đích rule là side-effect visibility (sync predicate không có side-effect tầng flow).
 - Giới hạn thừa nhận (đã document trong code, đúng specs): mutation ordering không model; nested try terminals chỉ route tới finally trong cùng, chưa transitively ra finally ngoài.
 
+## Update ~05:20 — Phase 7 (E2E) nghiệm thu ✅ (commit `ba13a4a`) — 12/12 PASS
+
+- E2e Sonnet chạy đủ 12 mục checklist theo 11 §3.5: **12/12 PASS, không bug chặn release**. Report: `e2e/report.md`, 31 screenshots ở `e2e/screenshots/` (19MB, để ngoài git).
+- ⚠️ **Claude in Chrome không dùng được cho subagent khi m ngủ**: extension yêu cầu chọn 1 trong 3 browser đang kết nối qua hộp thoại tương tác → agent fallback sang chrome-devtools MCP (vẫn Chrome thật, evidence đầy đủ). Nếu m muốn chạy đúng qua Claude in Chrome extension: lúc m thức, bảo t chạy lại — chỉ cần m chọn browser 1 lần.
+- 2 ghi nhận phụ vào backlog (không block): cursor cột 1 chọn container cha thay vì statement; inspector inputs thiếu id/name (a11y).
+- **Gap cuối đang đóng** (agent Opus đang chạy): `@codeflow/mcp` adapter (MVP scope 08 §1) + `codeflow check` (đang là stub). Xong 2 cái này là MVP đủ 100% theo specs.
+
 ## Update ~04:50 — Phase 6b (EDITING UI) nghiệm thu ✅ (commit `5f76f38`) → thả Phase 7 e2e
 
 - Editing đầy đủ trên UI: inspector Apply (multi-field, 1 patchNode), Preview diff, palette insert (needs-configuration flow), delete 2-bước + dependency error, đổi tool + warnings, Edit Code modal, conflict flow (Monaco edit → patch-conflict → Re-analyze → retry OK), `{{ }}` trong string literal bị từ chối đúng specs rồi cho convert tường minh.

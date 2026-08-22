@@ -10,9 +10,10 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createCodeFlow, type Registry } from "@codeflow/core";
+import type { FileFunctionLibraryStore } from "../library/file-store.js";
 import { agentMarkdown } from "../agent-md.js";
 import { loadWorkspace, registryFromConfig, type Workspace } from "../config.js";
-import { FileFunctionLibraryStore } from "../library/file-store.js";
+import { createLibraryStore } from "../library/store.js";
 import { FLOW_STYLE_FILENAME, FLOW_STYLE_MD } from "../prompts.js";
 
 export interface GenerateOptions {
@@ -35,6 +36,8 @@ export interface WrittenFile {
 export interface GenerateResult {
   workspace: Workspace;
   registry: Registry;
+  /** The workspace library store, with the `isInUse` guard of 03 §11 attached. */
+  store: FileFunctionLibraryStore;
   registryHash: string;
   toolCount: number;
   /** Names of the functions found in `lib/`, in registry order. */
@@ -77,10 +80,11 @@ export async function generate(options: GenerateOptions = {}): Promise<GenerateR
 
   // Functions live in `lib/` — the file is the storage (05 §4). They are added on
   // top of anything the config declared, and win on a name clash for that reason.
-  const store = new FileFunctionLibraryStore({
-    dir: workspace.libDir,
-    modulePath: workspace.libModulePath,
-  });
+  //
+  // The store carries the `isInUse` guard of 03 §11 (built lazily from `flows/`),
+  // so a host that reaches for `result` and then removes a function gets the
+  // usage check for free; generating itself never asks the question.
+  const store = createLibraryStore(workspace);
   const functions = await store.list();
   for (const fn of functions) registry.registerFunction(fn, { overwrite: true });
 
@@ -116,6 +120,7 @@ export async function generate(options: GenerateOptions = {}): Promise<GenerateR
   const result: GenerateResult = {
     workspace,
     registry,
+    store,
     registryHash: registry.registryHash(),
     toolCount: registry.listTools().length,
     libraryFunctions: functions.map((fn) => fn.name),

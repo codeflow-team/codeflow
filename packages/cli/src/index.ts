@@ -6,12 +6,14 @@
  * pass its CLI does without shelling out.
  *
  * Implemented: the file-based `FunctionLibraryStore` over the workspace `lib/`,
- * `codeflow generate` (+ `--agent-md`), `codeflow init`.
- * Waiting on the analyzer (phase 2 of 08-mvp.md §2): `codeflow check`.
+ * `codeflow generate` (+ `--agent-md`), `codeflow init`, and `codeflow check`
+ * (workspace-wide analysis + the usage index behind the library store's guard).
  */
 
 export { FileFunctionLibraryStore } from "./library/file-store.js";
 export type { FileFunctionLibraryStoreOptions } from "./library/file-store.js";
+export { createLibraryStore } from "./library/store.js";
+export type { CreateLibraryStoreOptions } from "./library/store.js";
 export {
   MARKER as FUNCTION_FILE_MARKER,
   hasFunctionHeader,
@@ -42,8 +44,31 @@ export { generate } from "./commands/generate.js";
 export type { GenerateOptions, GenerateResult, WrittenFile } from "./commands/generate.js";
 export { init } from "./commands/init.js";
 export type { InitOptions, InitResult } from "./commands/init.js";
-export { check, CHECK_NOTICE } from "./commands/check.js";
-export type { CheckOptions } from "./commands/check.js";
+export { check, checkToJson, formatCheck, GENERATED_ARTIFACTS } from "./commands/check.js";
+export type {
+  CheckOptions,
+  CheckResult,
+  DiagnosticCounts,
+  FlowCheck,
+  StaleArtifact,
+} from "./commands/check.js";
+
+export {
+  buildUsageIndex,
+  buildUsageIndexFrom,
+  findFlowFiles,
+  libraryImportsOf,
+  libraryModulePaths,
+  loadFlows,
+  FLOW_SUFFIX,
+} from "./usage.js";
+export type {
+  BuildUsageIndexOptions,
+  FlowFile,
+  FunctionUsage,
+  LoadedFlow,
+  UsageIndex,
+} from "./usage.js";
 
 export { agentMarkdown, AGENT_MD_BEGIN, AGENT_MD_END } from "./agent-md.js";
 export { FLOW_STYLE_MD, FLOW_STYLE_FILENAME } from "./prompts.js";

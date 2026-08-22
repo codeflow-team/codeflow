@@ -23,6 +23,14 @@ export interface TsSyntaxTree extends SyntaxTree {
   readonly sourceFile: SourceFile;
 }
 
+/** One syntactic error, in offsets — line/column is the caller's to derive. */
+export interface ParseError {
+  message: string;
+  /** 0-based offset, or undefined when the error has no position. */
+  start: number | undefined;
+  length: number | undefined;
+}
+
 export interface TsMorphParserOptions {
   /** Document path used for source files parsed without an explicit path. */
   file?: string;
@@ -66,6 +74,24 @@ export class TsMorphParser implements Parser {
     const path = file.startsWith("/") ? file : `/${file}`;
     const sourceFile = this.project.createSourceFile(path, source, { overwrite: true });
     return { file, content: source, sourceFile };
+  }
+
+  /**
+   * Syntactic errors of a tree this parser produced — the "does it parse" half
+   * of the L0 gate (10 §5).
+   *
+   * Syntactic only, never semantic: the project runs with `noLib`/`noResolve`
+   * (a flow's imports point at artifacts that exist in the workspace, not here),
+   * so semantic diagnostics would be noise. Type-checking, when a validation
+   * environment has one, is the host's to add (10 §5).
+   */
+  syntaxErrors(tree: TsSyntaxTree): ParseError[] {
+    const program = this.project.getProgram().compilerObject;
+    return program.getSyntacticDiagnostics(tree.sourceFile.compilerNode).map((diagnostic) => ({
+      message: ts.flattenDiagnosticMessageText(diagnostic.messageText, " "),
+      start: diagnostic.start,
+      length: diagnostic.length,
+    }));
   }
 
   /** MVP: full re-parse. `previous` and `changes` are accepted for contract parity. */

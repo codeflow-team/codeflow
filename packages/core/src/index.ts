@@ -13,6 +13,7 @@ export * from "./mapper/index.js";
 export * from "./analyzer/index.js";
 export * from "./patcher/index.js";
 export * from "./diff/index.js";
+export * from "./generation/index.js";
 
 export { InMemoryFunctionLibraryStore } from "./library/in-memory-store.js";
 export type { InMemoryFunctionLibraryStoreOptions } from "./library/in-memory-store.js";

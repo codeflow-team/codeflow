@@ -11,6 +11,8 @@
  * its copy without the CLI stomping on it.
  */
 
+import { FLOW_STYLE_PROMPT } from "@codeflow/core";
+
 export const FLOW_STYLE_FILENAME = "flow-style.md";
 
 export const FLOW_STYLE_MD = `# Flow style guide
@@ -56,26 +58,7 @@ export default async function flow(
 
 ## Rules
 
-1. **One step, one statement.** Every tool call is its own \`await\` statement at the
-   top level of the flow body, or inside an \`if\` / \`for\` / \`try\` block.
-2. **Never hide a call inside an expression.** Not in a condition
-   (\`if (await tools.x.y())\` — hoist it to \`const ok = await tools.x.y()\` first), not
-   as an argument to another call, not inside a callback
-   (\`Promise.all(prs.map(...))\` — use \`for...of\`, or \`Promise.all([...])\` with an
-   array literal of awaited calls).
-3. **Name your results.** Assign to a \`const\` with a meaningful name — the variable
-   name becomes the label of the data edge in the graph.
-4. **Extract complex conditions** into a named function with a descriptive name
-   (\`isAuthChange\`) instead of a long inline expression: it becomes a readable node.
-5. **Extract complex data transformations** into a named function too, instead of
-   scattering the logic across many statements.
-6. **Keep \`try\`/\`catch\` narrow.** Wrap the group of steps that can actually fail —
-   one tool call, or a few adjacent ones — never the whole flow body. The narrower
-   the catch, the more readable the graph.
-7. **Every \`while\` needs a visible stopping condition** — a counter or attempt limit
-   updated in the body. If the bound cannot be recognised, you get a warning.
-8. **\`return\` / \`break\` / \`continue\`** are fine for guards and early exits. Do not
-   use recursion in the flow body; wrap it in a named function instead.
+${FLOW_STYLE_PROMPT}
 
 ## What projects to a node
 

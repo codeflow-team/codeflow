@@ -376,13 +376,17 @@ function emitCodeNode(ctx: AnalysisContext, frame: Frame, run: readonly RunEntry
     mapping,
   );
   for (const entry of run) {
+    // Positioned on the call itself, not on the whole code node: a merged run can
+    // span many lines, and a reader — human or AI — has to be sent to the exact
+    // expression to hoist (10 §5 wants diagnostics that are *fixable*). The
+    // semantic path stays the node's, so the diagnostic still belongs to it.
     for (const hidden of entry.classification.hidden) {
       diagnose(
         ctx,
         "warning",
         "hidden-call-in-expression",
         `\`${hidden.getText().replace(/\s+/g, " ").slice(0, 80)}\` is awaited/called inside an expression — hoist it into its own \`const\` so it becomes a node (04 §1.4).`,
-        mapping,
+        mappingForNode(ctx.file, ctx.sourceFile, hidden, semanticPath),
       );
     }
     for (const optional of entry.classification.optionalTools) {
@@ -391,7 +395,7 @@ function emitCodeNode(ctx: AnalysisContext, frame: Frame, run: readonly RunEntry
         "warning",
         "unsupported-optional-chaining",
         `Optional chaining on \`tools\` (\`${optional.getText().replace(/\s+/g, " ").slice(0, 80)}\`) is not supported — the statement is kept as custom code (01 §2).`,
-        mapping,
+        mappingForNode(ctx.file, ctx.sourceFile, optional, semanticPath),
       );
     }
   }

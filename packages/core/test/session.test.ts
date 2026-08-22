@@ -8,6 +8,29 @@ import { generateToolsDts } from "../src/codegen/tools-dts.js";
 import { InMemoryFunctionLibraryStore } from "../src/library/in-memory-store.js";
 import { createSampleRegistry } from "./fixtures.js";
 
+/** The canonical flow of 01 §1 — the one the whole spec set is written around. */
+const CANONICAL_FLOW = `import type { Tools } from "../generated/tools";
+import { isAuthChange } from "@flows/lib";
+
+export default async function flow(
+  input: { repository: string },
+  tools: Tools
+) {
+  const prs = await tools.github.getNewPRs({ repo: input.repository });
+
+  for (const pr of prs) {
+    const files = await tools.github.getFiles({ pr });
+
+    if (files.some(isAuthChange)) {
+      await tools.slack.send({
+        channel: "#security",
+        message: \`Security PR: \${pr.title}\`
+      });
+    }
+  }
+}
+`;
+
 describe("session state", () => {
   it("keeps the registry and exposes its hash", () => {
     const registry = createSampleRegistry();
@@ -45,12 +68,28 @@ describe("codegen is available in phase 1", () => {
   });
 });
 
-describe("later phases are stubs, not lies", () => {
+describe("generation surface (phase 5)", () => {
   const session = createCodeFlow({ registry: createSampleRegistry() });
 
-  it("validate throws until the analyzer lands (phase 2)", async () => {
-    await expect(session.validate("")).rejects.toThrow("not implemented (phase 2)");
+  it("validate scores a source without touching the session", async () => {
+    const result = await session.validate(CANONICAL_FLOW);
+    expect(result.level).toBe("L2");
+    expect(session.getGraph()).toBeNull();
+    expect(session.lastChanges()).toEqual([]);
   });
+
+  it("buildGenerationContext ships the generated artifacts", async () => {
+    const context = await session.buildGenerationContext();
+    expect(context.files.map((file) => file.path)).toEqual([
+      "generated/tools.d.ts",
+      "generated/lib.d.ts",
+    ]);
+    expect(context.estimatedTokens).toBeGreaterThan(0);
+  });
+});
+
+describe("later phases are stubs, not lies", () => {
+  const session = createCodeFlow({ registry: createSampleRegistry() });
 
   it("patchNode refuses before anything has been analyzed", async () => {
     // The patch engine landed in phase 4; without a graph there is no node to
@@ -60,7 +99,4 @@ describe("later phases are stubs, not lies", () => {
     );
   });
 
-  it("buildGenerationContext throws until the context builder lands (phase 5)", async () => {
-    await expect(session.buildGenerationContext()).rejects.toThrow("not implemented (phase 5)");
-  });
 });

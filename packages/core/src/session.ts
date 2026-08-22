@@ -4,13 +4,14 @@
  * A session holds the registry (+ its hash), the parser/project kept warm, and
  * the most recent graph — the basis for identity continuity (03 §5.0).
  *
- * Phase 1 implements the registry and codegen halves, Phase 2 the analyzer,
- * Phase 3 identity continuity and the graph diff. The patcher and the
- * generation-context builder land in later phases per the build order (08 §2);
- * their methods throw until then rather than returning a plausible lie.
+ * Built in the order of 08 §2: registry and codegen (phase 1), the analyzer
+ * (2), identity continuity and the graph diff (3), the patch engine (4), and
+ * the AI generation surface — `buildGenerationContext` / `validate` (5).
  */
 
-import { CodeFlowError, notImplemented } from "./errors.js";
+import { CodeFlowError } from "./errors.js";
+import { buildGenerationContext } from "./generation/context.js";
+import { validateFlowSource, type ValidateFlowOptions } from "./generation/validate.js";
 import { computePatch } from "./patcher/patch.js";
 import { generateLibDts, type GenerateLibDtsOptions } from "./codegen/lib-dts.js";
 import { generateToolsDts, type GenerateToolsDtsOptions } from "./codegen/tools-dts.js";
@@ -73,7 +74,9 @@ export interface CodeFlowSession {
     changes: Record<string, unknown>,
     options?: PatchNodeOptions,
   ): Promise<PatchResult>;
-  validate(source: string): Promise<ValidationResult>;
+  /** Score AI output against the conformance ladder (10 §5). Never mutates the session. */
+  validate(source: string, options?: ValidateFlowOptions): Promise<ValidationResult>;
+  /** Everything the AI needs to see to write a flow against this registry (10 §1). */
   buildGenerationContext(options?: BuildGenerationContextOptions): Promise<GenerationContext>;
 
   /** Derived artifacts — `generated/tools.d.ts` and `generated/lib.d.ts` (05 §2). */
@@ -159,8 +162,22 @@ class Session implements CodeFlowSession {
     return graph;
   }
 
-  async validate(_source: string): Promise<ValidationResult> {
-    throw notImplemented("CodeFlowSession.validate", 2);
+  /**
+   * Score `source` on the conformance ladder of 10 §5 — the check a host runs on
+   * AI output before showing it to anyone.
+   *
+   * Deliberately side-effect free: the session's graph, identity continuity and
+   * diff are left exactly as they were. Validation answers "is this code good
+   * enough", not "this is the flow we are now editing"; a host that accepts the
+   * result calls `analyze` (or `patchNode`) afterwards.
+   */
+  async validate(source: string, options: ValidateFlowOptions = {}): Promise<ValidationResult> {
+    const { level, diagnostics } = validateFlowSource(source, this.registry, {
+      parser: this.tsParser,
+      ...(this.lastOptions.file === undefined ? {} : { file: this.lastOptions.file }),
+      ...options,
+    });
+    return { level, diagnostics };
   }
 
   /**
@@ -263,9 +280,9 @@ class Session implements CodeFlowSession {
   }
 
   async buildGenerationContext(
-    _options?: BuildGenerationContextOptions,
+    options: BuildGenerationContextOptions = {},
   ): Promise<GenerationContext> {
-    throw notImplemented("CodeFlowSession.buildGenerationContext", 5);
+    return buildGenerationContext(this.registry, options);
   }
 
   generateToolsDts(options: GenerateToolsDtsOptions = {}): string {

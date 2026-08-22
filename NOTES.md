@@ -11,6 +11,19 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 - **Quyết định specs t tự đưa** (theo phân tích của agent, t đồng ý và đã sửa 04 §1.4): hidden-call rule chỉ áp cho `await` + tool call (bắt rễ `tools`), KHÔNG áp cho sync library/local call trong expression — vì áp nguyên văn sẽ mâu thuẫn chính §2.2b/§2.6, và mục đích rule là side-effect visibility (sync predicate không có side-effect tầng flow).
 - Giới hạn thừa nhận (đã document trong code, đúng specs): mutation ordering không model; nested try terminals chỉ route tới finally trong cùng, chưa transitively ra finally ngoài.
 
+## Update ~02:50 — Phase 4 (PATCH ENGINE) nghiệm thu ✅ (commit `5567457`) — VÒNG LÕI KHÉP KÍN 🎉
+
+- Patch engine xong: **814 core tests** (897 toàn workspace), 30 edit cases trên 16 fixtures, transactional (fail → source không đổi 1 byte), KHÔNG dùng ts-morph reprint (chỉ thay text range nhỏ nhất, style đọc từ source).
+- **ACCEPTANCE TEST CHÍNH THỨC CỦA MVP (08 §4) PASS** — t chạy live từ dist: đổi channel → đúng 1 dòng đổi, patch = `"#security"`→`"#engineering"`, sibling GIỐNG HỆT ngay dưới không bị đụng, MỌI node giữ id, round-trip idempotent, template literal nguyên vẹn. Đây là tiêu chí "project validated về mặt kỹ thuật" trong specs — ĐẠT.
+- Encoding changes: field value = string thô (same-form) hoặc {kind: literal|expression|template|remove}; ops $condition/$iterable/$code/$tool/$delete/$insert. Bare expression + string thô bị TỪ CHỐI (bắt kind tường minh) — chống đổi kind ngầm, đúng 06 §3.
+- Giới hạn ghi nhận: statement chèn mới luôn 1 dòng; đổi tool qua alias bị từ chối (nói rõ thay vì đoán); xóa positional arg của function node bị từ chối.
+
+## Update ~02:55 — thả song song Phase 5 + Phase 6b (2 phase áp chót)
+
+- **Phase 5** (Opus, core): buildGenerationContext + validate L0/L1/L2 + **AI CONFORMANCE EVAL CHẠY THẬT** với `stealth/ox-alpha`: 6 intents phủ semantics MVP, vòng generate→validate→feed-diagnostics-retry đúng 10 §5, kết quả lưu test/ai/results/.
+- **Phase 6b** (Opus, react): bật editing trên UI — inspector Apply qua patchNode, palette insert, delete + dependency error, đổi tool, edit code node, diff preview — verify trong browser thật.
+- Sau đó chỉ còn Phase 7: e2e Sonnet + Claude in Chrome.
+
 ## Update ~02:15 — Phase 6a (REACT UI + DEMO) nghiệm thu ✅ (commit `b10d54c`)
 
 - `@codeflow/react` xong: canvas React Flow v12 + ELK hierarchical (loop/try là container thật), inspector với `{{ }}` display, Monaco sync 2 chiều, diagnostics panel, 3 mức progressive disclosure, light/dark. 37 tests + build sạch (t verify lại).

@@ -1,0 +1,93 @@
+{
+  "startedAt": "2026-08-22T19:30:49.136Z",
+  "model": "stealth/ox-alpha",
+  "registryVersion": 1,
+  "options": {
+    "intents": [
+      "parallel-digest"
+    ],
+    "repeat": 3,
+    "maxRetries": 2,
+    "target": "L1",
+    "examples": true,
+    "label": "parallel-recheck",
+    "from": ""
+  },
+  "rates": {
+    "total": 3,
+    "l0": 3,
+    "l1": 3,
+    "l2": 3
+  },
+  "results": [
+    {
+      "intent": "parallel-digest#1",
+      "covers": [
+        "Promise.all array literal",
+        "parallel + merge",
+        "library function"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { formatDigest } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { repository: string; jql: string; recipient: string },\n  tools: Tools\n) {\n  const [stats, issues, activity] = await Promise.all([\n    tools.github.getRepoStats({ repo: input.repository }),\n    tools.jira.searchIssues({ jql: input.jql }),\n    tools.slack.getChannelActivity({ channel: \"#engineering\" })\n  ]);\n\n  const digest = formatDigest(stats, issues, activity);\n\n  await tools.email.send({\n    to: input.recipient,\n    subject: `Weekly digest: ${input.repository}`,\n    body: digest\n  });\n\n  return { delivered: true };\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 60815
+        }
+      ],
+      "intentId": "parallel-digest"
+    },
+    {
+      "intent": "parallel-digest#2",
+      "covers": [
+        "Promise.all array literal",
+        "parallel + merge",
+        "library function"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { formatDigest } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { repository: string; jql: string; recipient: string },\n  tools: Tools\n) {\n  const [stats, issues, activity] = await Promise.all([\n    tools.github.getRepoStats({ repo: input.repository }),\n    tools.jira.searchIssues({ jql: input.jql }),\n    tools.slack.getChannelActivity({ channel: \"#engineering\" })\n  ]);\n\n  const digest = formatDigest(stats, issues, activity);\n\n  await tools.email.send({\n    to: input.recipient,\n    subject: `Weekly digest: ${input.repository}`,\n    body: digest\n  });\n\n  return { sentTo: input.recipient };\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 47953
+        }
+      ],
+      "intentId": "parallel-digest"
+    },
+    {
+      "intent": "parallel-digest#3",
+      "covers": [
+        "Promise.all array literal",
+        "parallel + merge",
+        "library function"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { formatDigest } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { repository: string; jql: string; recipient: string },\n  tools: Tools\n) {\n  const [stats, issues, activity] = await Promise.all([\n    tools.github.getRepoStats({ repo: input.repository }),\n    tools.jira.searchIssues({ jql: input.jql }),\n    tools.slack.getChannelActivity({ channel: \"#engineering\" })\n  ]);\n\n  const digest = formatDigest(stats, issues, activity);\n\n  await tools.email.send({\n    to: input.recipient,\n    subject: `Weekly digest: ${input.repository}`,\n    body: digest\n  });\n\n  return { delivered: true };\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 15000
+        }
+      ],
+      "intentId": "parallel-digest"
+    }
+  ]
+}

@@ -1,0 +1,651 @@
+{
+  "startedAt": "2026-08-22T19:33:27.184Z",
+  "model": "stealth/ox-alpha",
+  "registryVersion": 1,
+  "options": {
+    "intents": [],
+    "repeat": 2,
+    "maxRetries": 2,
+    "target": "L1",
+    "examples": true,
+    "label": "",
+    "from": ""
+  },
+  "rates": {
+    "total": 12,
+    "l0": 12,
+    "l1": 12,
+    "l2": 12
+  },
+  "results": [
+    {
+      "intent": "security-pr-notifier#1",
+      "covers": [
+        "for...of",
+        "if",
+        "library function",
+        "tool call",
+        "template literal"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { isAuthChange } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { repository: string },\n  tools: Tools\n) {\n  const pullRequests = await tools.github.getNewPRs({ repo: input.repository });\n\n  for (const pr of pullRequests) {\n    const files = await tools.github.getFiles({ pr });\n\n    if (files.some(isAuthChange)) {\n      await tools.slack.send({\n        channel: \"#security\",\n        message: `Security PR: ${pr.title}`\n      });\n    }\n  }\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 39303
+        }
+      ],
+      "intentId": "security-pr-notifier"
+    },
+    {
+      "intent": "security-pr-notifier#2",
+      "covers": [
+        "for...of",
+        "if",
+        "library function",
+        "tool call",
+        "template literal"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { isAuthChange } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { repository: string },\n  tools: Tools\n) {\n  const pullRequests = await tools.github.getNewPRs({ repo: input.repository });\n\n  for (const pr of pullRequests) {\n    const files = await tools.github.getFiles({ pr });\n\n    if (files.some(isAuthChange)) {\n      await tools.slack.send({\n        channel: \"#security\",\n        message: `Security review needed: pull request \"${pr.title}\" touches authentication or permissions`\n      });\n    }\n  }\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 73370
+        }
+      ],
+      "intentId": "security-pr-notifier"
+    },
+    {
+      "intent": "bounded-retry#1",
+      "covers": [
+        "while with bound",
+        "try/catch",
+        "early return"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nexport default async function flow(\n  input: { issueKey: string },\n  tools: Tools\n) {\n  let attempt = 0;\n  let issue: Issue | null = null;\n\n  while (issue === null && attempt < 3) {\n    attempt += 1;\n    try {\n      const fetched = await tools.jira.getIssue({ key: input.issueKey });\n      issue = fetched;\n    } catch {\n      // Issue service is flaky — fall through and retry up to the attempt limit.\n    }\n  }\n\n  if (issue === null) {\n    await tools.slack.send({\n      channel: \"#ops\",\n      message: `Could not fetch issue ${input.issueKey} after ${attempt} attempts.`\n    });\n    return { fetched: false, transitioned: false };\n  }\n\n  await tools.jira.transitionIssue({ key: input.issueKey, status: \"In Review\" });\n\n  return { fetched: true, transitioned: true };\n}\n",
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 7,
+                  "column": 3,
+                  "offset": 138
+                },
+                "end": {
+                  "line": 8,
+                  "column": 34,
+                  "offset": 188
+                },
+                "semanticPath": "flow/stmt[0..1]",
+                "fingerprint": "36447918e28a5ece5113a6602910ff748235abe862c67090153124f6d48fb633"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 11,
+                  "column": 5,
+                  "offset": 236
+                },
+                "end": {
+                  "line": 11,
+                  "column": 18,
+                  "offset": 249
+                },
+                "semanticPath": "flow/while[0]/stmt[0]",
+                "fingerprint": "fce03382f281bc39f0b4a5005d08432b08d93e8b7a0acc6a345278fe564d3ad9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 14,
+                  "column": 7,
+                  "offset": 340
+                },
+                "end": {
+                  "line": 14,
+                  "column": 23,
+                  "offset": 356
+                },
+                "semanticPath": "flow/while[0]/try[0]/stmt[1]",
+                "fingerprint": "b895b01cb23cf96e31e4d791c746cebb656efa4f8a82c2317f8bfd8fa7fc7f30"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 46384
+        }
+      ],
+      "intentId": "bounded-retry"
+    },
+    {
+      "intent": "bounded-retry#2",
+      "covers": [
+        "while with bound",
+        "try/catch",
+        "early return"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nexport default async function flow(\n  input: { issueKey: string },\n  tools: Tools\n) {\n  let attempt = 0;\n  let issue = null;\n\n  while (issue === null && attempt < 3) {\n    attempt += 1;\n    try {\n      const fetched = await tools.jira.getIssue({ key: input.issueKey });\n      issue = fetched;\n    } catch (error) {\n      // Issue service is flaky; retry on the next attempt.\n    }\n  }\n\n  if (issue === null) {\n    await tools.slack.send({\n      channel: \"#ops\",\n      message: `Could not fetch issue ${input.issueKey} after ${attempt} attempts`\n    });\n    return { fetched: false, transitioned: false };\n  }\n\n  await tools.jira.transitionIssue({ key: input.issueKey, status: \"In Review\" });\n\n  return { fetched: true, transitioned: true };\n}\n",
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 7,
+                  "column": 3,
+                  "offset": 138
+                },
+                "end": {
+                  "line": 8,
+                  "column": 20,
+                  "offset": 174
+                },
+                "semanticPath": "flow/stmt[0..1]",
+                "fingerprint": "90833524741a91a1e8d46bd1b01fbead8e36ccf9809c66960aa6f7d6ae62d6ca"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 11,
+                  "column": 5,
+                  "offset": 222
+                },
+                "end": {
+                  "line": 11,
+                  "column": 18,
+                  "offset": 235
+                },
+                "semanticPath": "flow/while[0]/stmt[0]",
+                "fingerprint": "fce03382f281bc39f0b4a5005d08432b08d93e8b7a0acc6a345278fe564d3ad9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 14,
+                  "column": 7,
+                  "offset": 326
+                },
+                "end": {
+                  "line": 14,
+                  "column": 23,
+                  "offset": 342
+                },
+                "semanticPath": "flow/while[0]/try[0]/stmt[1]",
+                "fingerprint": "b895b01cb23cf96e31e4d791c746cebb656efa4f8a82c2317f8bfd8fa7fc7f30"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 55516
+        }
+      ],
+      "intentId": "bounded-retry"
+    },
+    {
+      "intent": "parallel-digest#1",
+      "covers": [
+        "Promise.all array literal",
+        "parallel + merge",
+        "library function"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { formatDigest } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { repository: string; jql: string; recipient: string },\n  tools: Tools\n) {\n  const [stats, issues, activity] = await Promise.all([\n    tools.github.getRepoStats({ repo: input.repository }),\n    tools.jira.searchIssues({ jql: input.jql }),\n    tools.slack.getChannelActivity({ channel: \"#engineering\" })\n  ]);\n\n  const digest = formatDigest(stats, issues, activity);\n\n  await tools.email.send({\n    to: input.recipient,\n    subject: `Weekly digest: ${input.repository}`,\n    body: digest\n  });\n\n  return { delivered: true };\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 19335
+        }
+      ],
+      "intentId": "parallel-digest"
+    },
+    {
+      "intent": "parallel-digest#2",
+      "covers": [
+        "Promise.all array literal",
+        "parallel + merge",
+        "library function"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { formatDigest } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { repository: string; jql: string; recipient: string },\n  tools: Tools\n) {\n  const [stats, issues, activity] = await Promise.all([\n    tools.github.getRepoStats({ repo: input.repository }),\n    tools.jira.searchIssues({ jql: input.jql }),\n    tools.slack.getChannelActivity({ channel: \"#engineering\" })\n  ]);\n\n  const digest = formatDigest(stats, issues, activity);\n\n  await tools.email.send({\n    to: input.recipient,\n    subject: `Weekly digest: ${input.repository}`,\n    body: digest\n  });\n\n  return { sent: true };\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 13965
+        }
+      ],
+      "intentId": "parallel-digest"
+    },
+    {
+      "intent": "classify-and-route#1",
+      "covers": [
+        "if / else if / else",
+        "condition node",
+        "library function"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { severityOf } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { issueKey: string },\n  tools: Tools\n) {\n  const issue = await tools.jira.getIssue({ key: input.issueKey });\n  const severity = severityOf(issue);\n\n  if (severity === \"critical\") {\n    const followUp = await tools.jira.createIssue({\n      project: \"OPS\",\n      summary: `Follow-up: ${issue.summary}`,\n      description: `Auto-created follow-up for critical issue ${issue.key}.`,\n    });\n    await tools.slack.send({\n      channel: \"#incidents\",\n      message: `Critical issue ${issue.key}: follow-up ${followUp.key} created in OPS.`,\n    });\n  } else if (severity === \"high\") {\n    await tools.slack.send({\n      channel: \"#engineering\",\n      message: `High severity issue ${issue.key} needs attention.`,\n    });\n  }\n\n  return { severity };\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 117854
+        }
+      ],
+      "intentId": "classify-and-route"
+    },
+    {
+      "intent": "classify-and-route#2",
+      "covers": [
+        "if / else if / else",
+        "condition node",
+        "library function"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\nimport { severityOf } from \"@flows/lib\";\n\nexport default async function flow(\n  input: { issueKey: string },\n  tools: Tools\n) {\n  let issue = null;\n\n  try {\n    const fetched = await tools.jira.getIssue({ key: input.issueKey });\n    issue = fetched;\n  } catch (error) {\n    await tools.slack.send({\n      channel: \"#incidents\",\n      message: `Failed to fetch issue ${input.issueKey}: ${String(error)}`\n    });\n    return { severity: null };\n  }\n\n  const severity = severityOf(issue);\n\n  if (severity === \"critical\") {\n    const followUp = await tools.jira.createIssue({\n      project: \"OPS\",\n      summary: `Follow-up for ${input.issueKey}`,\n      description: `Automatically created follow-up for critical issue ${input.issueKey}.`\n    });\n    await tools.slack.send({\n      channel: \"#incidents\",\n      message: `Critical issue ${input.issueKey} — follow-up ${followUp.key} created in OPS.`\n    });\n  } else if (severity === \"high\") {\n    await tools.slack.send({\n      channel: \"#engineering\",\n      message: `High severity issue ${input.issueKey} needs attention.`\n    });\n  }\n\n  return { severity };\n}\n",
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 8,
+                  "column": 3,
+                  "offset": 179
+                },
+                "end": {
+                  "line": 8,
+                  "column": 20,
+                  "offset": 196
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "a8c75d0f720d20e8a10fe95744120f19274db943bbd294fba322a5dc60f3108e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 12,
+                  "column": 5,
+                  "offset": 282
+                },
+                "end": {
+                  "line": 12,
+                  "column": 21,
+                  "offset": 298
+                },
+                "semanticPath": "flow/try[0]/stmt[1]",
+                "fingerprint": "b895b01cb23cf96e31e4d791c746cebb656efa4f8a82c2317f8bfd8fa7fc7f30"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 30831
+        }
+      ],
+      "intentId": "classify-and-route"
+    },
+    {
+      "intent": "try-catch-finally-audit#1",
+      "covers": [
+        "try/catch/finally",
+        "error edge",
+        "narrow try"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction auditMessage(delivered: boolean): string {\n  return delivered\n    ? \"Release note delivered to #releases.\"\n    : \"Release note NOT delivered to #releases; on-call has been alerted.\";\n}\n\nexport default async function flow(\n  input: { releaseNote: string; onCallAddress: string },\n  tools: Tools\n) {\n  let delivered = false;\n\n  try {\n    await tools.slack.send({ channel: \"#releases\", message: input.releaseNote });\n    delivered = true;\n  } catch (error) {\n    await tools.email.send({\n      to: input.onCallAddress,\n      subject: \"Release note delivery failed\",\n      body: `Could not post the release note to #releases: ${String(error)}`\n    });\n  }\n\n  await tools.slack.send({ channel: \"#audit\", message: auditMessage(delivered) });\n\n  return { delivered };\n}\n",
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 13,
+                  "column": 3,
+                  "offset": 359
+                },
+                "end": {
+                  "line": 13,
+                  "column": 25,
+                  "offset": 381
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "f2ea2bd7a50ea3e32b412e833c7206fd7a6750e3bff7e6bd4166b21f0e3ae57e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 17,
+                  "column": 5,
+                  "offset": 477
+                },
+                "end": {
+                  "line": 17,
+                  "column": 22,
+                  "offset": 494
+                },
+                "semanticPath": "flow/try[0]/stmt[1]",
+                "fingerprint": "7aa1bfcbdd3bbf12dc47deec28b22688a2e9e2452cc929689051428dda53da4a"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 37106
+        }
+      ],
+      "intentId": "try-catch-finally-audit"
+    },
+    {
+      "intent": "try-catch-finally-audit#2",
+      "covers": [
+        "try/catch/finally",
+        "error edge",
+        "narrow try"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nexport default async function flow(\n  input: { releaseNote: string; onCallEmail: string },\n  tools: Tools\n) {\n  let delivered = false;\n\n  try {\n    await tools.slack.send({\n      channel: \"#releases\",\n      message: input.releaseNote,\n    });\n    delivered = true;\n  } catch (error) {\n    await tools.email.send({\n      to: input.onCallEmail,\n      subject: \"Release note delivery failed\",\n      body: `Could not post the release note to #releases: ${String(error)}`,\n    });\n  }\n\n  await tools.slack.send({\n    channel: \"#audit\",\n    message: `Release note to #releases: ${delivered ? \"delivered\" : \"not delivered\"}`,\n  });\n\n  return { delivered };\n}\n",
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 7,
+                  "column": 3,
+                  "offset": 162
+                },
+                "end": {
+                  "line": 7,
+                  "column": 25,
+                  "offset": 184
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "f2ea2bd7a50ea3e32b412e833c7206fd7a6750e3bff7e6bd4166b21f0e3ae57e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 14,
+                  "column": 5,
+                  "offset": 297
+                },
+                "end": {
+                  "line": 14,
+                  "column": 22,
+                  "offset": 314
+                },
+                "semanticPath": "flow/try[0]/stmt[1]",
+                "fingerprint": "7aa1bfcbdd3bbf12dc47deec28b22688a2e9e2452cc929689051428dda53da4a"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 40812
+        }
+      ],
+      "intentId": "try-catch-finally-audit"
+    },
+    {
+      "intent": "loop-with-jumps#1",
+      "covers": [
+        "for...of",
+        "continue",
+        "break",
+        "counter"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction isWip(pr: PullRequest): boolean {\n  return pr.title.startsWith(\"WIP\");\n}\n\nexport default async function flow(\n  input: { repository: string },\n  tools: Tools\n) {\n  const prs = await tools.github.getNewPRs({ repo: input.repository });\n\n  let commentsPosted = 0;\n\n  for (const pr of prs) {\n    if (commentsPosted >= 5) {\n      break;\n    }\n\n    if (isWip(pr)) {\n      continue;\n    }\n\n    const body = `Queued for review: ${pr.title}`;\n    await tools.github.addComment({ pr, body });\n    commentsPosted += 1;\n  }\n\n  return { commentsPosted };\n}\n",
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 13,
+                  "column": 3,
+                  "offset": 296
+                },
+                "end": {
+                  "line": 13,
+                  "column": 26,
+                  "offset": 319
+                },
+                "semanticPath": "flow/stmt[1]",
+                "fingerprint": "56a96b18e357cc6f6abbe80e04539360d8655f42c6303ccaf1300caaab62df49"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 24,
+                  "column": 5,
+                  "offset": 446
+                },
+                "end": {
+                  "line": 24,
+                  "column": 51,
+                  "offset": 492
+                },
+                "semanticPath": "flow/for[0]/stmt[2]",
+                "fingerprint": "116e07f55c17fda2871a78bac68bf5287ee5c52a8e17e340907bd3bb5eff0c02"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 26,
+                  "column": 5,
+                  "offset": 546
+                },
+                "end": {
+                  "line": 26,
+                  "column": 25,
+                  "offset": 566
+                },
+                "semanticPath": "flow/for[0]/stmt[4]",
+                "fingerprint": "046c30f81678f2fc2837c9317330b64c302a693203bd8d8027e6b42d1d908490"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 99082
+        }
+      ],
+      "intentId": "loop-with-jumps"
+    },
+    {
+      "intent": "loop-with-jumps#2",
+      "covers": [
+        "for...of",
+        "continue",
+        "break",
+        "counter"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction isWip(pr: { title: string }): boolean {\n  return pr.title.startsWith(\"WIP\");\n}\n\nexport default async function flow(\n  input: { repository: string },\n  tools: Tools\n) {\n  const pullRequests = await tools.github.getNewPRs({ repo: input.repository });\n\n  let posted = 0;\n\n  for (const pr of pullRequests) {\n    if (posted >= 5) {\n      break;\n    }\n\n    if (isWip(pr)) {\n      continue;\n    }\n\n    await tools.github.addComment({\n      pr,\n      body: `Queued for review: ${pr.title}`,\n    });\n\n    posted += 1;\n  }\n\n  return { queuedForReview: posted };\n}\n",
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 13,
+                  "column": 3,
+                  "offset": 311
+                },
+                "end": {
+                  "line": 13,
+                  "column": 18,
+                  "offset": 326
+                },
+                "semanticPath": "flow/stmt[1]",
+                "fingerprint": "0283ee2794326bd83902269c31080933d4ec891beebb7c488361ae675be8a13a"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 29,
+                  "column": 5,
+                  "offset": 555
+                },
+                "end": {
+                  "line": 29,
+                  "column": 17,
+                  "offset": 567
+                },
+                "semanticPath": "flow/for[0]/stmt[3]",
+                "fingerprint": "528cf07f11550652bd5de0c61849ef45b41ec1cbbbfbc50a42c6649977a5a0ef"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 47152
+        }
+      ],
+      "intentId": "loop-with-jumps"
+    }
+  ]
+}

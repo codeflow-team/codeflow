@@ -9,9 +9,9 @@
  *
  *   {@literal /}* @codeflow-function
  *   { "name": "isAuthChange", "label": "Is Auth Change",
- *     "inputSchema": { "files": "File[]" }, "outputSchema": "boolean" }
+ *     "inputSchema": { "file": "File" }, "outputSchema": "boolean" }
  *   *{@literal /}
- *   export function isAuthChange(files: File[]): boolean { ... }
+ *   export function isAuthChange(file: File): boolean { ... }
  *
  * A `.ts` file in `lib/` without that marker is a plain helper module, not a
  * library function: it is left alone and never registered.

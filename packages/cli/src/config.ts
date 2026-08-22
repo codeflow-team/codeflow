@@ -129,12 +129,22 @@ export async function findConfig(from: string): Promise<string | null> {
   }
 }
 
-async function importFresh(file: string): Promise<Record<string, unknown>> {
-  // Bust the module cache on content change, so a long-lived process (watch mode,
-  // a test suite) does not keep serving a stale config.
-  const version = await stat(file).then((s) => s.mtimeMs, () => Date.now());
-  const url = `${pathToFileURL(file).href}?codeflow=${version}`;
-  return (await import(url)) as Record<string, unknown>;
+/**
+ * Imports the config file.
+ *
+ * A plain `import()` of the file URL, with no cache-busting query: a query string
+ * makes the specifier stop looking like a `.ts` file to anything that inspects the
+ * extension, and this module is imported both by the `codeflow` binary (Node,
+ * native type stripping) and by test/bundler runtimes. The consequence is that the
+ * config is cached for the lifetime of the process, which is exactly right for a
+ * one-shot CLI run.
+ *
+ * TODO(watch mode): a long-lived process that reloads a changed config needs a
+ * cache-busting strategy here — worth solving together with `codeflow --watch`,
+ * not before.
+ */
+async function importConfig(file: string): Promise<Record<string, unknown>> {
+  return (await import(pathToFileURL(file).href)) as Record<string, unknown>;
 }
 
 function normalize(value: unknown, configPath: string): CodeflowConfig {
@@ -150,7 +160,7 @@ function normalize(value: unknown, configPath: string): CodeflowConfig {
 
 /** Loads and normalizes a config file. Does not touch the registry. */
 export async function loadConfigFile(configPath: string): Promise<CodeflowConfig> {
-  const module = await importFresh(configPath);
+  const module = await importConfig(configPath);
   const exported = "default" in module ? module["default"] : undefined;
   if (exported === undefined) {
     throw new CliError("invalid-config", `${configPath}: no default export found.`);

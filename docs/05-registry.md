@@ -115,13 +115,15 @@ interface FunctionDefinition {
 ```
 
 ```ts
+// Predicate trên MỘT file — nhờ đó dùng được trực tiếp làm callback:
+// `files.some(isAuthChange)` (ví dụ canonical 01 §1, sugar 04 §2.2b)
 registry.registerFunction({
   name: "isAuthChange",
   label: "Is Auth Change",
-  inputSchema: { files: "File[]" },
+  inputSchema: { file: "File" },
   outputSchema: "boolean",
-  code: `export function isAuthChange(files: File[]) {
-  return files.some(f => /auth|login|oauth|permission/i.test(f.path));
+  code: `export function isAuthChange(file: File) {
+  return /auth|login|oauth|permission/i.test(file.path);
 }`,
   modulePath: "@flows/lib"
 });
@@ -130,7 +132,7 @@ registry.registerFunction({
 ```text
 ┌───────────────────────┐
 │ 🔐 Is Auth Change     │
-│ File[] → boolean      │
+│ File → boolean        │
 │ [Edit Code]           │
 └───────────────────────┘
 ```

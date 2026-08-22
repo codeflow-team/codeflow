@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/** Entry point for the `codeflow` binary. TODO (phase 5): generate / check / watch. */
+/** Entry point for the `codeflow` binary — 02-architecture.md §2. */
 
-console.error("codeflow: not implemented (phase 5)");
-process.exit(1);
+import { run } from "./run.js";
+
+process.exitCode = await run(process.argv.slice(2));

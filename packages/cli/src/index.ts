@@ -1,17 +1,55 @@
 /**
- * codeflow — CLI (02-architecture.md §2, 10-ai-codegen.md §2).
+ * `@codeflow/cli` — the Node-only half of CodeFlow (02-architecture.md §2).
  *
- * Split from core because it needs fs/watch: core must stay browser-safe.
+ * Split from core because it needs fs: core has to stay browser-safe. Everything
+ * here is also usable programmatically, so a host app can run the same generate
+ * pass its CLI does without shelling out.
  *
- * TODO (phase 5, per build order 08 §2):
- *  - `codeflow generate`            — write generated/tools.d.ts + generated/lib.d.ts
- *                                     from codeflow.config.ts
- *  - `codeflow check`               — analyze every flow in flows/, report
- *                                     workspace-wide diagnostics (catches breakage
- *                                     when a tool or library function changes)
- *  - `codeflow generate --agent-md` — emit the AGENTS.md/CLAUDE.md section
- *  - default file-based FunctionLibraryStore over the workspace `lib/` directory
- *    (the file IS the storage — no second copy)
+ * Implemented: the file-based `FunctionLibraryStore` over the workspace `lib/`,
+ * `codeflow generate` (+ `--agent-md`), `codeflow init`.
+ * Waiting on the analyzer (phase 2 of 08-mvp.md §2): `codeflow check`.
  */
 
-export {};
+export { FileFunctionLibraryStore } from "./library/file-store.js";
+export type { FileFunctionLibraryStoreOptions } from "./library/file-store.js";
+export {
+  MARKER as FUNCTION_FILE_MARKER,
+  hasFunctionHeader,
+  kebabCase,
+  parseFunctionFile,
+  serializeFunctionFile,
+  stripFunctionHeader,
+} from "./library/metadata.js";
+
+export {
+  CONFIG_FILENAMES,
+  DEFAULT_LAYOUT,
+  DEFAULT_MODULE_PATH,
+  defineConfig,
+  findConfig,
+  loadConfigFile,
+  loadWorkspace,
+  registryFromConfig,
+} from "./config.js";
+export type {
+  CodeflowConfig,
+  CodeflowConfigExport,
+  LoadWorkspaceOptions,
+  Workspace,
+} from "./config.js";
+
+export { generate } from "./commands/generate.js";
+export type { GenerateOptions, GenerateResult, WrittenFile } from "./commands/generate.js";
+export { init } from "./commands/init.js";
+export type { InitOptions, InitResult } from "./commands/init.js";
+export { check, CHECK_NOTICE } from "./commands/check.js";
+export type { CheckOptions } from "./commands/check.js";
+
+export { agentMarkdown, AGENT_MD_BEGIN, AGENT_MD_END } from "./agent-md.js";
+export { FLOW_STYLE_MD, FLOW_STYLE_FILENAME } from "./prompts.js";
+
+export { run, USAGE } from "./run.js";
+export type { Io } from "./run.js";
+
+export { CliError } from "./errors.js";
+export type { CliErrorCode } from "./errors.js";

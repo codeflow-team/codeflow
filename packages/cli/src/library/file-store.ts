@@ -164,15 +164,26 @@ export class FileFunctionLibraryStore implements FunctionLibraryStore {
     await this.writeIndex();
   }
 
-  /** Rewrites `lib/index.ts` so it re-exports exactly the functions on disk. */
-  async writeIndex(): Promise<void> {
+  /** Content of `lib/index.ts` for the functions currently on disk. */
+  async renderIndex(): Promise<string> {
     const entries = await this.entries();
     const exports = entries
       .map((entry) => `export * from "./${path.basename(entry.file, ".ts")}.js";`)
       .sort();
     const body = exports.length === 0 ? ["export {};"] : exports;
+    return `${INDEX_HEADER}\n\n${body.join("\n")}\n`;
+  }
+
+  /** Path of the re-export barrel this store maintains. */
+  get indexPath(): string {
+    return path.join(this.dir, INDEX_FILE);
+  }
+
+  /** Rewrites `lib/index.ts` so it re-exports exactly the functions on disk. */
+  async writeIndex(): Promise<void> {
+    const content = await this.renderIndex();
     await mkdir(this.dir, { recursive: true });
-    await writeFile(path.join(this.dir, INDEX_FILE), `${INDEX_HEADER}\n\n${body.join("\n")}\n`, "utf8");
+    await writeFile(this.indexPath, content, "utf8");
   }
 
   private async entries(): Promise<Entry[]> {

@@ -25,6 +25,8 @@ export type {
 
 export type { TriggerMetadata, AnalyzeOptions } from "./trigger.js";
 
+export type { ProvenanceMap, ProvenanceTarget } from "./provenance.js";
+
 export type { EditableField, EditableFieldEditor, EditableFieldInput } from "./editable.js";
 
 export type {

@@ -4,6 +4,18 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 
 ---
 
+## Update ~01:20 — Phase 2 (ANALYZER) nghiệm thu ✅ (commit `285d38e`)
+
+- **Trái tim của lib đã chạy**: parser + mapper (semantic path/fingerprint/id deterministic) + analyzer đầy đủ theo 04-analyzer.md. Core giờ **456 tests xanh**, có **33 golden fixtures** (27 case khó theo yêu cầu + 6 case agent tự thêm).
+- T đã verify tay: fixture canonical **khớp từng node/edge** với graph chuẩn 07 §6; case try/finally+break có đúng edge jump→finally; alias `const t = tools` resolve đúng còn object giả tên giống không bị nhận nhầm; smoke test live từ dist ra đúng condition/merge/code/unknown/output + diagnostics.
+- **Quyết định specs t tự đưa** (theo phân tích của agent, t đồng ý và đã sửa 04 §1.4): hidden-call rule chỉ áp cho `await` + tool call (bắt rễ `tools`), KHÔNG áp cho sync library/local call trong expression — vì áp nguyên văn sẽ mâu thuẫn chính §2.2b/§2.6, và mục đích rule là side-effect visibility (sync predicate không có side-effect tầng flow).
+- Giới hạn thừa nhận (đã document trong code, đúng specs): mutation ordering không model; nested try terminals chỉ route tới finally trong cùng, chưa transitively ra finally ngoài.
+
+## Update ~01:25 — thả song song Phase 3 + Phase 6a
+
+- **Phase 3** (Opus, packages/core): identity resolution (sibling alignment LCS fingerprint-first, provenance hook, code-node statement-fingerprint overlap) + session continuity + GraphChange diff + 11 kịch bản identity test bắt buộc (kể cả case hiểm: chèn call giống hệt trước call đang có — không được mis-bind).
+- **Phase 6a** (Opus, packages/react + apps/demo): React Flow canvas + ELK hierarchical + inspector (fields hiển thị nhưng disabled chờ patch engine) + Monaco sync 2 chiều + demo app (sẽ là app cho e2e Claude in Chrome).
+
 ## Update ~00:45 — CLI nghiệm thu ✅ (commit `2e06ca0`)
 
 - `@codeflow/cli` xong: FileFunctionLibraryStore trên `lib/` (metadata nằm trong header comment của chính file — không có bản sao thứ hai), `codeflow generate` (load `codeflow.config.ts` bằng Node 24 type-stripping, không thêm dep), `codeflow init` scaffold workspace mẫu. 46/46 tests, tsc sạch.

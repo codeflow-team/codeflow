@@ -30,7 +30,9 @@ describe("I2 — cold analyze is deterministic", () => {
     expect(JSON.stringify(viaSession)).toBe(JSON.stringify(direct));
   });
 
-  it("re-analyzing in a session bumps version but keeps cold ids (phase 2)", async () => {
+  // With identity continuity in place (phase 3) an unchanged re-analyze resolves
+  // every node onto itself, so the session ids stay equal to the cold ones.
+  it("re-analyzing unchanged source in a session bumps version but keeps ids", async () => {
     const fixture = loadFixture("01-canonical");
     const session = createCodeFlow({ registry: fixture.registry });
     const first = await session.analyze(fixture.source, fixture.options);

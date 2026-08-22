@@ -8,6 +8,14 @@ export {
 
 export { coldNodeId, computeEdgeId, computeGraphId } from "./ids.js";
 
+export { resolveIdentity, applyIdentity } from "./resolve.js";
+export type {
+  IdentityMatch,
+  IdentityMatchStep,
+  IdentityResolution,
+  ResolveIdentityOptions,
+} from "./resolve.js";
+
 export { PathScope, FLOW_ROOT, withRole, callSegment } from "./semantic-path.js";
 
 export {

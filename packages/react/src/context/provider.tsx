@@ -1,10 +1,17 @@
 /**
  * `<CodeFlowProvider>` — the single place UI state lives (07 §2).
  *
- * Everything held here is **view state** (03 §8): selection, disclosure level,
- * the source range the code panel should reveal. None of it is derived back into
- * the graph, and none of it is persisted — the graph stays a pure projection of
- * source.
+ * View state (03 §8) — selection, disclosure level, the source range the code
+ * panel reveals — is held here and never derived back into the graph.
+ *
+ * Editing (phase 6b) is wired to the patch engine (06) and follows its shape
+ * exactly: every edit goes through `session.patchNode`, which either commits an
+ * atomically-validated patch or throws a `CodeFlowError` with a `patch-*` code.
+ * The provider keeps that failure around as state — a refusal is information the
+ * user has to be able to read, not a toast that disappears (07 §5). The new
+ * source and graph are handed to the host through `onPatched`; the provider
+ * never owns them, because the graph is a projection of the host's source
+ * (00 §2.1).
  */
 
 import {
@@ -13,19 +20,57 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import type {
-  CodeFlowSession,
-  Diagnostic,
-  RegistryLookup,
-  SourceMapping,
-  WorkflowGraph,
-  WorkflowNode,
+import {
+  CodeFlowError,
+  type CodeFlowErrorCode,
+  type CodeFlowSession,
+  type Diagnostic,
+  type GraphChange,
+  type PatchResult,
+  type RegistryLookup,
+  type SourceMapping,
+  type TextPatch,
+  type WorkflowGraph,
+  type WorkflowNode,
 } from "@codeflow/core";
+import { computePatch } from "@codeflow/core";
 import { buildIndex, diagnosticsByNode, nodeAtOffset, type GraphIndex } from "../graph/index.js";
 import type { DisclosureMode } from "../flow/summary.js";
+
+/** Why an edit was refused — `code` is the patch engine's, not a UI invention. */
+export interface PatchFailure {
+  nodeId: string;
+  code: CodeFlowErrorCode | "unknown";
+  message: string;
+}
+
+/** What the last successful patch did, kept so the UI can show it (07 §5). */
+export interface PatchSuccess {
+  /** The node the edit was addressed to. */
+  nodeId: string;
+  /**
+   * Nodes this patch is *about*: the edited node plus anything it added. An
+   * insert is addressed to the anchor node but the user is looking at the new
+   * one, so both have to be able to show what happened.
+   */
+  nodeIds: string[];
+  patches: TextPatch[];
+  diagnostics: Diagnostic[];
+  changes: GraphChange[];
+  at: number;
+}
+
+export type PatchOutcome =
+  | { ok: true; result: PatchResult }
+  | ({ ok: false } & PatchFailure);
+
+export type PreviewOutcome =
+  | { ok: true; patches: TextPatch[]; diagnostics: Diagnostic[] }
+  | { ok: false; code: CodeFlowErrorCode | "unknown"; message: string };
 
 export interface CodeFlowContextValue {
   graph: WorkflowGraph | null;
@@ -48,25 +93,65 @@ export interface CodeFlowContextValue {
   focusedRange: SourceMapping | null;
   focusRange: (range: SourceMapping | null) => void;
 
-  /**
-   * Phase 6a is read-only: the patch engine (06) is not wired yet, so every
-   * inspector field renders disabled with this reason as its tooltip.
-   */
+  /* --- editing (06) ------------------------------------------------------ */
+
+  /** False when an edit could not be applied end-to-end; the reason says why. */
   editingEnabled: boolean;
   editingDisabledReason: string;
+
+  /** The host's current text — may be ahead of `graph.source.content`. */
+  source: string;
+  /** True when the editor holds text the graph was not built from (06 §5). */
+  sourceDirty: boolean;
+
+  /** Apply one edit (06 §4). Never throws: refusals come back as `ok: false`. */
+  patchNode: (nodeId: string, changes: Record<string, unknown>) => Promise<PatchOutcome>;
+  /** The same patch computed but not committed — "preview diff before apply" (07 §5). */
+  previewPatch: (nodeId: string, changes: Record<string, unknown>) => PreviewOutcome;
+
+  lastPatch: PatchSuccess | null;
+  patchError: PatchFailure | null;
+  clearPatchError: () => void;
+  /** Nodes the last patch added or updated — highlighted on the canvas. */
+  changedNodeIds: Set<string>;
+
+  /** Ask the host to re-analyze its current source (offered after a conflict). */
+  requestReanalyze: () => void;
+  canReanalyze: boolean;
 }
 
-export const EDITING_DISABLED_REASON = "Editing lands with the patch engine";
+export const EDITING_DISABLED_REASON =
+  "Editing needs a CodeFlowSession and an `onPatched` handler on <CodeFlowProvider> (06 §4).";
 
 const CodeFlowContext = createContext<CodeFlowContextValue | null>(null);
 
 export interface CodeFlowProviderProps {
   /** The graph to display. Falls back to `session.getGraph()` when omitted. */
   graph?: WorkflowGraph | null;
-  /** Session the graph came from — the one source for registry + future patching (02 §4). */
+  /** Session the graph came from — the one source for registry + patching (02 §4). */
   session?: CodeFlowSession | null;
   /** Registry override; defaults to `session.registry`. */
   registry?: RegistryLookup | null;
+  /**
+   * The host's current source text, when the editor may be ahead of the graph.
+   * Passed to `patchNode` so conflict detection can run (06 §5).
+   */
+  source?: string;
+  /**
+   * Called with the result of every committed patch — the host owns the source
+   * and the graph, so this is how they move forward.
+   */
+  onPatched?: (result: PatchResult) => void;
+  /**
+   * Called when the session's graph moved without a patch committing (the
+   * conflict path of 06 §5 re-analyzes before refusing), so the host can catch
+   * up instead of rendering a graph the session no longer holds.
+   */
+  onGraphSync?: (graph: WorkflowGraph) => void;
+  /** Called when the user asks to re-analyze after a conflict. */
+  onReanalyze?: () => void;
+  /** Turn editing off even when everything else is wired. */
+  editable?: boolean;
   defaultMode?: DisclosureMode;
   /** Controlled disclosure level. */
   mode?: DisclosureMode;
@@ -76,20 +161,34 @@ export interface CodeFlowProviderProps {
   children: ReactNode;
 }
 
+function messageOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+function codeOf(cause: unknown): CodeFlowErrorCode | "unknown" {
+  return cause instanceof CodeFlowError ? cause.code : "unknown";
+}
+
 export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
-  const { session = null, onSelectNode, onModeChange } = props;
+  const { session = null, onSelectNode, onModeChange, onPatched, onGraphSync, onReanalyze } = props;
   const graph = props.graph ?? session?.getGraph() ?? null;
   const registry = props.registry ?? session?.registry ?? null;
 
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
   const [internalMode, setInternalMode] = useState<DisclosureMode>(props.defaultMode ?? "expanded");
   const [focusedRange, setFocusedRange] = useState<SourceMapping | null>(null);
+  const [patchError, setPatchError] = useState<PatchFailure | null>(null);
+  const [lastPatch, setLastPatch] = useState<PatchSuccess | null>(null);
+  const [changedNodeIds, setChangedNodeIds] = useState<Set<string>>(() => new Set());
 
   const selectedNodeId = props.selectedNodeId === undefined ? internalSelected : props.selectedNodeId;
   const mode = props.mode ?? internalMode;
 
   const index = useMemo(() => buildIndex(graph), [graph]);
   const nodeDiagnostics = useMemo(() => diagnosticsByNode(graph), [graph]);
+
+  const source = props.source ?? graph?.source.content ?? "";
+  const sourceDirty = graph !== null && source !== graph.source.content;
 
   // A new graph can retire the selected node (03 §5: identity is per-session).
   useEffect(() => {
@@ -130,6 +229,104 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
     [onModeChange],
   );
 
+  /* --- editing ----------------------------------------------------------- */
+
+  const disabledReason = useMemo(() => {
+    if (props.editable === false) return "Editing is turned off by the host (`editable={false}`).";
+    if (session === null) return "No session — editing goes through `CodeFlowSession.patchNode` (02 §4, 06 §4).";
+    if (graph === null) return "Nothing analyzed yet — analyze a flow before editing.";
+    if (onPatched === undefined) {
+      return "The host did not wire `onPatched`, so a patched source would have nowhere to go — editing is disabled rather than silently discarded (07 §5).";
+    }
+    if (graph.registryHash !== session.registryHash()) {
+      return "The registry changed since this graph was analyzed — re-analyze the flow before editing (06 §5).";
+    }
+    return null;
+  }, [props.editable, session, graph, onPatched]);
+
+  const editingEnabled = disabledReason === null;
+
+  // Kept in a ref so the callbacks below stay stable across renders.
+  const latest = useRef({ session, graph, registry, source, onPatched, onGraphSync });
+  latest.current = { session, graph, registry, source, onPatched, onGraphSync };
+
+  const patchNode = useCallback(
+    async (nodeId: string, changes: Record<string, unknown>): Promise<PatchOutcome> => {
+      const current = latest.current;
+      if (current.session === null || current.graph === null || current.onPatched === undefined) {
+        const failure: PatchFailure = {
+          nodeId,
+          code: "unknown",
+          message: disabledReason ?? EDITING_DISABLED_REASON,
+        };
+        setPatchError(failure);
+        return { ok: false, ...failure };
+      }
+      try {
+        const result = await current.session.patchNode(nodeId, changes, { source: current.source });
+        setPatchError(null);
+        // The node that was edited, plus anything the patch added. Deliberately
+        // not every `node.updated`: shifting a range by five characters marks
+        // every node after the edit as updated, and highlighting all of them
+        // would say "these changed" about nodes whose code did not.
+        const touched = new Set<string>([nodeId]);
+        for (const change of result.changes) {
+          if (change.type === "node.added" && change.nodeId !== undefined) touched.add(change.nodeId);
+        }
+        setLastPatch({
+          nodeId,
+          nodeIds: [...touched],
+          patches: result.patches,
+          diagnostics: result.diagnostics,
+          changes: result.changes,
+          at: Date.now(),
+        });
+        setChangedNodeIds(touched);
+        current.onPatched(result);
+        return { ok: true, result };
+      } catch (cause) {
+        const failure: PatchFailure = { nodeId, code: codeOf(cause), message: messageOf(cause) };
+        setPatchError(failure);
+        // The conflict path re-analyzes before refusing (06 §5), so the session
+        // may now hold a graph the host is not rendering. Say so rather than
+        // leaving the two silently out of step.
+        const moved = current.session.getGraph();
+        if (moved !== null && moved !== current.graph) current.onGraphSync?.(moved);
+        return { ok: false, ...failure };
+      }
+    },
+    [disabledReason],
+  );
+
+  /**
+   * The same computation `patchNode` runs, stopped before the commit (06 §4) —
+   * this is what "preview diff before apply" shows. It runs against the analyzed
+   * source, so a conflict with unanalyzed editor text only surfaces on apply.
+   */
+  const previewPatch = useCallback((nodeId: string, changes: Record<string, unknown>): PreviewOutcome => {
+    const current = latest.current;
+    if (current.graph === null || current.registry === null) {
+      return { ok: false, code: "unknown", message: "Nothing analyzed yet — there is no source to diff against." };
+    }
+    try {
+      const computed = computePatch({
+        graph: current.graph,
+        registry: current.registry,
+        nodeId,
+        changes,
+      });
+      return { ok: true, patches: computed.patches, diagnostics: computed.diagnostics };
+    } catch (cause) {
+      return { ok: false, code: codeOf(cause), message: messageOf(cause) };
+    }
+  }, []);
+
+  const clearPatchError = useCallback(() => { setPatchError(null); }, []);
+  const requestReanalyze = useCallback(() => {
+    setPatchError(null);
+    onReanalyze?.();
+  }, [onReanalyze]);
+
   const value = useMemo<CodeFlowContextValue>(
     () => ({
       graph,
@@ -145,8 +342,18 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       setMode,
       focusedRange,
       focusRange: setFocusedRange,
-      editingEnabled: false,
-      editingDisabledReason: EDITING_DISABLED_REASON,
+      editingEnabled,
+      editingDisabledReason: disabledReason ?? "",
+      source,
+      sourceDirty,
+      patchNode,
+      previewPatch,
+      lastPatch,
+      patchError,
+      clearPatchError,
+      changedNodeIds,
+      requestReanalyze,
+      canReanalyze: onReanalyze !== undefined,
     }),
     [
       graph,
@@ -160,6 +367,18 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       mode,
       setMode,
       focusedRange,
+      editingEnabled,
+      disabledReason,
+      source,
+      sourceDirty,
+      patchNode,
+      previewPatch,
+      lastPatch,
+      patchError,
+      clearPatchError,
+      changedNodeIds,
+      requestReanalyze,
+      onReanalyze,
     ],
   );
 
@@ -170,6 +389,11 @@ export function useCodeFlow(): CodeFlowContextValue {
   const value = useContext(CodeFlowContext);
   if (value === null) throw new Error("useCodeFlow must be used inside <CodeFlowProvider>");
   return value;
+}
+
+/** Like `useCodeFlow`, but `null` outside a provider — for optional chrome. */
+export function useOptionalCodeFlow(): CodeFlowContextValue | null {
+  return useContext(CodeFlowContext);
 }
 
 export function useSelectedNode(): WorkflowNode | null {

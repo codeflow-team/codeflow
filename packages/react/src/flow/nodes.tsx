@@ -6,8 +6,9 @@
 
 import type { ReactNode } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { Diagnostic } from "@codeflow/core";
+import type { Diagnostic, WorkflowNode } from "@codeflow/core";
 import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
+import { useOptionalCodeFlow } from "../context/provider.js";
 import { developerLines, nodeIcon, nodeKindLabel, nodeSummaryRows } from "./summary.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
 
@@ -53,7 +54,7 @@ function NodeBody({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
   );
 }
 
-function NodeHeader({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
+function NodeHeader({ data, selected }: { data: CodeFlowRFNode["data"]; selected: boolean }): ReactNode {
   return (
     <header className="cf-node__header">
       <span className="cf-node__icon" aria-hidden="true">
@@ -64,13 +65,47 @@ function NodeHeader({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
       </span>
       {data.mode !== "compact" ? <span className="cf-node__kind">{nodeKindLabel(data.node)}</span> : null}
       <DiagnosticBadge diagnostics={data.diagnostics} />
+      {selected ? <DeleteButton node={data.node} /> : null}
     </header>
   );
 }
 
+/**
+ * Delete affordance on the selected node (06 §2). The refusal path matters more
+ * than the happy one: a blocked delete comes back as `patch-dependency` naming
+ * the node that still reads the binding, and the inspector shows it — the button
+ * never removes anything quietly, and never leaves code that would not compile.
+ */
+function DeleteButton({ node }: { node: WorkflowNode }): ReactNode {
+  const cf = useOptionalCodeFlow();
+  if (cf === null || !cf.editingEnabled || !node.capabilities.deletable) return null;
+  return (
+    <button
+      type="button"
+      className="cf-node__delete"
+      title={`Delete “${node.label}”`}
+      aria-label={`Delete ${node.label}`}
+      data-testid={`node-delete-${node.id}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        void cf.patchNode(node.id, { $delete: true });
+      }}
+    >
+      ×
+    </button>
+  );
+}
+
+/** Nodes the last patch touched keep a marker until the next one (07 §5). */
+function useChangedClass(nodeId: string): string {
+  const cf = useOptionalCodeFlow();
+  return cf !== null && cf.changedNodeIds.has(nodeId) ? " is-changed" : "";
+}
+
 /** Leaf node — every non-container type. */
-export function CodeFlowNode({ data, selected }: NodeProps<CodeFlowRFNode>): ReactNode {
+export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>): ReactNode {
   const type = data.node.type;
+  const changed = useChangedClass(id);
   return (
     <div
       className={[
@@ -80,11 +115,11 @@ export function CodeFlowNode({ data, selected }: NodeProps<CodeFlowRFNode>): Rea
         selected === true ? "is-selected" : "",
       ]
         .filter(Boolean)
-        .join(" ")}
+        .join(" ") + changed}
       data-node-type={type}
     >
       <Handle type="target" position={Position.Top} className="cf-handle" />
-      <NodeHeader data={data} />
+      <NodeHeader data={data} selected={selected === true} />
       <NodeBody data={data} />
       <Handle type="source" position={Position.Bottom} className="cf-handle" />
     </div>
@@ -95,8 +130,9 @@ export function CodeFlowNode({ data, selected }: NodeProps<CodeFlowRFNode>): Rea
  * Container node — `loop` / `try`. React Flow renders children on top of it, so
  * the body is only a header plus the slot handles the child edges attach to.
  */
-export function CodeFlowContainerNode({ data, selected }: NodeProps<CodeFlowRFNode>): ReactNode {
+export function CodeFlowContainerNode({ id, data, selected }: NodeProps<CodeFlowRFNode>): ReactNode {
   const type = data.node.type;
+  const changed = useChangedClass(id);
   return (
     <div
       className={[
@@ -106,12 +142,12 @@ export function CodeFlowContainerNode({ data, selected }: NodeProps<CodeFlowRFNo
         selected === true ? "is-selected" : "",
       ]
         .filter(Boolean)
-        .join(" ")}
+        .join(" ") + changed}
       data-node-type={type}
     >
       <Handle type="target" position={Position.Top} className="cf-handle" />
       <div className="cf-container__header">
-        <NodeHeader data={data} />
+        <NodeHeader data={data} selected={selected === true} />
         <NodeBody data={data} />
       </div>
       {/*

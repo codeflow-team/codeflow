@@ -70,8 +70,33 @@ export default async function flow(input: { repository: string }, tools: Tools) 
 }
 `;
 
+/**
+ * Local function + inline code node — the two opaque regions "Edit Code" can
+ * replace in one patch (06 §2). `formatDigest` is a local function (its node is
+ * the call, its editable region is the body); the `reduce` line is a code node.
+ */
+const CODE_NODES = `import type { Tools } from "../generated/tools";
+
+function formatDigest(prs: PullRequest[]) {
+  return prs.map((pr) => \`- \${pr.title}\`).join("\\n");
+}
+
+export default async function flow(input: { repository: string }, tools: Tools) {
+  const prs = await tools.github.getNewPRs({ repo: input.repository });
+
+  const digest = formatDigest(prs);
+  const risky = prs.filter((pr) => pr.title.length > 40).length;
+
+  await tools.slack.send({
+    channel: "#daily",
+    message: \`Digest (\${risky} long titles): \${digest}\`
+  });
+}
+`;
+
 export const EXAMPLES: Example[] = [
   { id: "canonical", label: "Canonical (01 §1 / 07 §6)", source: CANONICAL },
   { id: "try", label: "try / catch + early return", source: TRY_CATCH },
   { id: "degraded", label: "Degradation: unknown · code · hidden call", source: DEGRADED },
+  { id: "code-nodes", label: "Local function + code node (Edit Code)", source: CODE_NODES },
 ];

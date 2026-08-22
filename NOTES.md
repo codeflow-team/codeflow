@@ -11,6 +11,16 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 - **Quyết định specs t tự đưa** (theo phân tích của agent, t đồng ý và đã sửa 04 §1.4): hidden-call rule chỉ áp cho `await` + tool call (bắt rễ `tools`), KHÔNG áp cho sync library/local call trong expression — vì áp nguyên văn sẽ mâu thuẫn chính §2.2b/§2.6, và mục đích rule là side-effect visibility (sync predicate không có side-effect tầng flow).
 - Giới hạn thừa nhận (đã document trong code, đúng specs): mutation ordering không model; nested try terminals chỉ route tới finally trong cùng, chưa transitively ra finally ngoài.
 
+## Update ~03:40 — Phase 5 (AI CODEGEN + EVAL THẬT) nghiệm thu ✅ (commit `e579fcf`)
+
+- `buildGenerationContext` + `renderSystemPrompt` + `validate` L0/L1/L2 xong. Core giờ **852 tests**.
+- **EVAL THẬT VỚI `stealth/ox-alpha` — KẾT QUẢ: 12/12 đạt L2 (100%), 0 retries** trên 6 intents phủ đủ semantics MVP (while+bound, try/catch/finally, Promise.all, else-if, jumps...). Kết quả đầy đủ + code model sinh ra lưu ở `packages/core/test/ai/results/`.
+- **Eval chứng minh giá trị ngay lần chạy đầu**: bắt được 1 lỗi conformance thật (model hoist promise ra const rồi Promise.all([xPromise,...]) → parallel biến mất khỏi graph, chỉ đạt 11/12). Sửa 1 câu trong style guide → chạy lại 12/12. Cả 2 bản kết quả đều được giữ để đối chiếu.
+- Vòng retry feed-diagnostics đã verify với model thật: code seeded 5 lỗi → L0 → 1 vòng feedback → L2 sạch.
+- Ablation: bỏ few-shot examples vẫn 6/6 L2 → khi cần tiết kiệm token có thể bỏ (~430 tokens).
+- T đã fold định nghĩa L2 tinh chỉnh vào docs 10 §5 (code node chứa call chặn L2; code node plumbing không call thì được phép) và dedupe style guide: CLI giờ import rules từ core (một nguồn duy nhất).
+- Chi phí: $0 (model free). Latency 20-120s/call (reasoning model).
+
 ## Update ~02:50 — Phase 4 (PATCH ENGINE) nghiệm thu ✅ (commit `5567457`) — VÒNG LÕI KHÉP KÍN 🎉
 
 - Patch engine xong: **814 core tests** (897 toàn workspace), 30 edit cases trên 16 fixtures, transactional (fail → source không đổi 1 byte), KHÔNG dùng ts-morph reprint (chỉ thay text range nhỏ nhất, style đọc từ source).

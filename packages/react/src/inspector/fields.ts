@@ -10,6 +10,14 @@ import type { EditableField, EditableFieldEditor, RegistryLookup, Schema, Workfl
 import { stringData } from "../graph/index.js";
 import { formatFieldValue, type FieldDisplay } from "./expression.js";
 
+/**
+ * How a field is patched back (06 §2): a plain argument property, or one of the
+ * two expression operations a core construct owns. `null` means the patch engine
+ * has no edit for it — the UI says so out loud instead of offering a control
+ * that would do nothing (07 §5).
+ */
+export type FieldPatchOp = "field" | "$condition" | "$iterable";
+
 export interface InspectorField {
   name: string;
   label: string;
@@ -20,11 +28,18 @@ export interface InspectorField {
   schema?: Schema;
   /** Declared editable by the registry (06 §1). Independent of `blockedReason`. */
   declaredEditable: boolean;
-  /** Set when this field cannot be patched even once the patch engine lands. */
+  /** Set when this field cannot be patched — the reason is shown next to it. */
   blockedReason: string | null;
   /** Required by the schema but missing from the call — "needs configuration" (06 §2). */
   missing: boolean;
+  /** Patch operation this field maps to, or null when there is none (06 §2). */
+  patch: FieldPatchOp | null;
 }
+
+/** The opaque region a node can hand to Monaco as one `$code` edit (06 §2). */
+export type CodeEditTarget =
+  | { kind: "region"; label: string }
+  | { kind: "localFunction"; functionName: string; label: string };
 
 export interface InspectorModel {
   fields: InspectorField[];
@@ -32,10 +47,16 @@ export interface InspectorModel {
   notice: string | null;
   /** Verbatim source shown for `code`/`unknown` nodes. */
   code: string | null;
+  /** Set when "Edit Code" applies to this node (`$code`, 06 §2). */
+  codeEdit: CodeEditTarget | null;
+  /** Set when the node's tool can be swapped (`$tool`, 06 §2). */
+  toolChange: { current: string } | null;
 }
 
 const VARIABLE_ARGUMENT_NOTICE =
   "The argument is not a visible object literal (a variable, or several positional args) — fields are not editable; edit it in the code view (06 §1).";
+const UNRESOLVED_NOTICE =
+  "This call does not resolve to a tool in the registry, so its fields have no schema and no patcher (03 §11). Point it at a registered tool below, or edit the statement as code.";
 const SPREAD_NOTICE =
   "This argument object contains a spread. Only properties written after the spread are editable; nothing is ever inserted after it to override a value you cannot see (06 §1).";
 
@@ -88,7 +109,15 @@ function callFields(node: WorkflowNode, registry: RegistryLookup | null): Inspec
   const argumentsEditable = node.data["argumentsEditable"] === true;
   const hasSpread = node.data["argumentsHaveSpread"] === true;
 
-  const blocked = !argumentsEditable ? VARIABLE_ARGUMENT_NOTICE : null;
+  // An `unknown` node is a call that *looks* like a tool but resolves to
+  // nothing (03 §3), so there is no schema to validate a field against and no
+  // patcher for it (03 §11, capabilities: editable=false). Said here rather
+  // than letting Apply come back with `patch-not-editable` (07 §5).
+  const blocked = !argumentsEditable
+    ? VARIABLE_ARGUMENT_NOTICE
+    : node.type === "unknown"
+      ? UNRESOLVED_NOTICE
+      : null;
   const notice = blocked ?? (hasSpread ? SPREAD_NOTICE : null);
 
   const names: string[] = [];
@@ -108,13 +137,25 @@ function callFields(node: WorkflowNode, registry: RegistryLookup | null): Inspec
       declaredEditable: editableFields === null ? args !== null : declared !== undefined,
       blockedReason: blocked,
       missing: raw === null,
+      patch: blocked === null ? "field" : null,
     };
   });
 
+  const toolName = stringData(node, "toolName");
+  const local = node.type === "function" && stringData(node, "functionSource") === "local";
+  const library = node.type === "function" && stringData(node, "functionSource") === "library";
+
   return {
     fields,
-    notice,
+    notice: notice ?? (library ? LIBRARY_FUNCTION_NOTICE : null),
     code: null,
+    codeEdit: local
+      ? { kind: "localFunction", functionName: stringData(node, "functionName") ?? "", label: "Edit function body" }
+      : node.type === "unknown"
+        ? { kind: "region", label: "Edit statement as code" }
+        : null,
+    toolChange:
+      (node.type === "tool" || node.type === "unknown") && toolName !== null ? { current: toolName } : null,
   };
 }
 
@@ -132,6 +173,8 @@ function simpleField(
   label: string,
   raw: string | null,
   editor: EditableFieldEditor,
+  patch: FieldPatchOp | null = null,
+  blockedReason: string | null = null,
 ): InspectorField {
   return {
     name,
@@ -140,10 +183,36 @@ function simpleField(
     raw,
     display: formatFieldValue(raw),
     declaredEditable: raw !== null,
-    blockedReason: null,
+    blockedReason,
     missing: raw === null,
+    patch,
   };
 }
+
+/** Nothing to patch and nothing to say beyond "not this way" — 07 §5. */
+const NOT_PATCHABLE = {
+  loopVariable:
+    "Renaming the loop variable would rewrite every use of it — that is a structural edit, not supported at MVP (06 §2). Edit it in the code view.",
+  output:
+    "A `return` expression has no patch operation at MVP (06 §2) — edit it in the code view. The node itself can still be deleted.",
+  trigger: "The trigger is synthetic: it comes from the flow signature plus host metadata (03 §9), not from an editable statement.",
+  jump: "Turning `break` into `continue` changes control flow — not a supported edit (06 §2). Edit it in the code view.",
+  tryCatch: "Renaming the catch binding is not a supported edit (06 §2) — edit it in the code view.",
+} as const;
+
+/**
+ * A library function's source lives in the function library, not in this file
+ * (05 §4), so `$code` — which replaces a region of *this* source — cannot reach
+ * it. Said out loud rather than offering a button that would edit the call
+ * (07 §5).
+ */
+const LIBRARY_FUNCTION_NOTICE =
+  "This is a library function: its source lives in the function library (05 §4), not in this flow, so “Edit Code” does not apply here. Editing library sources needs a library store, which this build does not wire up.";
+
+const EMPTY_MODEL: Omit<InspectorModel, "fields" | "notice" | "code"> = {
+  codeEdit: null,
+  toolChange: null,
+};
 
 /**
  * Build the inspector model for `node`.
@@ -164,7 +233,8 @@ export function resolveInspectorFields(
 
     case "condition":
       return {
-        fields: [simpleField("expression", "Condition", stringData(node, "expression"), "expression")],
+        ...EMPTY_MODEL,
+        fields: [simpleField("expression", "Condition", stringData(node, "expression"), "expression", "$condition")],
         notice: null,
         code: null,
       };
@@ -172,7 +242,8 @@ export function resolveInspectorFields(
     case "loop": {
       if (stringData(node, "kind") === "while") {
         return {
-          fields: [simpleField("condition", "While", stringData(node, "condition"), "expression")],
+          ...EMPTY_MODEL,
+          fields: [simpleField("condition", "While", stringData(node, "condition"), "expression", "$condition")],
           notice:
             node.data["bounded"] === false
               ? "No stopping condition was recognised for this loop (04 §2.8)."
@@ -181,9 +252,10 @@ export function resolveInspectorFields(
         };
       }
       return {
+        ...EMPTY_MODEL,
         fields: [
-          simpleField("variable", "Item", stringData(node, "variable"), "text"),
-          simpleField("iterable", "Iterable", stringData(node, "iterable"), "expression"),
+          simpleField("variable", "Item", stringData(node, "variable"), "text", null, NOT_PATCHABLE.loopVariable),
+          simpleField("iterable", "Iterable", stringData(node, "iterable"), "expression", "$iterable"),
         ],
         notice: null,
         code: null,
@@ -192,7 +264,10 @@ export function resolveInspectorFields(
 
     case "output":
       return {
-        fields: [simpleField("expression", "Return", stringData(node, "expression"), "expression")],
+        ...EMPTY_MODEL,
+        fields: [
+          simpleField("expression", "Return", stringData(node, "expression"), "expression", null, NOT_PATCHABLE.output),
+        ],
         notice:
           node.data["explicit"] === true
             ? null
@@ -202,36 +277,43 @@ export function resolveInspectorFields(
 
     case "code":
       return {
+        ...EMPTY_MODEL,
         fields: [],
         notice: "Custom code is kept verbatim — it is edited as code, not as fields (05 §4b).",
         code: stringData(node, "text"),
+        codeEdit: { kind: "region", label: "Edit code" },
       };
 
     case "trigger":
       return {
-        fields: [simpleField("inputType", "Input type", stringData(node, "inputType"), "code")],
+        ...EMPTY_MODEL,
+        fields: [simpleField("inputType", "Input type", stringData(node, "inputType"), "code", null, NOT_PATCHABLE.trigger)],
         notice: "Trigger is synthetic — built from the flow signature plus host metadata (03 §9).",
         code: null,
       };
 
     case "jump":
       return {
-        fields: [simpleField("kind", "Jump", stringData(node, "kind"), "text")],
+        ...EMPTY_MODEL,
+        fields: [simpleField("kind", "Jump", stringData(node, "kind"), "text", null, NOT_PATCHABLE.jump)],
         notice: null,
         code: null,
       };
 
     case "try":
       return {
-        fields: [simpleField("catchParam", "Catch binding", stringData(node, "catchParam"), "text")],
+        ...EMPTY_MODEL,
+        fields: [
+          simpleField("catchParam", "Catch binding", stringData(node, "catchParam"), "text", null, NOT_PATCHABLE.tryCatch),
+        ],
         notice: "Adding or removing a `try` wrapper is a structural edit — not supported at MVP (06 §2).",
         code: null,
       };
 
     case "merge":
-      return { fields: [], notice: "Synthetic convergence point — not editable (03 §4).", code: null };
+      return { ...EMPTY_MODEL, fields: [], notice: "Synthetic convergence point — not editable (03 §4).", code: null };
 
     default:
-      return { fields: [], notice: null, code: null };
+      return { ...EMPTY_MODEL, fields: [], notice: null, code: null };
   }
 }

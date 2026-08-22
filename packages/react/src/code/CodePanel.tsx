@@ -5,8 +5,9 @@
  * range selects the node that owns it.
  *
  * Note (03 §5.2 step 0): typing here is a source edit *without* patch
- * provenance, so identity would go through the heuristic path. Phase 6a keeps
- * the editor read-only unless the host explicitly passes `onChange`.
+ * provenance, so identity goes through the heuristic path — unlike an inspector
+ * edit, which carries provenance and keeps every id exactly. The editor stays
+ * read-only unless the host passes `onChange` and takes on that re-analyze.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -51,6 +52,12 @@ export function CodePanel(props: CodePanelProps): ReactNode {
 
     editor.onDidChangeCursorPosition((event) => {
       if (programmatic.current) return;
+      // Only a *user* moving the caret is a selection gesture. Replacing the
+      // model — which is what a committed patch does — also moves the caret,
+      // and treating that as "the user selected nothing" would drop the
+      // selection out from under the node that was just edited.
+      if (event.reason === monaco.editor.CursorChangeReason.ContentFlush) return;
+      if (event.source !== "mouse" && event.source !== "keyboard") return;
       const model = editor.getModel();
       if (model === null) return;
       selectAtOffset.current(model.getOffsetAt(event.position));

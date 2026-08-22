@@ -453,3 +453,234 @@
 
 .cf-code { width: 100%; height: 100%; min-height: 160px; }
 .cf-monaco-range { background: color-mix(in srgb, var(--cf-accent) 22%, transparent); border-radius: 2px; }
+
+/* -------------------------------------------------------------------------- */
+/* editing — 06 / 07 §5                                                        */
+/* -------------------------------------------------------------------------- */
+
+.cf-button {
+  padding: 5px 10px;
+  border: 1px solid var(--cf-border);
+  border-radius: 6px;
+  background: var(--cf-surface);
+  color: var(--cf-text);
+  font: 11px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+}
+.cf-button:hover:not(:disabled) { border-color: var(--cf-accent); }
+.cf-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.cf-button--primary { background: var(--cf-accent); border-color: transparent; color: #fff; }
+.cf-button--danger { border-color: var(--cf-error); color: var(--cf-error); }
+.cf-button--danger:hover:not(:disabled) { background: color-mix(in srgb, var(--cf-error) 12%, var(--cf-surface)); }
+.cf-button--small { padding: 2px 8px; margin-left: 8px; }
+
+.cf-icon-button {
+  border: none;
+  background: none;
+  color: var(--cf-text-dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.cf-icon-button:hover { color: var(--cf-text); }
+
+.cf-select {
+  padding: 4px 6px;
+  border: 1px solid var(--cf-border);
+  border-radius: 5px;
+  background: var(--cf-surface-2);
+  color: var(--cf-text);
+  font: 11px/1.4 system-ui, sans-serif;
+  max-width: 100%;
+}
+
+.cf-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.cf-checkbox { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--cf-text-dim); }
+.cf-checkbox__box { width: 13px; height: 13px; }
+
+.cf-section { margin-top: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cf-section__title {
+  margin: 0;
+  width: 100%;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cf-text-dim);
+}
+
+.cf-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+.cf-tag--changed { background: color-mix(in srgb, var(--cf-trigger) 20%, var(--cf-surface)); color: var(--cf-trigger); }
+
+.cf-notice--stale { border-left-color: var(--cf-warning); }
+
+.cf-alert {
+  margin: 8px 0;
+  padding: 8px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--cf-border);
+  background: var(--cf-surface-2);
+  font-size: 11px;
+}
+.cf-alert__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cf-alert__head code { font-family: var(--cf-mono); font-weight: 700; }
+.cf-alert__message { margin: 4px 0 0; }
+.cf-alert__list { margin: 6px 0 0; padding-left: 16px; }
+.cf-alert__list code { font-family: var(--cf-mono); font-weight: 700; }
+.cf-alert--error { border-color: var(--cf-error); background: color-mix(in srgb, var(--cf-error) 10%, var(--cf-surface)); }
+.cf-alert--error .cf-alert__head code { color: var(--cf-error); }
+.cf-alert--warning { border-color: var(--cf-warning); background: color-mix(in srgb, var(--cf-warning) 10%, var(--cf-surface)); }
+.cf-alert--ok { border-color: var(--cf-trigger); background: color-mix(in srgb, var(--cf-trigger) 8%, var(--cf-surface)); }
+
+.cf-field__convert {
+  font-size: 10px;
+  color: var(--cf-warning);
+  background: color-mix(in srgb, var(--cf-warning) 10%, var(--cf-surface));
+  border-radius: 5px;
+  padding: 5px 6px;
+}
+.cf-field__convert .cf-link { margin: 0; font-size: 10px; }
+
+/* preview diff — 07 §5 */
+.cf-preview { margin-top: 10px; }
+.cf-preview__title {
+  margin: 0 0 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cf-text-dim);
+}
+.cf-diff { margin: 6px 0 0; font-family: var(--cf-mono); font-size: 11px; }
+.cf-diff--empty { color: var(--cf-text-dim); font-family: inherit; }
+.cf-diff__patch { border: 1px solid var(--cf-border); border-radius: 6px; overflow: hidden; margin-bottom: 6px; }
+.cf-diff__where {
+  padding: 3px 7px;
+  background: var(--cf-surface-2);
+  border-bottom: 1px solid var(--cf-border);
+  color: var(--cf-text-dim);
+  font-size: 10px;
+}
+.cf-diff__body { margin: 0; padding: 4px 0; display: flex; flex-direction: column; overflow-x: auto; }
+.cf-diff__line { padding: 0 7px; white-space: pre; }
+.cf-diff__line--old { background: color-mix(in srgb, var(--cf-error) 14%, transparent); color: var(--cf-error); }
+.cf-diff__line--new { background: color-mix(in srgb, var(--cf-trigger) 14%, transparent); color: var(--cf-trigger); }
+
+/* -------------------------------------------------------------------------- */
+/* palette — 07 §2                                                             */
+/* -------------------------------------------------------------------------- */
+
+.cf-palette {
+  box-sizing: border-box;
+  background: var(--cf-surface);
+  color: var(--cf-text);
+  font: 12px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 10px 12px;
+  overflow: auto;
+}
+.cf-palette__header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cf-palette__title { margin: 0; font-size: 13px; }
+.cf-palette__header .cf-select { margin-left: auto; max-width: 60%; }
+.cf-palette__group { margin-top: 8px; }
+.cf-palette__group-title {
+  margin: 0 0 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cf-text-dim);
+}
+.cf-palette__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cf-palette__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  border: 1px solid var(--cf-border);
+  border-radius: 6px;
+  background: var(--cf-surface-2);
+  color: var(--cf-text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.cf-palette__item:hover:not(:disabled) { border-color: var(--cf-accent); }
+.cf-palette__item:disabled { opacity: 0.5; cursor: not-allowed; }
+.cf-palette__icon { font-size: 13px; }
+.cf-palette__label { font-weight: 600; }
+.cf-palette__name { margin-left: auto; color: var(--cf-text-dim); font-family: var(--cf-mono); font-size: 10px; }
+
+/* -------------------------------------------------------------------------- */
+/* node chrome for editing                                                     */
+/* -------------------------------------------------------------------------- */
+
+.cf-node__delete {
+  margin-left: 4px;
+  border: none;
+  background: none;
+  color: var(--cf-error);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.cf-node__delete:hover { transform: scale(1.15); }
+
+.cf-node.is-changed,
+.cf-container.is-changed {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cf-trigger) 65%, transparent);
+}
+
+/* -------------------------------------------------------------------------- */
+/* code dialog                                                                 */
+/* -------------------------------------------------------------------------- */
+
+.cf-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #000 45%, transparent);
+}
+.cf-dialog__panel {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 90vw);
+  height: min(560px, 80vh);
+  background: var(--cf-surface);
+  color: var(--cf-text);
+  border: 1px solid var(--cf-border-strong);
+  border-radius: 10px;
+  overflow: hidden;
+  font: 12px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.cf-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cf-border);
+}
+.cf-dialog__header h2 { margin: 0; font-size: 13px; }
+.cf-dialog__hint { margin: 0; padding: 6px 12px; color: var(--cf-text-dim); font-size: 11px; }
+.cf-dialog__editor { flex: 1 1 auto; min-height: 0; }
+.cf-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--cf-border);
+}
+.cf-dialog .cf-alert { margin: 0 12px; }

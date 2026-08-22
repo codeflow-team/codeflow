@@ -44,6 +44,31 @@ describe("resolveInspectorFields", () => {
     for (const field of model.fields) expect(field.blockedReason).not.toBeNull();
   });
 
+  it("refuses field edits on an unresolved call, even when its argument is a literal (03 §11)", () => {
+    const unresolved = node({
+      id: "n",
+      type: "unknown",
+      label: "github.getAuditLog",
+      path: "flow/call:github.getAuditLog[0]",
+      data: {
+        toolName: "github.getAuditLog",
+        resolved: false,
+        arguments: { repo: "input.repository" },
+        argumentsEditable: true,
+        argumentsHaveSpread: false,
+      },
+    });
+    const model = resolveInspectorFields(unresolved, registry());
+    expect(model.notice).toContain("does not resolve to a tool in the registry");
+    for (const field of model.fields) {
+      expect(field.blockedReason).not.toBeNull();
+      expect(field.patch).toBeNull();
+    }
+    // …but it can still be pointed at a real tool, or edited as code (06 §2).
+    expect(model.toolChange).not.toBeNull();
+    expect(model.codeEdit).toEqual({ kind: "region", label: "Edit statement as code" });
+  });
+
   it("warns about spreads without offering to override hidden values (06 §1)", () => {
     const spread = node({
       id: "n",

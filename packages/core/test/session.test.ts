@@ -52,9 +52,11 @@ describe("later phases are stubs, not lies", () => {
     await expect(session.validate("")).rejects.toThrow("not implemented (phase 2)");
   });
 
-  it("patchNode throws until the patch engine lands (phase 4)", async () => {
+  it("patchNode refuses before anything has been analyzed", async () => {
+    // The patch engine landed in phase 4; without a graph there is no node to
+    // resolve, and the session says so instead of inventing one.
     await expect(session.patchNode("node_1", { channel: "#eng" })).rejects.toThrow(
-      "not implemented (phase 4)",
+      "Nothing has been analyzed in this session yet",
     );
   });
 

@@ -1,0 +1,7 @@
+{
+  "description": "adding a schema property follows the literal's multi-line, trailing-comma layout (06 §2, §4)",
+  "node": "flow/call:slack.send[0]",
+  "changes": {
+    "threadId": "T-42"
+  }
+}

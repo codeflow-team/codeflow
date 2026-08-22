@@ -1,0 +1,11 @@
+{
+  "description": "an unknown node is replaced by a registered tool with the same input field (03 §11, 06 §2)",
+  "node": "flow/call:github.listEverything[0]",
+  "changes": {
+    "$tool": "github.getNewPRs"
+  },
+  "updatedAs": "flow/call:github.getNewPRs[0]",
+  "diagnostics": [
+    "output-type-changed"
+  ]
+}

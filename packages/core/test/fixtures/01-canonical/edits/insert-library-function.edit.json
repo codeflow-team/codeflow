@@ -1,0 +1,20 @@
+{
+  "description": "palette insert of a library function already imported — no duplicate import (06 §2)",
+  "node": "flow/for[0]/call:github.getFiles[0]",
+  "changes": {
+    "$insert": {
+      "function": "isAuthChange",
+      "where": "after",
+      "variable": "flagged",
+      "arguments": {
+        "files": {
+          "kind": "expression",
+          "text": "files"
+        }
+      }
+    }
+  },
+  "expectAdded": 1,
+  "idempotent": false,
+  "expectUpdated": []
+}

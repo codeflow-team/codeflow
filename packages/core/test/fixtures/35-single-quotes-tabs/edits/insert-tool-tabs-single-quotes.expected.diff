@@ -1,0 +1,8 @@
+@@ -6,6 +6,7 @@
+ 
+ 	for (const pr of prs) {
+ 		const files = await tools.github.getFiles({ pr });
++		await tools.slack.send({ channel: '#audit', message: pr.title, urgent: false });
+ 
+ 		if (files.some(isAuthChange)) {
+ 			await tools.slack.send({ channel: '#security', message: 'Auth change detected' });

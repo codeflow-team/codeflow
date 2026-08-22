@@ -1,0 +1,9 @@
+@@ -9,7 +9,7 @@
+   const repo = normalize(input.repository);
+   const prs = await tools.github.getNewPRs({ repo });
+   const files = await tools.github.getFiles({ pr: prs[0] });
+-  const flagged = filterAuthChanges(files);
++  const flagged = filterAuthChanges(files.slice(0, 10));
+ 
+   return flagged;
+ }

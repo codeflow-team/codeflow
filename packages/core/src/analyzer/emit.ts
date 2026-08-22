@@ -87,20 +87,29 @@ interface ArgumentInfo {
   editable: boolean;
   hasSpread: boolean;
   fields: Record<string, string> | null;
+  /**
+   * Fields whose value is the literal placeholder `undefined` — what the
+   * palette writes for a required input it has no value for (06 §2). Their
+   * presence is what puts a node in **needs-configuration**.
+   */
+  placeholders: string[];
 }
 
 function describeArguments(call: Node): ArgumentInfo {
   if (!Node.isCallExpression(call)) {
-    return { text: "", editable: false, hasSpread: false, fields: null };
+    return { text: "", editable: false, hasSpread: false, fields: null, placeholders: [] };
   }
   const args = call.getArguments();
   const text = args.map((a) => a.getText()).join(", ");
-  if (args.length !== 1) return { text, editable: false, hasSpread: false, fields: null };
+  if (args.length !== 1) {
+    return { text, editable: false, hasSpread: false, fields: null, placeholders: [] };
+  }
   const only = unwrap(args[0]);
   if (only === undefined || !Node.isObjectLiteralExpression(only)) {
-    return { text, editable: false, hasSpread: false, fields: null };
+    return { text, editable: false, hasSpread: false, fields: null, placeholders: [] };
   }
   const fields: Record<string, string> = {};
+  const placeholders: string[] = [];
   let hasSpread = false;
   for (const property of only.getProperties()) {
     if (Node.isSpreadAssignment(property)) {
@@ -108,14 +117,16 @@ function describeArguments(call: Node): ArgumentInfo {
       continue;
     }
     if (Node.isPropertyAssignment(property)) {
-      fields[property.getName()] = property.getInitializerOrThrow().getText();
+      const value = property.getInitializerOrThrow().getText();
+      fields[property.getName()] = value;
+      if (value === "undefined") placeholders.push(property.getName());
       continue;
     }
     if (Node.isShorthandPropertyAssignment(property)) {
       fields[property.getName()] = property.getName();
     }
   }
-  return { text, editable: true, hasSpread, fields };
+  return { text, editable: true, hasSpread, fields, placeholders };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -553,6 +564,22 @@ function createCallNode(
         argumentsHaveSpread: args.hasSpread,
       },
     });
+  }
+
+  // needs-configuration (06 §2): the palette writes `undefined` for a required
+  // input it has no value for. The code still parses; the node says out loud
+  // that it is not finished, rather than looking configured and failing at run
+  // time.
+  if (args.placeholders.length > 0) {
+    node.data["needsConfiguration"] = true;
+    node.data["placeholders"] = [...args.placeholders];
+    diagnose(
+      ctx,
+      "warning",
+      "needs-configuration",
+      `\`${node.label}\` has unset inputs: ${args.placeholders.join(", ")} — fill them in before running the flow (06 §2).`,
+      node.source,
+    );
   }
 
   recordReads(ctx, frame, node.id, [call], declared);

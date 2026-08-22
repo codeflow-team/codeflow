@@ -1,0 +1,7 @@
+{
+  "description": "the condition expression of a while loop (06 §2)",
+  "node": "flow/while[0]",
+  "changes": {
+    "$condition": "attempts < 5"
+  }
+}

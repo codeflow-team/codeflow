@@ -1,0 +1,7 @@
+@@ -6,6 +6,5 @@
+   await tools.slack.send({
+     channel: "#security", // where the alert goes
+     message: `Found ${prs.length} PRs`,
+-    urgent: true,
+   });
+ }

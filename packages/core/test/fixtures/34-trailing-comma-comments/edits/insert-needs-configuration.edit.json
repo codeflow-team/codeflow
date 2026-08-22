@@ -1,0 +1,21 @@
+{
+  "description": "palette insert with required fields left unset — placeholders + needs-configuration (06 §2)",
+  "node": "flow/call:github.getNewPRs[0]",
+  "changes": {
+    "$insert": {
+      "tool": "slack.send",
+      "where": "after",
+      "arguments": {
+        "channel": "#audit",
+        "message": "queued"
+      }
+    }
+  },
+  "expectAdded": 1,
+  "idempotent": false,
+  "diagnostics": [
+    "needs-configuration",
+    "needs-configuration"
+  ],
+  "expectUpdated": []
+}

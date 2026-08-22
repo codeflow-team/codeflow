@@ -1,0 +1,8 @@
+@@ -4,7 +4,6 @@
+   const prs = await tools.github.getNewPRs({ repo: input.repository });
+ 
+   await tools.slack.send({
+-    channel: "#security", // where the alert goes
+     message: `Found ${prs.length} PRs`,
+     urgent: true,
+   });

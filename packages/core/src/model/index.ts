@@ -42,7 +42,7 @@ export type {
 
 export type { SyntaxTree, Parser } from "./parser.js";
 
-export type { PatchResult } from "./patch.js";
+export type { PatchResult, PatchNodeOptions } from "./patch.js";
 
 export type {
   FunctionLibraryStore,

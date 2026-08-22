@@ -1,0 +1,9 @@
+{
+  "description": "deleting the output node of an early return (06 §2)",
+  "node": "flow/if[0]/return[0]",
+  "changes": {
+    "$delete": true
+  },
+  "expectRemoved": 1,
+  "idempotent": false
+}

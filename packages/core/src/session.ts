@@ -10,7 +10,8 @@
  * their methods throw until then rather than returning a plausible lie.
  */
 
-import { notImplemented } from "./errors.js";
+import { CodeFlowError, notImplemented } from "./errors.js";
+import { computePatch } from "./patcher/patch.js";
 import { generateLibDts, type GenerateLibDtsOptions } from "./codegen/lib-dts.js";
 import { generateToolsDts, type GenerateToolsDtsOptions } from "./codegen/tools-dts.js";
 import { analyzeSource, type AnalyzeParser } from "./analyzer/analyze.js";
@@ -24,6 +25,7 @@ import type {
   GenerationContext,
   GraphChange,
   Parser,
+  PatchNodeOptions,
   PatchResult,
   ValidationResult,
   WorkflowGraph,
@@ -61,7 +63,16 @@ export interface CodeFlowSession {
   lastResolution(): IdentityResolution | null;
 
   analyze(source: string, options?: AnalyzeOptions): Promise<WorkflowGraph>;
-  patchNode(nodeId: string, changes: Record<string, unknown>): Promise<PatchResult>;
+  /**
+   * Apply one edit to a node and patch it back into the source (06 §4).
+   * Refusals are thrown as `CodeFlowError`s with a `patch-*` code — the caller
+   * always learns *why*, and the source is never half-written.
+   */
+  patchNode(
+    nodeId: string,
+    changes: Record<string, unknown>,
+    options?: PatchNodeOptions,
+  ): Promise<PatchResult>;
   validate(source: string): Promise<ValidationResult>;
   buildGenerationContext(options?: BuildGenerationContextOptions): Promise<GenerationContext>;
 
@@ -78,6 +89,13 @@ class Session implements CodeFlowSession {
   private graph: WorkflowGraph | null = null;
   private changes: GraphChange[] = [];
   private resolution: IdentityResolution | null = null;
+  /**
+   * Options of the last analyze, minus `provenance` (which belongs to one patch,
+   * never to the session). A re-analyze triggered by a patch has to see the same
+   * file path and trigger metadata, or the graph would change for reasons the
+   * user did not ask for.
+   */
+  private lastOptions: AnalyzeOptions = {};
   /** Kept warm across analyses so re-analyze stays inside the <100ms target (07 §7). */
   private readonly tsParser: TsMorphParser;
 
@@ -120,6 +138,8 @@ class Session implements CodeFlowSession {
    */
   async analyze(source: string, options?: AnalyzeOptions): Promise<WorkflowGraph> {
     const previous = this.graph;
+    const { provenance: _provenance, ...sticky } = options ?? {};
+    this.lastOptions = sticky;
     const version = (previous?.version ?? 0) + 1;
     const parser = (this.parser ?? this.tsParser) as AnalyzeParser;
     const cold = analyzeSource(source, this.registry, { ...options, version }, parser);
@@ -143,8 +163,103 @@ class Session implements CodeFlowSession {
     throw notImplemented("CodeFlowSession.validate", 2);
   }
 
-  async patchNode(_nodeId: string, _changes: Record<string, unknown>): Promise<PatchResult> {
-    throw notImplemented("CodeFlowSession.patchNode", 4);
+  /**
+   * Edit a node and patch the change back into the source (06 §4).
+   *
+   * Conflict detection runs first (06 §5): the registry must still be the one
+   * the graph was analyzed against, and — when the host hands over a newer file
+   * — the graph is re-analyzed and the node's **raw text** compared, so an edit
+   * made outside CodeFlow is never silently overwritten.
+   *
+   * The patch itself is computed on a candidate source and only committed once
+   * it parses and re-analyzes cleanly; the re-analyze carries patch provenance,
+   * so every other node keeps its id exactly (03 §5.2 step 0).
+   */
+  async patchNode(
+    nodeId: string,
+    changes: Record<string, unknown>,
+    options: PatchNodeOptions = {},
+  ): Promise<PatchResult> {
+    let graph = this.graph;
+    if (graph === null) {
+      throw new CodeFlowError(
+        "patch-node-not-found",
+        "Nothing has been analyzed in this session yet — call analyze() before patchNode().",
+      );
+    }
+
+    // 0 — the graph is a function of (source, registry); a moved registry makes
+    // it stale no matter what the source says (06 §5.0).
+    if (graph.registryHash !== this.registry.registryHash()) {
+      throw new CodeFlowError(
+        "patch-conflict",
+        "The registry changed since this graph was analyzed — re-analyze the flow before editing (06 §5).",
+      );
+    }
+
+    // 1–4 — the file may have moved under us.
+    if (options.source !== undefined && options.source !== graph.source.content) {
+      const previous = graph.nodes.find((node) => node.id === nodeId);
+      if (previous === undefined) {
+        throw new CodeFlowError(
+          "patch-node-not-found",
+          `No node "${nodeId}" in the current graph — re-analyze before editing.`,
+        );
+      }
+      const before = graph.source.content.slice(
+        previous.source.start.offset,
+        previous.source.end.offset,
+      );
+      graph = await this.analyze(options.source, this.lastOptions);
+      const current = graph.nodes.find((node) => node.id === nodeId);
+      if (current === undefined) {
+        throw new CodeFlowError(
+          "patch-conflict",
+          "This node no longer exists after re-analyzing the changed file — reload the workflow before editing (06 §5).",
+        );
+      }
+      const after = options.source.slice(current.source.start.offset, current.source.end.offset);
+      // Raw text, not the fingerprint: a fingerprint drops trivia and would miss
+      // a comment change that a region-replacing patch would overwrite (06 §5).
+      if (before !== after) {
+        throw new CodeFlowError(
+          "patch-conflict",
+          "This node changed since the workflow was loaded — reload the workflow before editing (06 §5).",
+        );
+      }
+    }
+
+    const computed = computePatch({
+      graph,
+      registry: this.registry,
+      nodeId,
+      changes,
+      ...(this.lastOptions.trigger === undefined ? {} : { analyzeOptions: { trigger: this.lastOptions.trigger } }),
+    });
+
+    if (computed.patches.length === 0) {
+      // Empty edit: not one byte changes, and the graph is left exactly as it is (I4).
+      return {
+        source: graph.source.content,
+        patches: [],
+        graph,
+        diagnostics: computed.diagnostics,
+        changes: [],
+      };
+    }
+
+    const next = await this.analyze(computed.source, {
+      ...this.lastOptions,
+      provenance: computed.provenance,
+    });
+
+    return {
+      source: computed.source,
+      patches: computed.patches,
+      graph: next,
+      diagnostics: [...computed.diagnostics, ...next.diagnostics],
+      changes: this.lastChanges(),
+    };
   }
 
   async buildGenerationContext(

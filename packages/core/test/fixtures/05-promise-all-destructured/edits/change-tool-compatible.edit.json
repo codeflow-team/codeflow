@@ -1,0 +1,8 @@
+{
+  "description": "compatible tool change inside a Promise.all branch: the argument carries over (06 §2)",
+  "node": "flow/parallel[0]/call:payment.charge[0]",
+  "changes": {
+    "$tool": "payment.receipt"
+  },
+  "updatedAs": "flow/parallel[0]/call:payment.receipt[0]"
+}

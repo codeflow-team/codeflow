@@ -1,0 +1,12 @@
+{
+  "description": "removing the last property keeps the file's trailing-comma style (06 §4)",
+  "node": "flow/call:slack.send[0]",
+  "changes": {
+    "urgent": {
+      "kind": "remove"
+    }
+  },
+  "diagnostics": [
+    "needs-configuration"
+  ]
+}

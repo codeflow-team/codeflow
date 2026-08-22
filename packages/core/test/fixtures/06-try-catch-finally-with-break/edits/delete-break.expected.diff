@@ -1,0 +1,8 @@
+@@ -6,7 +6,6 @@
+       await tools.payment.charge({ amount });
+     } catch (err) {
+       await tools.slack.send({ channel: "#alerts", message: `Charge failed: ${err}` });
+-      break;
+     } finally {
+       await tools.audit.log({ item: amount });
+     }

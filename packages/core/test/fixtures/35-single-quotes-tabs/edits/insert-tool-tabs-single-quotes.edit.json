@@ -1,0 +1,21 @@
+{
+  "description": "inserted code follows the file's tabs and single quotes (06 §4)",
+  "node": "flow/for[0]/call:github.getFiles[0]",
+  "changes": {
+    "$insert": {
+      "tool": "slack.send",
+      "where": "after",
+      "arguments": {
+        "channel": "#audit",
+        "message": {
+          "kind": "expression",
+          "text": "pr.title"
+        },
+        "urgent": false
+      }
+    }
+  },
+  "expectAdded": 1,
+  "idempotent": false,
+  "expectUpdated": []
+}

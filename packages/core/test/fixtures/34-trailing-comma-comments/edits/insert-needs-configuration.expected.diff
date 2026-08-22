@@ -1,0 +1,8 @@
+@@ -2,6 +2,7 @@
+ 
+ export default async function flow(input: { repository: string }, tools: Tools) {
+   const prs = await tools.github.getNewPRs({ repo: input.repository });
++  await tools.slack.send({ channel: "#audit", message: "queued", urgent: undefined, threadId: undefined });
+ 
+   await tools.slack.send({
+     channel: "#security", // where the alert goes

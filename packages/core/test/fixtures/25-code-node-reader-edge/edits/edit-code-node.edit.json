@@ -1,0 +1,7 @@
+{
+  "description": "a code node is an opaque region — the minimal patch replaces all of it (06 §2)",
+  "node": "flow/stmt[1]",
+  "changes": {
+    "$code": "files.push(\"extra.ts\", \"more.ts\");"
+  }
+}

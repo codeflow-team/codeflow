@@ -1,0 +1,11 @@
+@@ -8,10 +8,6 @@
+     const files = await tools.github.getFiles({ pr });
+ 
+     if (files.some(isAuthChange)) {
+-      await tools.slack.send({
+-        channel: "#security",
+-        message: `Security PR: ${pr.title}`
+-      });
+     }
+   }
+ }

@@ -1,0 +1,9 @@
+@@ -16,7 +16,7 @@
+         if ( files.some( isAuthChange ) )
+         {
+       await tools.slack.send( {
+-              channel : "#security" ,
++              channel : "#engineering" ,
+               message : `Security PR: ${pr.title}`
+       } ) ;
+         }

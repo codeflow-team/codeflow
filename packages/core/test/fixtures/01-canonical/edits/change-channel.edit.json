@@ -1,0 +1,7 @@
+{
+  "description": "acceptance (08 §4): the user changes the Slack channel to #engineering",
+  "node": "flow/for[0]/if[0]/call:slack.send[0]",
+  "changes": {
+    "channel": "#engineering"
+  }
+}

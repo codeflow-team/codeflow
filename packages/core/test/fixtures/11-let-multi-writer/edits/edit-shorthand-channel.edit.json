@@ -1,0 +1,7 @@
+{
+  "description": "editing a shorthand property rewrites it longhand — defined behaviour (06 §1)",
+  "node": "flow/call:slack.send[0]",
+  "changes": {
+    "channel": "#urgent"
+  }
+}

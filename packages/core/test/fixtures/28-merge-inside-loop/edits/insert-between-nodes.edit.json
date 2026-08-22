@@ -1,0 +1,19 @@
+{
+  "description": "palette insert between two existing nodes of a loop body (06 §2)",
+  "node": "flow/for[0]/if[0]",
+  "changes": {
+    "$insert": {
+      "tool": "audit.log",
+      "where": "after",
+      "arguments": {
+        "item": {
+          "kind": "expression",
+          "text": "pr"
+        }
+      }
+    }
+  },
+  "expectAdded": 1,
+  "idempotent": false,
+  "expectUpdated": []
+}

@@ -1,0 +1,7 @@
+{
+  "description": "08 §4 acceptance test, on the first of two byte-identical calls",
+  "node": "flow/call:slack.send[0]",
+  "changes": {
+    "channel": "#engineering"
+  }
+}

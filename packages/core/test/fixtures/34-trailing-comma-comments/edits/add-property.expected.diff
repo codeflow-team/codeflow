@@ -1,0 +1,7 @@
+@@ -7,5 +7,6 @@
+     channel: "#security", // where the alert goes
+     message: `Found ${prs.length} PRs`,
+     urgent: true,
++    threadId: "T-42",
+   });
+ }

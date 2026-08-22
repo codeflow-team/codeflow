@@ -11,6 +11,13 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 - **Quyết định specs t tự đưa** (theo phân tích của agent, t đồng ý và đã sửa 04 §1.4): hidden-call rule chỉ áp cho `await` + tool call (bắt rễ `tools`), KHÔNG áp cho sync library/local call trong expression — vì áp nguyên văn sẽ mâu thuẫn chính §2.2b/§2.6, và mục đích rule là side-effect visibility (sync predicate không có side-effect tầng flow).
 - Giới hạn thừa nhận (đã document trong code, đúng specs): mutation ordering không model; nested try terminals chỉ route tới finally trong cùng, chưa transitively ra finally ngoài.
 
+## Update ~02:15 — Phase 6a (REACT UI + DEMO) nghiệm thu ✅ (commit `b10d54c`)
+
+- `@codeflow/react` xong: canvas React Flow v12 + ELK hierarchical (loop/try là container thật), inspector với `{{ }}` display, Monaco sync 2 chiều, diagnostics panel, 3 mức progressive disclosure, light/dark. 37 tests + build sạch (t verify lại).
+- **Demo app**: `pnpm dev` → http://localhost:5173 — preload sẵn ví dụ canonical, có thêm example try/catch và example degradation (unknown/code/hidden-call). Đây là app cho e2e Claude in Chrome.
+- Agent đã tự verify TRONG BROWSER THẬT (Chrome DevTools): graph khớp 07 §6 từng node, sync chọn node↔highlight code chạy cả 2 chiều, và tự tìm+fix 1 bug thật (Monaco cursor listener bắt stale graph).
+- Editing đang DISABLED có chủ đích (tooltip "Editing lands with the patch engine") — sẽ wire ở Phase 6b sau khi Phase 4 xong.
+
 ## Update ~01:45 — Phase 3 (IDENTITY) nghiệm thu ✅ (commit `edd9d3d`) → thả Phase 4
 
 - Identity + diff xong: **563 tests xanh**. T smoke test tay kịch bản hiểm nhất: chèn call `slack.send` GIỐNG HỆT lên trước call cũ → id cũ ở đúng node cũ, node mới nhận id mới, không mis-bind; reformat toàn file → id giữ nguyên hết. Provenance hook sẵn sàng cho patcher.

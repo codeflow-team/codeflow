@@ -1,0 +1,7 @@
+{
+  "description": "adding a property to a single-line literal reuses its separator and quote style (06 §4)",
+  "node": "flow/for[0]/if[0]/call:slack.send[0]",
+  "changes": {
+    "urgent": true
+  }
+}

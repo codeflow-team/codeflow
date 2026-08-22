@@ -1,0 +1,11 @@
+{
+  "description": "deleting a node whose output is still read is refused, naming the dependent node (06 §2)",
+  "node": "flow/call:normalize[0]",
+  "changes": {
+    "$delete": true
+  },
+  "error": {
+    "code": "patch-dependency",
+    "message": "Get New PRs"
+  }
+}

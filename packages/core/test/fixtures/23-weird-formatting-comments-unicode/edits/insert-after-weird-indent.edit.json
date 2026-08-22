@@ -1,0 +1,20 @@
+{
+  "description": "an inserted statement follows the indentation of the line it joins (06 §4)",
+  "node": "flow/for[0]/call:github.getFiles[0]",
+  "changes": {
+    "$insert": {
+      "tool": "slack.send",
+      "where": "after",
+      "arguments": {
+        "channel": "#audit",
+        "message": {
+          "kind": "expression",
+          "text": "pr.title"
+        }
+      }
+    }
+  },
+  "expectAdded": 1,
+  "idempotent": false,
+  "expectUpdated": []
+}

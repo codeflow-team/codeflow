@@ -1,0 +1,17 @@
+{
+  "description": "insert a call byte-identical to the one already there — provenance keeps both ids (03 §5.2)",
+  "node": "flow/call:slack.send[0]",
+  "changes": {
+    "$insert": {
+      "tool": "slack.send",
+      "where": "before",
+      "arguments": {
+        "channel": "#security",
+        "message": "Auth change detected"
+      }
+    }
+  },
+  "expectAdded": 1,
+  "idempotent": false,
+  "expectUpdated": []
+}

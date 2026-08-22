@@ -1,0 +1,10 @@
+@@ -3,8 +3,8 @@
+ 
+ export default async function flow(input: { amount: number }, tools: Tools) {
+   const [charge, receipt, ready] = await Promise.all([
+-    tools.payment.charge({ amount: input.amount }),
+     tools.payment.receipt({ amount: input.amount }),
++    tools.payment.receipt({ amount: input.amount }),
+     isReady(input)
+   ]);
+ 

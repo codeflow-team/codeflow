@@ -1,0 +1,7 @@
+{
+  "description": "editing the text around an interpolation keeps the template literal (06 §3)",
+  "node": "flow/for[0]/if[0]/call:slack.send[0]",
+  "changes": {
+    "message": "Auth PR: ${pr.title}"
+  }
+}

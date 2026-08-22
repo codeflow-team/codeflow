@@ -1,0 +1,12 @@
+{
+  "description": "removing a property takes its whole line, comment included, and leaves the commas right (06 §4)",
+  "node": "flow/call:slack.send[0]",
+  "changes": {
+    "channel": {
+      "kind": "remove"
+    }
+  },
+  "diagnostics": [
+    "needs-configuration"
+  ]
+}

@@ -1,0 +1,9 @@
+@@ -4,7 +4,7 @@
+ export default async function flow(input: { repository: string }, tools: Tools) {
+   const prs = await tools.github.getNewPRs({ repo: input.repository });
+ 
+-  for (const pr of prs) {
++  for (const pr of prs.slice(0, 5)) {
+     const files = await tools.github.getFiles({ pr });
+ 
+     if (files.some(isAuthChange)) {

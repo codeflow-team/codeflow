@@ -1,0 +1,7 @@
+{
+  "description": "a channel edit on oddly spaced source touches the literal and nothing else (I3)",
+  "node": "flow/for[0]/if[0]/call:slack.send[0]",
+  "changes": {
+    "channel": "#engineering"
+  }
+}

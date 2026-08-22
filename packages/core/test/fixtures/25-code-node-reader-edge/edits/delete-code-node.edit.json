@@ -1,0 +1,9 @@
+{
+  "description": "deleting a code node that binds nothing",
+  "node": "flow/stmt[1]",
+  "changes": {
+    "$delete": true
+  },
+  "expectRemoved": 1,
+  "idempotent": false
+}

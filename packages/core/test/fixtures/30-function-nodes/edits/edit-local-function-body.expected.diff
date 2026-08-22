@@ -1,0 +1,9 @@
+@@ -2,7 +2,7 @@
+ import { filterAuthChanges } from "@flows/lib";
+ 
+ function normalize(raw: string): string {
+-  return raw.trim();
++  return raw.trim().toLowerCase();
+ }
+ 
+ export default async function flow(input: { repository: string }, tools: Tools) {

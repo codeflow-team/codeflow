@@ -1,0 +1,7 @@
+@@ -9,5 +9,5 @@
+     channel = "#quiet";
+   }
+ 
+-  await tools.slack.send({ channel, message: "routed" });
++  await tools.slack.send({ channel: "#urgent", message: "routed" });
+ }

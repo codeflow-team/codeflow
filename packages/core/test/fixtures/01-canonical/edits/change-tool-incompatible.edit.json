@@ -1,0 +1,12 @@
+{
+  "description": "replace & reconfigure: the new tool shares no input field (06 §2)",
+  "node": "flow/for[0]/if[0]/call:slack.send[0]",
+  "changes": {
+    "$tool": "github.getFiles"
+  },
+  "updatedAs": "flow/for[0]/if[0]/call:github.getFiles[0]",
+  "diagnostics": [
+    "tool-replace-reconfigure",
+    "needs-configuration"
+  ]
+}

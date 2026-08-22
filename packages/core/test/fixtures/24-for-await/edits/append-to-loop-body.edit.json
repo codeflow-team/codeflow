@@ -1,0 +1,21 @@
+{
+  "description": "palette insert at the end of a loop body (06 §2)",
+  "node": "flow/for[0]",
+  "changes": {
+    "$insert": {
+      "tool": "slack.send",
+      "where": "append",
+      "slot": "body",
+      "arguments": {
+        "channel": "#done",
+        "message": {
+          "kind": "expression",
+          "text": "String(page)"
+        }
+      }
+    }
+  },
+  "expectAdded": 1,
+  "idempotent": false,
+  "expectUpdated": []
+}

@@ -1,0 +1,10 @@
+{
+  "description": "editing a function node's field patches the positional argument it names (05 §4)",
+  "node": "flow/call:filterAuthChanges[0]",
+  "changes": {
+    "files": {
+      "kind": "expression",
+      "text": "files.slice(0, 10)"
+    }
+  }
+}

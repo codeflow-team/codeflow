@@ -1,0 +1,9 @@
+{
+  "description": "deleting a node nothing depends on",
+  "node": "flow/for[0]/if[0]/call:slack.send[0]",
+  "changes": {
+    "$delete": true
+  },
+  "expectRemoved": 1,
+  "idempotent": false
+}

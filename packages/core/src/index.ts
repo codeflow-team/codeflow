@@ -11,6 +11,7 @@ export * from "./codegen/index.js";
 export * from "./parser/index.js";
 export * from "./mapper/index.js";
 export * from "./analyzer/index.js";
+export * from "./patcher/index.js";
 export * from "./diff/index.js";
 
 export { InMemoryFunctionLibraryStore } from "./library/in-memory-store.js";

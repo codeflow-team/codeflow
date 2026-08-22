@@ -1,0 +1,7 @@
+{
+  "description": "the condition of a nested else-if (04 §2.4, 06 §2)",
+  "node": "flow/if[0]/else/if[0]",
+  "changes": {
+    "$condition": "input.level === \"medium\" || input.level === \"warn\""
+  }
+}

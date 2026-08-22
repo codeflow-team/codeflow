@@ -1,0 +1,8 @@
+{
+  "description": "editing the body of a local function replaces the whole opaque region (06 §2)",
+  "node": "flow/call:normalize[0]",
+  "changes": {
+    "$code": "\n  return raw.trim().toLowerCase();\n"
+  },
+  "expectUpdated": []
+}

@@ -1,0 +1,7 @@
+{
+  "description": "the iterable of a for…of (06 §2)",
+  "node": "flow/for[0]",
+  "changes": {
+    "$iterable": "prs.slice(0, 5)"
+  }
+}

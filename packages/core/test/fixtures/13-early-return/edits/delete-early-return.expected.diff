@@ -1,0 +1,8 @@
+@@ -4,7 +4,6 @@
+   const pr = await tools.github.getPR({ id: input.id });
+ 
+   if (!pr) {
+-    return null;
+   }
+ 
+   await tools.slack.send({ channel: "#security", message: `${pr.title}` });

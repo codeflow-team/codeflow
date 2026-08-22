@@ -1,0 +1,30 @@
+{
+  "tools": [
+    {
+      "name": "github.getNewPRs",
+      "label": "Get New PRs",
+      "description": "Get new pull requests",
+      "icon": "🐙",
+      "inputSchema": {
+        "repo": "string"
+      },
+      "outputSchema": "PullRequest[]",
+      "editableFields": [
+        "repo"
+      ]
+    },
+    {
+      "name": "github.getFiles",
+      "label": "Get PR Files",
+      "description": "Get files changed in a PR",
+      "icon": "🐙",
+      "inputSchema": {
+        "pr": "PullRequest"
+      },
+      "outputSchema": "File[]",
+      "editableFields": [
+        "pr"
+      ]
+    }
+  ]
+}

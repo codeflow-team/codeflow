@@ -1,0 +1,34 @@
+{
+  "tools": [
+    {
+      "name": "github.getFiles",
+      "label": "Get PR Files",
+      "description": "Get files changed in a PR",
+      "icon": "🐙",
+      "inputSchema": {
+        "pr": "PullRequest"
+      },
+      "outputSchema": "File[]",
+      "editableFields": [
+        "pr"
+      ]
+    },
+    {
+      "name": "slack.send",
+      "label": "Slack Send",
+      "description": "Send a Slack message",
+      "icon": "💬",
+      "inputSchema": {
+        "channel": "string",
+        "message": "string"
+      },
+      "editableFields": [
+        "channel",
+        {
+          "name": "message",
+          "editor": "expression"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "tools": [
+    {
+      "name": "payment.charge",
+      "label": "Charge Payment",
+      "icon": "💳",
+      "inputSchema": {
+        "amount": "number"
+      },
+      "outputSchema": "Charge",
+      "editableFields": [
+        "amount"
+      ]
+    },
+    {
+      "name": "payment.receipt",
+      "label": "Payment Receipt",
+      "icon": "🧾",
+      "inputSchema": {
+        "amount": "number"
+      },
+      "outputSchema": "Receipt",
+      "editableFields": [
+        "amount"
+      ]
+    },
+    {
+      "name": "slack.send",
+      "label": "Slack Send",
+      "description": "Send a Slack message",
+      "icon": "💬",
+      "inputSchema": {
+        "channel": "string",
+        "message": "string"
+      },
+      "editableFields": [
+        "channel",
+        {
+          "name": "message",
+          "editor": "expression"
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "isReady",
+      "label": "Is Ready",
+      "icon": "✅",
+      "inputSchema": {
+        "input": "unknown"
+      },
+      "outputSchema": "boolean",
+      "code": "export function isReady(input: unknown) {\n  return input !== null;\n}",
+      "modulePath": "@flows/lib"
+    }
+  ]
+}

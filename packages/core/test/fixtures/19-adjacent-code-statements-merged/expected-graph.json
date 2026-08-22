@@ -1,0 +1,205 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          9,
+          1,
+          297
+        ],
+        "end": [
+          9,
+          2,
+          298
+        ]
+      },
+      "fingerprint": "sha256#6",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          81,
+          130
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ repository: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ repository: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          8,
+          3,
+          231
+        ],
+        "end": [
+          8,
+          68,
+          296
+        ]
+      },
+      "fingerprint": "sha256#5",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#audit\", message: parts[0] }",
+        "arguments": {
+          "channel": "\"#audit\"",
+          "message": "parts[0]"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/stmt[0..2]",
+      "type": "code",
+      "label": "Custom Code",
+      "range": {
+        "start": [
+          4,
+          3,
+          134
+        ],
+        "end": [
+          6,
+          37,
+          227
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "now",
+          "label": "now"
+        },
+        {
+          "id": "runLabel",
+          "label": "runLabel"
+        },
+        {
+          "id": "parts",
+          "label": "parts"
+        }
+      ],
+      "data": {
+        "parentId": null,
+        "parentSlot": null,
+        "statementCount": 3,
+        "statementFingerprints": [
+          "sha256#2",
+          "sha256#3",
+          "sha256#4"
+        ],
+        "text": "const now = Date.now();\nconst runLabel = `run-${now}`;\nconst parts = runLabel.split(\"-\");"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/stmt[0..2]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:slack.send[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/stmt[0..2]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/stmt[0..2]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "parts",
+      "label": "parts"
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "unsupported-construct",
+      "message": "Custom code is kept verbatim — no semantic projection.",
+      "at": "flow/stmt[0..2]"
+    }
+  ]
+}

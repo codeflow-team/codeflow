@@ -1,0 +1,144 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          5,
+          1,
+          201
+        ],
+        "end": [
+          5,
+          2,
+          202
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          78,
+          127
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ channel: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ channel: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          4,
+          3,
+          131
+        ],
+        "end": [
+          4,
+          72,
+          200
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: input.channel, message: \"hello\" }",
+        "arguments": {
+          "channel": "input.channel",
+          "message": "\"hello\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.channel"
+    },
+    {
+      "from": "#flow/call:slack.send[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

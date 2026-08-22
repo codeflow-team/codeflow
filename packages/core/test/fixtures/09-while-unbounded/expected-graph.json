@@ -1,0 +1,247 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          9,
+          1,
+          245
+        ],
+        "end": [
+          9,
+          2,
+          246
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          78,
+          127
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ channel: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ channel: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/stmt[0]",
+      "type": "code",
+      "label": "Custom Code",
+      "range": {
+        "start": [
+          4,
+          3,
+          131
+        ],
+        "end": [
+          4,
+          20,
+          148
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "done",
+          "label": "done"
+        }
+      ],
+      "data": {
+        "parentId": null,
+        "parentSlot": null,
+        "statementCount": 1,
+        "statementFingerprints": [
+          "sha256#1"
+        ],
+        "text": "let done = false;"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": true
+      }
+    },
+    {
+      "path": "flow/while[0]",
+      "type": "loop",
+      "label": "While !done",
+      "range": {
+        "start": [
+          6,
+          3,
+          152
+        ],
+        "end": [
+          8,
+          4,
+          244
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "bounded": false,
+        "condition": "!done",
+        "kind": "while",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": true
+      }
+    },
+    {
+      "path": "flow/while[0]/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          7,
+          5,
+          172
+        ],
+        "end": [
+          7,
+          73,
+          240
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: input.channel, message: \"ping\" }",
+        "arguments": {
+          "channel": "input.channel",
+          "message": "\"ping\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": "#flow/while[0]",
+        "parentSlot": "body",
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/stmt[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/while[0]/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.channel"
+    },
+    {
+      "from": "#flow/stmt[0]",
+      "to": "#flow/while[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/stmt[0]",
+      "to": "#flow/while[0]",
+      "kind": "data",
+      "sourcePort": "done",
+      "label": "done"
+    },
+    {
+      "from": "#flow/while[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/while[0]",
+      "to": "#flow/while[0]/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "body",
+      "label": "body"
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "unsupported-construct",
+      "message": "Custom code is kept verbatim — no semantic projection.",
+      "at": "flow/stmt[0]"
+    },
+    {
+      "severity": "warning",
+      "code": "unbounded-loop-risk",
+      "message": "No stopping condition recognised for `while (!done)` — update a counter or flag from the loop body so the bound is visible (04 §2.8).",
+      "at": "flow/while[0]"
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          9,
+          1,
+          299
+        ],
+        "end": [
+          9,
+          2,
+          300
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          81,
+          130
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ repository: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ repository: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.getNewPRs[0]",
+      "type": "tool",
+      "label": "Get New PRs",
+      "range": {
+        "start": [
+          4,
+          3,
+          134
+        ],
+        "end": [
+          4,
+          72,
+          203
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "repo",
+          "label": "repo",
+          "schema": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "prs",
+          "label": "prs",
+          "schema": "PullRequest[]"
+        }
+      ],
+      "data": {
+        "argumentText": "{ repo: input.repository }",
+        "arguments": {
+          "repo": "input.repository"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.getNewPRs"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/stmt[1]",
+      "type": "code",
+      "label": "Custom Code",
+      "range": {
+        "start": [
+          6,
+          3,
+          207
+        ],
+        "end": [
+          8,
+          4,
+          298
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "parentId": null,
+        "parentSlot": null,
+        "statementCount": 1,
+        "statementFingerprints": [
+          "sha256#2"
+        ],
+        "text": "for (let i = 0; i < prs.length; i++) {\n    await tools.github.getFiles({ pr: prs[i] });\n  }"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": true
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.repository"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/stmt[1]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/stmt[1]",
+      "kind": "data",
+      "sourcePort": "prs",
+      "label": "prs.length"
+    },
+    {
+      "from": "#flow/stmt[1]",
+      "to": "#flow#output",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "unsupported-construct",
+      "message": "Custom code is kept verbatim — no semantic projection.",
+      "at": "flow/stmt[1]"
+    },
+    {
+      "severity": "warning",
+      "code": "hidden-call-in-expression",
+      "message": "`await tools.github.getFiles({ pr: prs[i] })` is awaited/called inside an expression — hoist it into its own `const` so it becomes a node (04 §1.4).",
+      "at": "flow/stmt[1]"
+    }
+  ]
+}

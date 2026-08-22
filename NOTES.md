@@ -4,6 +4,12 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 
 ---
 
+## Update ~00:45 — CLI nghiệm thu ✅ (commit `2e06ca0`)
+
+- `@codeflow/cli` xong: FileFunctionLibraryStore trên `lib/` (metadata nằm trong header comment của chính file — không có bản sao thứ hai), `codeflow generate` (load `codeflow.config.ts` bằng Node 24 type-stripping, không thêm dep), `codeflow init` scaffold workspace mẫu. 46/46 tests, tsc sạch.
+- **CLI agent bắt được 1 bug thật trong specs** (có từ draft GPT v0.1): `files.some(isAuthChange)` (ví dụ canonical) mâu thuẫn signature `isAuthChange(files: File[])` — callback của `.some` nhận 1 phần tử. **T quyết: đổi thành per-file predicate `isAuthChange(file: File)`** (giữ nguyên ví dụ canonical + quy tắc sugar, chỉ sửa definition 05 §4 + templates/tests CLI). Đã sửa, test lại xanh.
+- Deviation đáng chú ý của CLI (đều hợp lý, chi tiết trong transcript): scaffold tsconfig dùng `moduleResolution: "Bundler"` (vì flow contract import không đuôi); `rename` trong file-store có sửa tên declaration trong chính file function (để workspace còn type-check) nhưng KHÔNG sửa flow đang import (đúng specs); vitest chưa vào devDeps của cli (cấm sửa lockfile khi agent khác đang chạy) — **TODO: `pnpm install` bổ sung sau khi Phase 2 xong**.
+
 ## Trạng thái lúc m đi ngủ (2026-08-23 ~00:30)
 
 - ✅ **Phase 0**: môi trường OK; model AI `stealth/ox-alpha` (OpenRouter) đã test — chạy được, cost = 0. Key lưu ở `.env` (đã gitignore). Lưu ý: là reasoning model → khi gọi phải để `max_tokens` cao.

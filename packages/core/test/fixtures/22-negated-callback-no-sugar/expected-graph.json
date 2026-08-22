@@ -1,0 +1,253 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          10,
+          1,
+          351
+        ],
+        "end": [
+          10,
+          2,
+          352
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          4,
+          1,
+          93
+        ],
+        "end": [
+          4,
+          73,
+          165
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ pr: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ pr: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.getFiles[0]",
+      "type": "tool",
+      "label": "Get PR Files",
+      "range": {
+        "start": [
+          5,
+          3,
+          169
+        ],
+        "end": [
+          5,
+          63,
+          229
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "pr",
+          "label": "pr",
+          "schema": "PullRequest"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "files",
+          "label": "files",
+          "schema": "File[]"
+        }
+      ],
+      "data": {
+        "argumentText": "{ pr: input.pr }",
+        "arguments": {
+          "pr": "input.pr"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.getFiles"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]",
+      "type": "condition",
+      "label": "!files.some(isAuthChange)",
+      "range": {
+        "start": [
+          7,
+          3,
+          233
+        ],
+        "end": [
+          9,
+          4,
+          350
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "expression": "!files.some(isAuthChange)",
+        "hasElse": false,
+        "labelSource": "expression",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          8,
+          5,
+          270
+        ],
+        "end": [
+          8,
+          81,
+          346
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#security\", message: \"no auth change\" }",
+        "arguments": {
+          "channel": "\"#security\"",
+          "message": "\"no auth change\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getFiles[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getFiles[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.pr"
+    },
+    {
+      "from": "#flow/call:github.getFiles[0]",
+      "to": "#flow/if[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.getFiles[0]",
+      "to": "#flow/if[0]",
+      "kind": "data",
+      "sourcePort": "files",
+      "label": "files"
+    },
+    {
+      "from": "#flow/if[0]",
+      "to": "#flow#output",
+      "kind": "control",
+      "sourcePort": "false",
+      "label": "false"
+    },
+    {
+      "from": "#flow/if[0]",
+      "to": "#flow/if[0]/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "true",
+      "label": "true"
+    },
+    {
+      "from": "#flow/if[0]/call:slack.send[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

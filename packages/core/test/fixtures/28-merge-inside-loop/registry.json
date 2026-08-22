@@ -1,0 +1,45 @@
+{
+  "tools": [
+    {
+      "name": "github.getNewPRs",
+      "label": "Get New PRs",
+      "description": "Get new pull requests",
+      "icon": "🐙",
+      "inputSchema": {
+        "repo": "string"
+      },
+      "outputSchema": "PullRequest[]",
+      "editableFields": [
+        "repo"
+      ]
+    },
+    {
+      "name": "slack.send",
+      "label": "Slack Send",
+      "description": "Send a Slack message",
+      "icon": "💬",
+      "inputSchema": {
+        "channel": "string",
+        "message": "string"
+      },
+      "editableFields": [
+        "channel",
+        {
+          "name": "message",
+          "editor": "expression"
+        }
+      ]
+    },
+    {
+      "name": "audit.log",
+      "label": "Audit Log",
+      "icon": "📒",
+      "inputSchema": {
+        "item": "unknown"
+      },
+      "editableFields": [
+        "item"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "tools": [
+    {
+      "name": "payment.charge",
+      "label": "Charge Payment",
+      "icon": "💳",
+      "inputSchema": {
+        "amount": "number"
+      },
+      "outputSchema": "Charge",
+      "editableFields": [
+        "amount"
+      ]
+    }
+  ]
+}

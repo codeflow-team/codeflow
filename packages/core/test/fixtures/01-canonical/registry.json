@@ -1,0 +1,60 @@
+{
+  "tools": [
+    {
+      "name": "github.getNewPRs",
+      "label": "Get New PRs",
+      "description": "Get new pull requests",
+      "icon": "🐙",
+      "inputSchema": {
+        "repo": "string"
+      },
+      "outputSchema": "PullRequest[]",
+      "editableFields": [
+        "repo"
+      ]
+    },
+    {
+      "name": "github.getFiles",
+      "label": "Get PR Files",
+      "description": "Get files changed in a PR",
+      "icon": "🐙",
+      "inputSchema": {
+        "pr": "PullRequest"
+      },
+      "outputSchema": "File[]",
+      "editableFields": [
+        "pr"
+      ]
+    },
+    {
+      "name": "slack.send",
+      "label": "Slack Send",
+      "description": "Send a Slack message",
+      "icon": "💬",
+      "inputSchema": {
+        "channel": "string",
+        "message": "string"
+      },
+      "editableFields": [
+        "channel",
+        {
+          "name": "message",
+          "editor": "expression"
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "isAuthChange",
+      "label": "Is Auth Change",
+      "icon": "🔐",
+      "inputSchema": {
+        "files": "File[]"
+      },
+      "outputSchema": "boolean",
+      "code": "export function isAuthChange(files: File[]) {\n  return files.some((f) => /auth/i.test(f.path));\n}",
+      "modulePath": "@flows/lib"
+    }
+  ]
+}

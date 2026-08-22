@@ -48,12 +48,6 @@ describe("codegen is available in phase 1", () => {
 describe("later phases are stubs, not lies", () => {
   const session = createCodeFlow({ registry: createSampleRegistry() });
 
-  it("analyze throws until the analyzer lands (phase 2)", async () => {
-    await expect(session.analyze("export default async function flow() {}")).rejects.toThrow(
-      "not implemented (phase 2)",
-    );
-  });
-
   it("validate throws until the analyzer lands (phase 2)", async () => {
     await expect(session.validate("")).rejects.toThrow("not implemented (phase 2)");
   });

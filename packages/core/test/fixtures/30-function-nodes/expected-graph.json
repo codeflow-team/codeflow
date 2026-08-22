@@ -1,0 +1,331 @@
+{
+  "nodes": [
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          8,
+          1,
+          164
+        ],
+        "end": [
+          8,
+          81,
+          244
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ repository: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ repository: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:filterAuthChanges[0]",
+      "type": "function",
+      "label": "Filter Auth Changes",
+      "range": {
+        "start": [
+          12,
+          3,
+          407
+        ],
+        "end": [
+          12,
+          44,
+          448
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [
+        {
+          "id": "files",
+          "label": "files",
+          "schema": "File[]"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "flagged",
+          "label": "flagged",
+          "schema": "File[]"
+        }
+      ],
+      "data": {
+        "argumentText": "files",
+        "arguments": null,
+        "argumentsEditable": false,
+        "argumentsHaveSpread": false,
+        "awaited": false,
+        "functionName": "filterAuthChanges",
+        "functionSource": "library",
+        "icon": "🔎",
+        "localName": "filterAuthChanges",
+        "modulePath": "@flows/lib",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.getFiles[0]",
+      "type": "tool",
+      "label": "Get PR Files",
+      "range": {
+        "start": [
+          11,
+          3,
+          346
+        ],
+        "end": [
+          11,
+          61,
+          404
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [
+        {
+          "id": "pr",
+          "label": "pr",
+          "schema": "PullRequest"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "files",
+          "label": "files",
+          "schema": "File[]"
+        }
+      ],
+      "data": {
+        "argumentText": "{ pr: prs[0] }",
+        "arguments": {
+          "pr": "prs[0]"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.getFiles"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.getNewPRs[0]",
+      "type": "tool",
+      "label": "Get New PRs",
+      "range": {
+        "start": [
+          10,
+          3,
+          292
+        ],
+        "end": [
+          10,
+          54,
+          343
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [
+        {
+          "id": "repo",
+          "label": "repo",
+          "schema": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "prs",
+          "label": "prs",
+          "schema": "PullRequest[]"
+        }
+      ],
+      "data": {
+        "argumentText": "{ repo }",
+        "arguments": {
+          "repo": "repo"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.getNewPRs"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:normalize[0]",
+      "type": "function",
+      "label": "normalize",
+      "range": {
+        "start": [
+          9,
+          3,
+          248
+        ],
+        "end": [
+          9,
+          44,
+          289
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "repo",
+          "label": "repo"
+        }
+      ],
+      "data": {
+        "argumentText": "input.repository",
+        "arguments": null,
+        "argumentsEditable": false,
+        "argumentsHaveSpread": false,
+        "awaited": false,
+        "functionName": "normalize",
+        "functionSource": "local",
+        "parentId": null,
+        "parentSlot": null,
+        "signature": "(raw: string): string"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/return[0]",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          14,
+          3,
+          452
+        ],
+        "end": [
+          14,
+          18,
+          467
+        ]
+      },
+      "fingerprint": "sha256#5",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": true,
+        "expression": "flagged",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:normalize[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:normalize[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.repository"
+    },
+    {
+      "from": "#flow/call:filterAuthChanges[0]",
+      "to": "#flow/return[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:filterAuthChanges[0]",
+      "to": "#flow/return[0]",
+      "kind": "data",
+      "sourcePort": "flagged",
+      "label": "flagged"
+    },
+    {
+      "from": "#flow/call:github.getFiles[0]",
+      "to": "#flow/call:filterAuthChanges[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.getFiles[0]",
+      "to": "#flow/call:filterAuthChanges[0]",
+      "kind": "data",
+      "sourcePort": "files",
+      "label": "files"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/call:github.getFiles[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/call:github.getFiles[0]",
+      "kind": "data",
+      "sourcePort": "prs",
+      "label": "prs"
+    },
+    {
+      "from": "#flow/call:normalize[0]",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:normalize[0]",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "data",
+      "sourcePort": "repo",
+      "label": "repo"
+    }
+  ],
+  "diagnostics": []
+}

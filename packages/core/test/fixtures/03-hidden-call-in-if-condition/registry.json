@@ -1,0 +1,33 @@
+{
+  "tools": [
+    {
+      "name": "github.hasLabel",
+      "label": "Has Label",
+      "icon": "🐙",
+      "inputSchema": {
+        "pr": "string"
+      },
+      "outputSchema": "boolean",
+      "editableFields": [
+        "pr"
+      ]
+    },
+    {
+      "name": "slack.send",
+      "label": "Slack Send",
+      "description": "Send a Slack message",
+      "icon": "💬",
+      "inputSchema": {
+        "channel": "string",
+        "message": "string"
+      },
+      "editableFields": [
+        "channel",
+        {
+          "name": "message",
+          "editor": "expression"
+        }
+      ]
+    }
+  ]
+}

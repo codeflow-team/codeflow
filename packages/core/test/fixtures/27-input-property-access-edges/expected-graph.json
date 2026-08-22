@@ -1,0 +1,214 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          9,
+          1,
+          310
+        ],
+        "end": [
+          9,
+          2,
+          311
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          6,
+          3,
+          153
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ repository: string; channel: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ repository: string; channel: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.getNewPRs[0]",
+      "type": "tool",
+      "label": "Get New PRs",
+      "range": {
+        "start": [
+          7,
+          3,
+          157
+        ],
+        "end": [
+          7,
+          72,
+          226
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "repo",
+          "label": "repo",
+          "schema": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "prs",
+          "label": "prs",
+          "schema": "PullRequest[]"
+        }
+      ],
+      "data": {
+        "argumentText": "{ repo: input.repository }",
+        "arguments": {
+          "repo": "input.repository"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.getNewPRs"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          8,
+          3,
+          229
+        ],
+        "end": [
+          8,
+          83,
+          309
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: input.channel, message: String(prs.length) }",
+        "arguments": {
+          "channel": "input.channel",
+          "message": "String(prs.length)"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.repository"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.channel"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "prs",
+      "label": "prs.length"
+    },
+    {
+      "from": "#flow/call:slack.send[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

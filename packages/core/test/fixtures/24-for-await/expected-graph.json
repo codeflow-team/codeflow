@@ -1,0 +1,258 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          9,
+          1,
+          320
+        ],
+        "end": [
+          9,
+          2,
+          321
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          81,
+          130
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ repository: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ repository: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.pages[0]",
+      "type": "tool",
+      "label": "Get Pages",
+      "range": {
+        "start": [
+          4,
+          3,
+          134
+        ],
+        "end": [
+          4,
+          70,
+          201
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "repo",
+          "label": "repo",
+          "schema": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "pages",
+          "label": "pages",
+          "schema": "AsyncIterable<Page>"
+        }
+      ],
+      "data": {
+        "argumentText": "{ repo: input.repository }",
+        "arguments": {
+          "repo": "input.repository"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.pages"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]",
+      "type": "loop",
+      "label": "For Each page in pages",
+      "range": {
+        "start": [
+          6,
+          3,
+          205
+        ],
+        "end": [
+          8,
+          4,
+          319
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "page",
+          "label": "page"
+        }
+      ],
+      "data": {
+        "iterable": "pages",
+        "kind": "forAwaitOf",
+        "parentId": null,
+        "parentSlot": null,
+        "variable": "page"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": true
+      }
+    },
+    {
+      "path": "flow/for[0]/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          7,
+          5,
+          243
+        ],
+        "end": [
+          7,
+          77,
+          315
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#security\", message: String(page) }",
+        "arguments": {
+          "channel": "\"#security\"",
+          "message": "String(page)"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": "#flow/for[0]",
+        "parentSlot": "body",
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.pages[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.pages[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.repository"
+    },
+    {
+      "from": "#flow/call:github.pages[0]",
+      "to": "#flow/for[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.pages[0]",
+      "to": "#flow/for[0]",
+      "kind": "data",
+      "sourcePort": "pages",
+      "label": "pages"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "body",
+      "label": "body"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "page",
+      "label": "page"
+    }
+  ],
+  "diagnostics": []
+}

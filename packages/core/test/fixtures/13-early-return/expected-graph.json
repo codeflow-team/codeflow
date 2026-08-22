@@ -1,0 +1,333 @@
+{
+  "nodes": [
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          73,
+          122
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ id: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ id: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.getPR[0]",
+      "type": "tool",
+      "label": "Get PR",
+      "range": {
+        "start": [
+          4,
+          3,
+          126
+        ],
+        "end": [
+          4,
+          57,
+          180
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "id",
+          "label": "id",
+          "schema": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "pr",
+          "label": "pr",
+          "schema": "PullRequest | null"
+        }
+      ],
+      "data": {
+        "argumentText": "{ id: input.id }",
+        "arguments": {
+          "id": "input.id"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.getPR"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          10,
+          3,
+          219
+        ],
+        "end": [
+          10,
+          76,
+          292
+        ]
+      },
+      "fingerprint": "sha256#5",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#security\", message: `${pr.title}` }",
+        "arguments": {
+          "channel": "\"#security\"",
+          "message": "`${pr.title}`"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]",
+      "type": "condition",
+      "label": "!pr",
+      "range": {
+        "start": [
+          6,
+          3,
+          184
+        ],
+        "end": [
+          8,
+          4,
+          215
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "expression": "!pr",
+        "hasElse": false,
+        "labelSource": "expression",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]#merge",
+      "type": "merge",
+      "label": "Merge",
+      "range": {
+        "start": [
+          6,
+          3,
+          184
+        ],
+        "end": [
+          8,
+          4,
+          215
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "of": "condition",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]/return[0]",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          7,
+          5,
+          199
+        ],
+        "end": [
+          7,
+          17,
+          211
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": true,
+        "expression": "null",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/return[0]",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          11,
+          3,
+          295
+        ],
+        "end": [
+          11,
+          13,
+          305
+        ]
+      },
+      "fingerprint": "sha256#6",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": true,
+        "expression": "pr",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getPR[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getPR[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.id"
+    },
+    {
+      "from": "#flow/call:github.getPR[0]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "pr",
+      "label": "pr.title"
+    },
+    {
+      "from": "#flow/call:github.getPR[0]",
+      "to": "#flow/if[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.getPR[0]",
+      "to": "#flow/if[0]",
+      "kind": "data",
+      "sourcePort": "pr",
+      "label": "pr"
+    },
+    {
+      "from": "#flow/call:github.getPR[0]",
+      "to": "#flow/return[0]",
+      "kind": "data",
+      "sourcePort": "pr",
+      "label": "pr"
+    },
+    {
+      "from": "#flow/call:slack.send[0]",
+      "to": "#flow/return[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/if[0]",
+      "to": "#flow/if[0]#merge",
+      "kind": "control",
+      "sourcePort": "false",
+      "label": "false"
+    },
+    {
+      "from": "#flow/if[0]",
+      "to": "#flow/if[0]/return[0]",
+      "kind": "control",
+      "sourcePort": "true",
+      "label": "true"
+    },
+    {
+      "from": "#flow/if[0]#merge",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

@@ -1,0 +1,36 @@
+{
+  "tools": [
+    {
+      "name": "github.fetchRepo",
+      "label": "Fetch Repo",
+      "icon": "🐙",
+      "inputSchema": {
+        "repo": "string"
+      },
+      "outputSchema": {
+        "data": "Repo",
+        "error": "string | null"
+      },
+      "editableFields": [
+        "repo"
+      ]
+    },
+    {
+      "name": "slack.send",
+      "label": "Slack Send",
+      "description": "Send a Slack message",
+      "icon": "💬",
+      "inputSchema": {
+        "channel": "string",
+        "message": "string"
+      },
+      "editableFields": [
+        "channel",
+        {
+          "name": "message",
+          "editor": "expression"
+        }
+      ]
+    }
+  ]
+}

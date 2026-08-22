@@ -1,0 +1,33 @@
+{
+  "tools": [
+    {
+      "name": "github.getPR",
+      "label": "Get PR",
+      "icon": "🐙",
+      "inputSchema": {
+        "id": "string"
+      },
+      "outputSchema": "PullRequest | null",
+      "editableFields": [
+        "id"
+      ]
+    },
+    {
+      "name": "slack.send",
+      "label": "Slack Send",
+      "description": "Send a Slack message",
+      "icon": "💬",
+      "inputSchema": {
+        "channel": "string",
+        "message": "string"
+      },
+      "editableFields": [
+        "channel",
+        {
+          "name": "message",
+          "editor": "expression"
+        }
+      ]
+    }
+  ]
+}

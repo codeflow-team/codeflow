@@ -1,0 +1,217 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          6,
+          1,
+          297
+        ],
+        "end": [
+          6,
+          2,
+          298
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          81,
+          130
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ repository: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ repository: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.fetchRepo[0]",
+      "type": "tool",
+      "label": "Fetch Repo",
+      "range": {
+        "start": [
+          4,
+          3,
+          134
+        ],
+        "end": [
+          4,
+          84,
+          215
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "repo",
+          "label": "repo",
+          "schema": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "data",
+          "label": "data"
+        },
+        {
+          "id": "error",
+          "label": "error"
+        }
+      ],
+      "data": {
+        "argumentText": "{ repo: input.repository }",
+        "arguments": {
+          "repo": "input.repository"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.fetchRepo"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          5,
+          3,
+          218
+        ],
+        "end": [
+          5,
+          81,
+          296
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#security\", message: `${data} ${error}` }",
+        "arguments": {
+          "channel": "\"#security\"",
+          "message": "`${data} ${error}`"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.fetchRepo[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.fetchRepo[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.repository"
+    },
+    {
+      "from": "#flow/call:github.fetchRepo[0]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.fetchRepo[0]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "data",
+      "label": "data"
+    },
+    {
+      "from": "#flow/call:github.fetchRepo[0]",
+      "to": "#flow/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "error",
+      "label": "error"
+    },
+    {
+      "from": "#flow/call:slack.send[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

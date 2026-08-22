@@ -1,0 +1,395 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          14,
+          1,
+          421
+        ],
+        "end": [
+          14,
+          2,
+          422
+        ]
+      },
+      "fingerprint": "sha256#7",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          80,
+          129
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ amounts: number[] }"
+        }
+      ],
+      "data": {
+        "inputType": "{ amounts: number[] }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]",
+      "type": "loop",
+      "label": "For Each amount in input.amounts",
+      "range": {
+        "start": [
+          4,
+          3,
+          133
+        ],
+        "end": [
+          13,
+          4,
+          420
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "amount",
+          "label": "amount"
+        }
+      ],
+      "data": {
+        "iterable": "input.amounts",
+        "kind": "forOf",
+        "parentId": null,
+        "parentSlot": null,
+        "variable": "amount"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": true
+      }
+    },
+    {
+      "path": "flow/for[0]/try[0]",
+      "type": "try",
+      "label": "Try",
+      "range": {
+        "start": [
+          5,
+          5,
+          175
+        ],
+        "end": [
+          12,
+          6,
+          416
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "err",
+          "label": "err"
+        }
+      ],
+      "data": {
+        "catchParam": "err",
+        "hasCatch": true,
+        "hasFinally": true,
+        "parentId": "#flow/for[0]",
+        "parentSlot": "body"
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": true,
+        "expandable": true
+      }
+    },
+    {
+      "path": "flow/for[0]/try[0]/call:payment.charge[0]",
+      "type": "tool",
+      "label": "Charge Payment",
+      "range": {
+        "start": [
+          6,
+          7,
+          187
+        ],
+        "end": [
+          6,
+          46,
+          226
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [
+        {
+          "id": "amount",
+          "label": "amount",
+          "schema": "number"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ amount }",
+        "arguments": {
+          "amount": "amount"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💳",
+        "parentId": "#flow/for[0]/try[0]",
+        "parentSlot": "body",
+        "resolved": true,
+        "toolName": "payment.charge"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]/try[0]/catch/break[0]",
+      "type": "jump",
+      "label": "break",
+      "range": {
+        "start": [
+          9,
+          7,
+          341
+        ],
+        "end": [
+          9,
+          13,
+          347
+        ]
+      },
+      "fingerprint": "sha256#5",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "kind": "break",
+        "parentId": "#flow/for[0]/try[0]",
+        "parentSlot": "catch"
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]/try[0]/catch/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          8,
+          7,
+          253
+        ],
+        "end": [
+          8,
+          88,
+          334
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#alerts\", message: `Charge failed: ${err}` }",
+        "arguments": {
+          "channel": "\"#alerts\"",
+          "message": "`Charge failed: ${err}`"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": "#flow/for[0]/try[0]",
+        "parentSlot": "catch",
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]/try[0]/finally/call:audit.log[0]",
+      "type": "tool",
+      "label": "Audit Log",
+      "range": {
+        "start": [
+          11,
+          7,
+          370
+        ],
+        "end": [
+          11,
+          47,
+          410
+        ]
+      },
+      "fingerprint": "sha256#6",
+      "inputs": [
+        {
+          "id": "item",
+          "label": "item",
+          "schema": "unknown"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ item: amount }",
+        "arguments": {
+          "item": "amount"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "📒",
+        "parentId": "#flow/for[0]/try[0]",
+        "parentSlot": "finally",
+        "resolved": true,
+        "toolName": "audit.log"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/for[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/for[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.amounts"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/try[0]",
+      "kind": "control",
+      "sourcePort": "body",
+      "label": "body"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/try[0]/call:payment.charge[0]",
+      "kind": "data",
+      "sourcePort": "amount",
+      "label": "amount"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/try[0]/finally/call:audit.log[0]",
+      "kind": "data",
+      "sourcePort": "amount",
+      "label": "amount"
+    },
+    {
+      "from": "#flow/for[0]/try[0]",
+      "to": "#flow/for[0]/try[0]/call:payment.charge[0]",
+      "kind": "control",
+      "sourcePort": "body",
+      "label": "body"
+    },
+    {
+      "from": "#flow/for[0]/try[0]",
+      "to": "#flow/for[0]/try[0]/catch/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "error",
+      "label": "error"
+    },
+    {
+      "from": "#flow/for[0]/try[0]",
+      "to": "#flow/for[0]/try[0]/catch/call:slack.send[0]",
+      "kind": "data",
+      "sourcePort": "err",
+      "label": "err"
+    },
+    {
+      "from": "#flow/for[0]/try[0]/call:payment.charge[0]",
+      "to": "#flow/for[0]/try[0]/finally/call:audit.log[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/for[0]/try[0]/catch/break[0]",
+      "to": "#flow/for[0]/try[0]/finally/call:audit.log[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/for[0]/try[0]/catch/call:slack.send[0]",
+      "to": "#flow/for[0]/try[0]/catch/break[0]",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

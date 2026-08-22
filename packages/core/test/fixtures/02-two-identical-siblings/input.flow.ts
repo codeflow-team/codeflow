@@ -1,0 +1,6 @@
+import type { Tools } from "../generated/tools";
+
+export default async function flow(input: { repository: string }, tools: Tools) {
+  await tools.slack.send({ channel: "#security", message: "Auth change detected" });
+  await tools.slack.send({ channel: "#security", message: "Auth change detected" });
+}

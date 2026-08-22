@@ -1,0 +1,11 @@
+{
+  "nodes": [],
+  "edges": [],
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "invalid-flow-contract",
+      "message": "No default export found. A flow file must `export default` a single async function taking (input, tools) — 01 §1."
+    }
+  ]
+}

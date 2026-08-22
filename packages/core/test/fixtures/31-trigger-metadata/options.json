@@ -1,0 +1,9 @@
+{
+  "trigger": {
+    "kind": "cron",
+    "label": "Every day 9am",
+    "config": {
+      "cron": "0 9 * * *"
+    }
+  }
+}

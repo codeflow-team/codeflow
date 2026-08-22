@@ -1,0 +1,396 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          13,
+          1,
+          375
+        ],
+        "end": [
+          13,
+          2,
+          376
+        ]
+      },
+      "fingerprint": "sha256#7",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          81,
+          130
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ repository: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ repository: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:github.getNewPRs[0]",
+      "type": "tool",
+      "label": "Get New PRs",
+      "range": {
+        "start": [
+          4,
+          3,
+          134
+        ],
+        "end": [
+          4,
+          72,
+          203
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [
+        {
+          "id": "repo",
+          "label": "repo",
+          "schema": "string"
+        }
+      ],
+      "outputs": [
+        {
+          "id": "prs",
+          "label": "prs",
+          "schema": "PullRequest[]"
+        }
+      ],
+      "data": {
+        "argumentText": "{ repo: input.repository }",
+        "arguments": {
+          "repo": "input.repository"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "🐙",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "github.getNewPRs"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]",
+      "type": "loop",
+      "label": "For Each pr in prs",
+      "range": {
+        "start": [
+          6,
+          3,
+          207
+        ],
+        "end": [
+          12,
+          4,
+          374
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "pr",
+          "label": "pr"
+        }
+      ],
+      "data": {
+        "iterable": "prs",
+        "kind": "forOf",
+        "parentId": null,
+        "parentSlot": null,
+        "variable": "pr"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": true
+      }
+    },
+    {
+      "path": "flow/for[0]/call:audit.log[0]",
+      "type": "tool",
+      "label": "Audit Log",
+      "range": {
+        "start": [
+          11,
+          5,
+          334
+        ],
+        "end": [
+          11,
+          41,
+          370
+        ]
+      },
+      "fingerprint": "sha256#6",
+      "inputs": [
+        {
+          "id": "item",
+          "label": "item",
+          "schema": "unknown"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ item: pr }",
+        "arguments": {
+          "item": "pr"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "📒",
+        "parentId": "#flow/for[0]",
+        "parentSlot": "body",
+        "resolved": true,
+        "toolName": "audit.log"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]/if[0]",
+      "type": "condition",
+      "label": "pr.draft",
+      "range": {
+        "start": [
+          7,
+          5,
+          235
+        ],
+        "end": [
+          9,
+          6,
+          328
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "expression": "pr.draft",
+        "hasElse": false,
+        "labelSource": "expression",
+        "parentId": "#flow/for[0]",
+        "parentSlot": "body"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]/if[0]#merge",
+      "type": "merge",
+      "label": "Merge",
+      "range": {
+        "start": [
+          7,
+          5,
+          235
+        ],
+        "end": [
+          9,
+          6,
+          328
+        ]
+      },
+      "fingerprint": "sha256#5",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "of": "condition",
+        "parentId": "#flow/for[0]",
+        "parentSlot": "body"
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/for[0]/if[0]/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          8,
+          7,
+          257
+        ],
+        "end": [
+          8,
+          72,
+          322
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#drafts\", message: \"draft\" }",
+        "arguments": {
+          "channel": "\"#drafts\"",
+          "message": "\"draft\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": "#flow/for[0]",
+        "parentSlot": "body",
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:github.getNewPRs[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.repository"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/for[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/call:github.getNewPRs[0]",
+      "to": "#flow/for[0]",
+      "kind": "data",
+      "sourcePort": "prs",
+      "label": "prs"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/call:audit.log[0]",
+      "kind": "data",
+      "sourcePort": "pr",
+      "label": "pr"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/if[0]",
+      "kind": "control",
+      "sourcePort": "body",
+      "label": "body"
+    },
+    {
+      "from": "#flow/for[0]",
+      "to": "#flow/for[0]/if[0]",
+      "kind": "data",
+      "sourcePort": "pr",
+      "label": "pr.draft"
+    },
+    {
+      "from": "#flow/for[0]/if[0]",
+      "to": "#flow/for[0]/if[0]#merge",
+      "kind": "control",
+      "sourcePort": "false",
+      "label": "false"
+    },
+    {
+      "from": "#flow/for[0]/if[0]",
+      "to": "#flow/for[0]/if[0]/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "true",
+      "label": "true"
+    },
+    {
+      "from": "#flow/for[0]/if[0]#merge",
+      "to": "#flow/for[0]/call:audit.log[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/for[0]/if[0]/call:slack.send[0]",
+      "to": "#flow/for[0]/if[0]#merge",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

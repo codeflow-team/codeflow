@@ -1,0 +1,447 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          13,
+          1,
+          471
+        ],
+        "end": [
+          13,
+          2,
+          472
+        ]
+      },
+      "fingerprint": "sha256#8",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          76,
+          125
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ level: string }"
+        }
+      ],
+      "data": {
+        "inputType": "{ level: string }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:audit.log[0]",
+      "type": "tool",
+      "label": "Audit Log",
+      "range": {
+        "start": [
+          12,
+          3,
+          425
+        ],
+        "end": [
+          12,
+          48,
+          470
+        ]
+      },
+      "fingerprint": "sha256#7",
+      "inputs": [
+        {
+          "id": "item",
+          "label": "item",
+          "schema": "unknown"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ item: input.level }",
+        "arguments": {
+          "item": "input.level"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "📒",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "audit.log"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]",
+      "type": "condition",
+      "label": "input.level === \"high\"",
+      "range": {
+        "start": [
+          4,
+          3,
+          129
+        ],
+        "end": [
+          10,
+          4,
+          421
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "expression": "input.level === \"high\"",
+        "hasElse": true,
+        "labelSource": "expression",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]#merge",
+      "type": "merge",
+      "label": "Merge",
+      "range": {
+        "start": [
+          4,
+          3,
+          129
+        ],
+        "end": [
+          10,
+          4,
+          421
+        ]
+      },
+      "fingerprint": "sha256#6",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "of": "condition",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          5,
+          5,
+          163
+        ],
+        "end": [
+          5,
+          69,
+          227
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#urgent\", message: \"high\" }",
+        "arguments": {
+          "channel": "\"#urgent\"",
+          "message": "\"high\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]/else/if[0]",
+      "type": "condition",
+      "label": "input.level === \"medium\"",
+      "range": {
+        "start": [
+          6,
+          10,
+          237
+        ],
+        "end": [
+          10,
+          4,
+          421
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "expression": "input.level === \"medium\"",
+        "hasElse": true,
+        "labelSource": "expression",
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]/else/if[0]/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          7,
+          5,
+          273
+        ],
+        "end": [
+          7,
+          71,
+          339
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#normal\", message: \"medium\" }",
+        "arguments": {
+          "channel": "\"#normal\"",
+          "message": "\"medium\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/if[0]/else/if[0]/else/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          9,
+          5,
+          355
+        ],
+        "end": [
+          9,
+          67,
+          417
+        ]
+      },
+      "fingerprint": "sha256#5",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#quiet\", message: \"low\" }",
+        "arguments": {
+          "channel": "\"#quiet\"",
+          "message": "\"low\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:audit.log[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.level"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/if[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/if[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.level"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/if[0]/else/if[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.level"
+    },
+    {
+      "from": "#flow/call:audit.log[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/if[0]",
+      "to": "#flow/if[0]/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "true",
+      "label": "true"
+    },
+    {
+      "from": "#flow/if[0]",
+      "to": "#flow/if[0]/else/if[0]",
+      "kind": "control",
+      "sourcePort": "false",
+      "label": "false"
+    },
+    {
+      "from": "#flow/if[0]#merge",
+      "to": "#flow/call:audit.log[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/if[0]/call:slack.send[0]",
+      "to": "#flow/if[0]#merge",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/if[0]/else/if[0]",
+      "to": "#flow/if[0]/else/if[0]/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "true",
+      "label": "true"
+    },
+    {
+      "from": "#flow/if[0]/else/if[0]",
+      "to": "#flow/if[0]/else/if[0]/else/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "false",
+      "label": "false"
+    },
+    {
+      "from": "#flow/if[0]/else/if[0]/call:slack.send[0]",
+      "to": "#flow/if[0]#merge",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/if[0]/else/if[0]/else/call:slack.send[0]",
+      "to": "#flow/if[0]#merge",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

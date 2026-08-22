@@ -1,0 +1,297 @@
+{
+  "nodes": [
+    {
+      "path": "flow#output",
+      "type": "output",
+      "label": "End Flow",
+      "range": {
+        "start": [
+          11,
+          1,
+          338
+        ],
+        "end": [
+          11,
+          2,
+          339
+        ]
+      },
+      "fingerprint": "sha256#5",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "explicit": false,
+        "expression": null,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow#trigger",
+      "type": "trigger",
+      "label": "Trigger",
+      "range": {
+        "start": [
+          3,
+          1,
+          50
+        ],
+        "end": [
+          3,
+          77,
+          126
+        ]
+      },
+      "fingerprint": "sha256#0",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "input",
+          "label": "input",
+          "schema": "{ amount: number }"
+        }
+      ],
+      "data": {
+        "inputType": "{ amount: number }",
+        "paramName": "input",
+        "parentId": null,
+        "parentSlot": null,
+        "triggerKind": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": false,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/call:audit.log[0]",
+      "type": "tool",
+      "label": "Audit Log",
+      "range": {
+        "start": [
+          10,
+          3,
+          291
+        ],
+        "end": [
+          10,
+          49,
+          337
+        ]
+      },
+      "fingerprint": "sha256#4",
+      "inputs": [
+        {
+          "id": "item",
+          "label": "item",
+          "schema": "unknown"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ item: input.amount }",
+        "arguments": {
+          "item": "input.amount"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "📒",
+        "parentId": null,
+        "parentSlot": null,
+        "resolved": true,
+        "toolName": "audit.log"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/try[0]",
+      "type": "try",
+      "label": "Try",
+      "range": {
+        "start": [
+          4,
+          3,
+          130
+        ],
+        "end": [
+          8,
+          4,
+          287
+        ]
+      },
+      "fingerprint": "sha256#1",
+      "inputs": [],
+      "outputs": [],
+      "data": {
+        "catchParam": null,
+        "hasCatch": true,
+        "hasFinally": false,
+        "parentId": null,
+        "parentSlot": null
+      },
+      "capabilities": {
+        "editable": false,
+        "deletable": true,
+        "expandable": true
+      }
+    },
+    {
+      "path": "flow/try[0]/call:payment.charge[0]",
+      "type": "tool",
+      "label": "Charge Payment",
+      "range": {
+        "start": [
+          5,
+          5,
+          140
+        ],
+        "end": [
+          5,
+          58,
+          193
+        ]
+      },
+      "fingerprint": "sha256#2",
+      "inputs": [
+        {
+          "id": "amount",
+          "label": "amount",
+          "schema": "number"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ amount: input.amount }",
+        "arguments": {
+          "amount": "input.amount"
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💳",
+        "parentId": "#flow/try[0]",
+        "parentSlot": "body",
+        "resolved": true,
+        "toolName": "payment.charge"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    },
+    {
+      "path": "flow/try[0]/catch/call:slack.send[0]",
+      "type": "tool",
+      "label": "Slack Send",
+      "range": {
+        "start": [
+          7,
+          5,
+          210
+        ],
+        "end": [
+          7,
+          78,
+          283
+        ]
+      },
+      "fingerprint": "sha256#3",
+      "inputs": [
+        {
+          "id": "channel",
+          "label": "channel",
+          "schema": "string"
+        },
+        {
+          "id": "message",
+          "label": "message",
+          "schema": "string"
+        }
+      ],
+      "outputs": [],
+      "data": {
+        "argumentText": "{ channel: \"#alerts\", message: \"charge failed\" }",
+        "arguments": {
+          "channel": "\"#alerts\"",
+          "message": "\"charge failed\""
+        },
+        "argumentsEditable": true,
+        "argumentsHaveSpread": false,
+        "awaited": true,
+        "icon": "💬",
+        "parentId": "#flow/try[0]",
+        "parentSlot": "catch",
+        "resolved": true,
+        "toolName": "slack.send"
+      },
+      "capabilities": {
+        "editable": true,
+        "deletable": true,
+        "expandable": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/call:audit.log[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.amount"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/try[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow#trigger",
+      "to": "#flow/try[0]/call:payment.charge[0]",
+      "kind": "data",
+      "sourcePort": "input",
+      "label": "input.amount"
+    },
+    {
+      "from": "#flow/call:audit.log[0]",
+      "to": "#flow#output",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/try[0]",
+      "to": "#flow/try[0]/call:payment.charge[0]",
+      "kind": "control",
+      "sourcePort": "body",
+      "label": "body"
+    },
+    {
+      "from": "#flow/try[0]",
+      "to": "#flow/try[0]/catch/call:slack.send[0]",
+      "kind": "control",
+      "sourcePort": "error",
+      "label": "error"
+    },
+    {
+      "from": "#flow/try[0]/call:payment.charge[0]",
+      "to": "#flow/call:audit.log[0]",
+      "kind": "control"
+    },
+    {
+      "from": "#flow/try[0]/catch/call:slack.send[0]",
+      "to": "#flow/call:audit.log[0]",
+      "kind": "control"
+    }
+  ],
+  "diagnostics": []
+}

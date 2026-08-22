@@ -1,7 +1,7 @@
 {
   "name": "@codeflow/react",
   "version": "0.0.0",
-  "description": "CodeFlow UI layer — React Flow canvas, ELK layout, inspector, Monaco. Not implemented yet (phase 6).",
+  "description": "CodeFlow UI layer — React Flow canvas, ELK hierarchical layout, inspector, Monaco code panel, diagnostics (07-ui.md).",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,17 +9,31 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit"
+    "build": "tsc -p tsconfig.build.json && node ./scripts/copy-assets.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@codeflow/core": "workspace:*"
+    "@codeflow/core": "workspace:*",
+    "@monaco-editor/react": "^4.7.0",
+    "@xyflow/react": "^12.8.6",
+    "elkjs": "^0.11.0"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0",
+    "react-dom": "^18.2.0 || ^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

@@ -1,0 +1,110 @@
+/**
+ * `<CodePanel>` — Monaco source view, the developer level of progressive
+ * disclosure (07 §4) and the other half of the two-way selection sync (07 §2):
+ * selecting a node highlights its source range, and moving the caret into a
+ * range selects the node that owns it.
+ *
+ * Note (03 §5.2 step 0): typing here is a source edit *without* patch
+ * provenance, so identity would go through the heuristic path. Phase 6a keeps
+ * the editor read-only unless the host explicitly passes `onChange`.
+ */
+
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Editor, type OnMount } from "@monaco-editor/react";
+import { useCodeFlow } from "../context/provider.js";
+
+type MonacoEditor = Parameters<OnMount>[0];
+type MonacoApi = Parameters<OnMount>[1];
+type DecorationsCollection = ReturnType<MonacoEditor["createDecorationsCollection"]>;
+
+export interface CodePanelProps {
+  /** Source to show. Defaults to the analyzed graph's source document. */
+  value?: string;
+  onChange?: (value: string) => void;
+  language?: string;
+  height?: string | number;
+  className?: string;
+  theme?: "light" | "dark";
+}
+
+export function CodePanel(props: CodePanelProps): ReactNode {
+  const { graph, focusedRange, selectNodeAtOffset, selectedNodeId } = useCodeFlow();
+  const value = props.value ?? graph?.source.content ?? "";
+
+  const editorRef = useRef<MonacoEditor | null>(null);
+  const monacoRef = useRef<MonacoApi | null>(null);
+  const decorationsRef = useRef<DecorationsCollection | null>(null);
+  const [ready, setReady] = useState(false);
+  /** Set while we move the caret ourselves, so the sync does not echo back. */
+  const programmatic = useRef(false);
+
+  // The cursor listener is registered once; keep it pointing at the *current*
+  // selector so it never resolves offsets against a stale graph.
+  const selectAtOffset = useRef(selectNodeAtOffset);
+  selectAtOffset.current = selectNodeAtOffset;
+
+  const onMount = useCallback<OnMount>((editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    decorationsRef.current = editor.createDecorationsCollection();
+    setReady(true);
+
+    editor.onDidChangeCursorPosition((event) => {
+      if (programmatic.current) return;
+      const model = editor.getModel();
+      if (model === null) return;
+      selectAtOffset.current(model.getOffsetAt(event.position));
+    });
+  }, []);
+
+  // Canvas → code: reveal and highlight the selected node's range.
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const decorations = decorationsRef.current;
+    if (editor === null || monaco === null || decorations === null) return;
+
+    if (focusedRange === null) {
+      decorations.set([]);
+      return;
+    }
+    const range = new monaco.Range(
+      focusedRange.start.line,
+      focusedRange.start.column,
+      focusedRange.end.line,
+      focusedRange.end.column,
+    );
+    decorations.set([
+      {
+        range,
+        options: { className: "cf-monaco-range", isWholeLine: false, overviewRuler: { color: "#3b82f6", position: 4 } },
+      },
+    ]);
+    programmatic.current = true;
+    editor.revealRangeInCenterIfOutsideViewport(range);
+    programmatic.current = false;
+  }, [focusedRange, selectedNodeId, ready]);
+
+  return (
+    <div className={`cf-code ${props.className ?? ""}`}>
+      <Editor
+        height={props.height ?? "100%"}
+        defaultLanguage={props.language ?? "typescript"}
+        theme={props.theme === "dark" ? "vs-dark" : "vs"}
+        value={value}
+        onMount={onMount}
+        onChange={(next) => { props.onChange?.(next ?? ""); }}
+        options={{
+          readOnly: props.onChange === undefined,
+          minimap: { enabled: false },
+          fontSize: 12,
+          lineNumbers: "on",
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          tabSize: 2,
+          renderWhitespace: "none",
+        }}
+      />
+    </div>
+  );
+}

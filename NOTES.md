@@ -11,6 +11,13 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 - **Quyết định specs t tự đưa** (theo phân tích của agent, t đồng ý và đã sửa 04 §1.4): hidden-call rule chỉ áp cho `await` + tool call (bắt rễ `tools`), KHÔNG áp cho sync library/local call trong expression — vì áp nguyên văn sẽ mâu thuẫn chính §2.2b/§2.6, và mục đích rule là side-effect visibility (sync predicate không có side-effect tầng flow).
 - Giới hạn thừa nhận (đã document trong code, đúng specs): mutation ordering không model; nested try terminals chỉ route tới finally trong cùng, chưa transitively ra finally ngoài.
 
+## Update ~01:45 — Phase 3 (IDENTITY) nghiệm thu ✅ (commit `edd9d3d`) → thả Phase 4
+
+- Identity + diff xong: **563 tests xanh**. T smoke test tay kịch bản hiểm nhất: chèn call `slack.send` GIỐNG HỆT lên trước call cũ → id cũ ở đúng node cũ, node mới nhận id mới, không mis-bind; reformat toàn file → id giữ nguyên hết. Provenance hook sẵn sàng cho patcher.
+- Điểm hay trong thuật toán của agent (t review và đồng ý): pass A match theo fingerprint **order-free** (LCS thuần không giải được hoán vị 2 call cùng tool), pass B mới là LCS; `tool` và `unknown` cùng một family để tool bị gỡ khỏi registry không làm mất id node.
+- Giới hạn ghi nhận: edge chỉ có added/removed (specs không có edge.updated) → edge đổi mỗi label không hiện trong diff.
+- **Phase 4 đã thả** (Opus, packages/core): patch engine + round-trip suite + acceptance test 08 §4 (đổi channel → diff đúng 1 dòng, byte-for-byte).
+
 ## Update ~01:25 — thả song song Phase 3 + Phase 6a
 
 - **Phase 3** (Opus, packages/core): identity resolution (sibling alignment LCS fingerprint-first, provenance hook, code-node statement-fingerprint overlap) + session continuity + GraphChange diff + 11 kịch bản identity test bắt buộc (kể cả case hiểm: chèn call giống hệt trước call đang có — không được mis-bind).

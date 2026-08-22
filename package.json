@@ -7,7 +7,8 @@
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "dev": "pnpm --filter demo dev"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -11,6 +11,13 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 - **Quyết định specs t tự đưa** (theo phân tích của agent, t đồng ý và đã sửa 04 §1.4): hidden-call rule chỉ áp cho `await` + tool call (bắt rễ `tools`), KHÔNG áp cho sync library/local call trong expression — vì áp nguyên văn sẽ mâu thuẫn chính §2.2b/§2.6, và mục đích rule là side-effect visibility (sync predicate không có side-effect tầng flow).
 - Giới hạn thừa nhận (đã document trong code, đúng specs): mutation ordering không model; nested try terminals chỉ route tới finally trong cùng, chưa transitively ra finally ngoài.
 
+## Update ~04:50 — Phase 6b (EDITING UI) nghiệm thu ✅ (commit `5f76f38`) → thả Phase 7 e2e
+
+- Editing đầy đủ trên UI: inspector Apply (multi-field, 1 patchNode), Preview diff, palette insert (needs-configuration flow), delete 2-bước + dependency error, đổi tool + warnings, Edit Code modal, conflict flow (Monaco edit → patch-conflict → Re-analyze → retry OK), `{{ }}` trong string literal bị từ chối đúng specs rồi cho convert tường minh.
+- Agent verify 10 kịch bản TRONG BROWSER THẬT, screenshots ở `.codeflow-verify/` (17 files, để ngoài git), tìm + fix 4 bug UI thật (stale debounce, selection drop sau patch, changedNodeIds quá rộng, unknown node fields).
+- Toàn workspace: **964 tests** (core 852 + react 66 + cli 46), tsc sạch.
+- **Phase 7 đã thả** (SONNET + Claude in Chrome, đúng phân công): 12 mục checklist e2e theo 11 §3.5, report sẽ ở `e2e/report.md`. Có fallback chrome-devtools nếu extension bị chặn permission (sẽ ghi rõ trong report).
+
 ## Update ~03:40 — Phase 5 (AI CODEGEN + EVAL THẬT) nghiệm thu ✅ (commit `e579fcf`)
 
 - `buildGenerationContext` + `renderSystemPrompt` + `validate` L0/L1/L2 xong. Core giờ **852 tests**.

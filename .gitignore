@@ -11,3 +11,4 @@ coverage/
 .DS_Store
 *.log
 .codeflow-verify/
+e2e/screenshots/

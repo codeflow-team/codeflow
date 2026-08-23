@@ -3,7 +3,22 @@
 **Ngày chạy:** 2026-08-23, ~03:50–04:17 (giờ local)
 **App:** `apps/demo` tại http://localhost:5173
 **Agent:** Sonnet subagent, điều khiển browser thật
-**Môi trường browser:** FALLBACK sang `chrome-devtools` MCP — `claude-in-chrome` yêu cầu chọn 1 trong 3 browser đang kết nối qua hộp thoại tương tác, subagent không có cơ chế hỏi người dùng (user đang ngủ). Toàn bộ checklist vẫn chạy trên Chrome thật với đầy đủ evidence. Muốn chạy lại qua đúng Claude in Chrome extension: mở lại phiên khi có người chọn browser.
+**Môi trường browser:** FALLBACK sang `chrome-devtools` MCP — `claude-in-chrome` yêu cầu chọn 1 trong 3 browser đang kết nối qua hộp thoại tương tác, subagent không có cơ chế hỏi người dùng (user đang ngủ). Toàn bộ checklist vẫn chạy trên Chrome thật với đầy đủ evidence.
+
+## ✅ Bổ sung: re-verify qua ĐÚNG Claude in Chrome extension (2026-08-23, browser "lucas")
+
+Sau khi user thức và chọn browser, các flow trọng yếu đã được chạy lại qua chính extension Claude in Chrome (không phải chrome-devtools) — **tất cả PASS**, screenshots ở `e2e/claude-in-chrome/`:
+
+| Flow | Kết quả qua Claude in Chrome | Evidence |
+|---|---|---|
+| Load + render canonical | 7 nodes · 11 edges · 0 diagnostics | — |
+| Sync canvas → Monaco | Chọn Slack Send → Monaco highlight đúng lines 14–17, inspector hiện `flow.ts:14:7` | — |
+| **Acceptance 08 §4** | Preview diff `line 15:18–15:29` đúng 1 patch (`-"#security"` / `+"#engineering"`) → Apply → header `patched: 1 range(s) · line 15 · v3`, Monaco chỉ đổi dòng 15, message template nguyên vẹn, 7 nodes/11 edges giữ nguyên, badge UPDATED | `01-acceptance-applied.jpg` |
+| Delete bị chặn | 2 bước (Delete → Confirm) → `patch-dependency: Cannot delete "Get PR Files": "Is Auth Change" uses 'files' — delete or edit that node first (06 §2)`, source không đổi | `02-delete-blocked.jpg` |
+| Degradation | unknown node đỏ + badge "unresolved", code node sọc chéo, while loop lồng code node; DiagnosticsPanel: 1 error + 1 warning + 2 info gồm `unresolved-tool`, `hidden-call-in-expression` (kèm hướng dẫn hoist ra `const`), `unsupported-construct` ×2 | `03-degradation.jpg` |
+| Console | 0 error / 0 exception | — |
+
+Ghi nhận vận hành: click node trên React Flow canvas cần screenshot ngay trước khi click (canvas auto-fit/resize làm tọa độ đổi); click theo `ref` từ `find` không kích hoạt selection của React Flow — click theo tọa độ thì được.
 
 ## Kết quả — 12/12 PASS
 

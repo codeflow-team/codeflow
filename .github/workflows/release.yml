@@ -53,8 +53,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
-            echo "::error::NPM_TOKEN repository secret is not set — nothing can be published."
-            exit 1
+            # Publishing is opt-in: no token means the repo is not set up to release
+            # yet. Skipping is the correct outcome — a red X on every push until
+            # someone adds a secret would be noise, not a signal.
+            echo "::notice::NPM_TOKEN is not set, so nothing is published. Add the secret when you want releases to go out."
+            echo "- Skipped: NPM_TOKEN is not set." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
 
           published=0

@@ -42,9 +42,15 @@ const MIN_WIDTH = 184;
 const MAX_WIDTH = 440;
 const MONO_MAX_WIDTH = 470;
 
-/** Padding a container reserves for its header before its children start. */
-export const CONTAINER_PADDING = { top: 64, left: 22, bottom: 24, right: 22 };
-export const CONTAINER_MIN_SIZE = { width: 280, height: 150 };
+/**
+ * Padding a container reserves around its children.
+ *
+ * `top` is only a floor: the real inset follows the container's own header
+ * (`elk-graph.ts`). The sides are wide enough that a child's selection ring and
+ * an edge label inside the body do not touch the container's border.
+ */
+export const CONTAINER_PADDING = { top: 66, left: 26, bottom: 30, right: 26 };
+export const CONTAINER_MIN_SIZE = { width: 300, height: 160 };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);

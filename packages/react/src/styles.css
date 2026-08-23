@@ -51,7 +51,6 @@
     color: var(--cf-text);
     box-shadow: var(--cf-shadow-node);
     border: 1px solid var(--cf-border);
-    overflow: hidden;
     transition:
       box-shadow 160ms ease,
       border-color 160ms ease,
@@ -74,6 +73,12 @@
   .cf-container {
     position: relative;
   }
+
+  /* A leaf clips its own content; a container must not, or the resize handles
+     sitting on its border would be cut in half. */
+  .cf-node { overflow: hidden; }
+  .cf-container { overflow: visible; }
+  .cf-container::before { border-radius: var(--radius-node) var(--radius-node) 0 0; }
 
   .cf-node:hover,
   .cf-container:hover {
@@ -317,13 +322,55 @@
   fill: var(--cf-text);
 }
 
+/*
+ * Edge labels.
+ *
+ * The branch labels — `true`, `false`, `error`, `body` — are not decoration:
+ * they are the only place the diagram says *which way* a decision goes, so they
+ * get the branch's own colour and a chip behind them, while a data label (the
+ * name of a value being passed along) stays quiet.
+ */
 .cf-canvas .react-flow__edge-text {
   font-family: var(--cf-font);
-  font-size: 9.5px;
+  font-size: 10px;
   font-weight: 500;
   fill: var(--cf-text-dim);
 }
-.cf-canvas .react-flow__edge-textbg { fill: var(--cf-bg); }
+.cf-canvas .react-flow__edge-textbg {
+  fill: var(--cf-bg);
+  rx: 5;
+  ry: 5;
+}
+
+.cf-canvas .cf-rf-edge--true .react-flow__edge-text,
+.cf-canvas .cf-rf-edge--false .react-flow__edge-text,
+.cf-canvas .cf-rf-edge--error .react-flow__edge-text,
+.cf-canvas .cf-rf-edge--body .react-flow__edge-text {
+  font-weight: 600;
+  font-size: 10px;
+}
+.cf-canvas .cf-rf-edge--true .react-flow__edge-text { fill: var(--cf-trigger); }
+.cf-canvas .cf-rf-edge--false .react-flow__edge-text { fill: var(--cf-text-faint); }
+.cf-canvas .cf-rf-edge--error .react-flow__edge-text { fill: var(--cf-error); }
+.cf-canvas .cf-rf-edge--body .react-flow__edge-text { fill: var(--cf-loop); }
+
+.cf-canvas .cf-rf-edge--true .react-flow__edge-textbg {
+  fill: color-mix(in srgb, var(--cf-trigger) 14%, var(--cf-bg));
+}
+.cf-canvas .cf-rf-edge--error .react-flow__edge-textbg {
+  fill: color-mix(in srgb, var(--cf-error) 14%, var(--cf-bg));
+}
+.cf-canvas .cf-rf-edge--body .react-flow__edge-textbg {
+  fill: color-mix(in srgb, var(--cf-loop) 14%, var(--cf-bg));
+}
+
+/* Resize affordance on a container — only drawn while it is selected. */
+.cf-canvas .react-flow__resize-control.line {
+  border-color: transparent;
+}
+.cf-canvas .react-flow__resize-control.handle {
+  box-shadow: var(--cf-shadow-sm);
+}
 
 .cf-canvas .react-flow__handle {
   width: 7px;

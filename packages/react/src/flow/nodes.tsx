@@ -9,9 +9,9 @@
  * qualified name, the source text — is held back for the developer level.
  */
 
-import type { ReactNode } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Trash2 } from "lucide-react";
+import { useCallback, type ReactNode } from "react";
+import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from "@xyflow/react";
+import { Shrink, Trash2 } from "lucide-react";
 import type { Diagnostic, WorkflowNode } from "@codeflow/core";
 import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
 import { useOptionalCodeFlow } from "../context/hooks.js";
@@ -112,7 +112,55 @@ function DeleteButton({ node }: { node: WorkflowNode }): ReactNode {
   );
 }
 
-function NodeHeader({ data, selected }: { data: CodeFlowRFNode["data"]; selected: boolean }): ReactNode {
+/**
+ * Puts a hand-resized container back to the size layout worked out for it.
+ *
+ * Only offered once the box has actually been pulled out of shape, so the
+ * header stays clean the rest of the time.
+ */
+function FitButton({ nodeId, width, height }: { nodeId: string; width: number; height: number }): ReactNode {
+  const { setNodes } = useReactFlow();
+  const fit = useCallback(() => {
+    setNodes((nodes) =>
+      nodes.map((node) =>
+        node.id === nodeId
+          ? { ...node, width, height, style: { ...node.style, width, height } }
+          : node,
+      ),
+    );
+  }, [setNodes, nodeId, width, height]);
+
+  return (
+    <button
+      type="button"
+      title="Fit the box back to its contents"
+      aria-label="Fit the box back to its contents"
+      data-testid={`node-fit-${nodeId}`}
+      className={cn(
+        "ml-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0",
+        "text-ink-faint outline-none transition-colors hover:bg-surface-2 hover:text-ink",
+        "focus-visible:ring-2 focus-visible:ring-ring/70",
+      )}
+      onClick={(event) => {
+        event.stopPropagation();
+        fit();
+      }}
+    >
+      <Shrink className="size-3" />
+    </button>
+  );
+}
+
+function NodeHeader({
+  data,
+  selected,
+  before,
+}: {
+  data: CodeFlowRFNode["data"];
+  selected: boolean;
+  /** Extra affordance shown left of the delete button (container "fit"). */
+  before?: ReactNode;
+}): ReactNode {
   const caption = nodeCaption(data.node, data.mode);
   const compact = data.mode === "compact";
   return (
@@ -142,6 +190,7 @@ function NodeHeader({ data, selected }: { data: CodeFlowRFNode["data"]; selected
           </span>
         )}
       </span>
+      {before}
       {selected ? <DeleteButton node={data.node} /> : null}
     </header>
   );
@@ -208,9 +257,11 @@ export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>):
  * Container node — `loop` / `try`. React Flow renders children on top of it, so
  * the body is only a header plus the slot handles the child edges attach to.
  */
-export function CodeFlowContainerNode({ id, data, selected }: NodeProps<CodeFlowRFNode>): ReactNode {
+export function CodeFlowContainerNode({ id, data, selected, width, height }: NodeProps<CodeFlowRFNode>): ReactNode {
   const type = data.node.type;
   const changed = useChangedClass(id);
+  // Pulled out of shape by hand: offer the way back.
+  const resized = (width ?? 0) > data.autoWidth + 1 || (height ?? 0) > data.autoHeight + 1;
   return (
     <div
       className={
@@ -220,9 +271,35 @@ export function CodeFlowContainerNode({ id, data, selected }: NodeProps<CodeFlow
       }
       data-node-type={type}
     >
+      {/*
+        A `for` / `while` / `try` can be dragged bigger.
+
+        Layout sizes a container to exactly what fits, which is right for the
+        picture as a whole and wrong for the one box someone is trying to read:
+        when a branch is crowded, being able to pull the frame open is the
+        difference between guessing the structure and seeing it. It can only
+        grow — the layout size is the floor, so no drag can ever clip the body —
+        and it is as unpersisted as position is (03 §8): the next layout run
+        gives the box back its computed size.
+      */}
+      <NodeResizer
+        isVisible={selected === true}
+        minWidth={data.autoWidth}
+        minHeight={data.autoHeight}
+        lineClassName="!border-transparent"
+        handleClassName="!size-2.5 !rounded-[3px] !border-2 !border-[color:var(--cf-surface)] !bg-[color:var(--node,var(--cf-accent))]"
+      />
       <Handle type="target" position={Position.Top} className="cf-handle" />
       <div className="cf-container__header rounded-t-[calc(var(--radius-node)-1px)]">
-        <NodeHeader data={data} selected={selected === true} />
+        <NodeHeader
+          data={data}
+          selected={selected === true}
+          before={
+            selected === true && resized ? (
+              <FitButton nodeId={id} width={data.autoWidth} height={data.autoHeight} />
+            ) : null
+          }
+        />
         <NodeBody data={data} />
       </div>
       {/*

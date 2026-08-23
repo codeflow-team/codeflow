@@ -70,15 +70,26 @@ function baseOptions(direction: LayoutDirection): Record<string, string> {
  * - the minimum is the header's own size plus padding, so an empty or very
  *   small body still reads as a container and not as a label.
  */
-function containerOptions(direction: LayoutDirection, own: { width: number; height: number }): Record<string, string> {
-  const { left, bottom, right } = CONTAINER_PADDING;
-  const top = Math.max(CONTAINER_PADDING.top, Math.round(own.height + 16));
+function containerOptions(
+  direction: LayoutDirection,
+  own: { width: number; height: number },
+  /** How many containers this one sits inside — 0 at the top level. */
+  depth: number,
+): Record<string, string> {
+  // Nesting is what makes a diagram hard to read: two frames a few pixels apart
+  // stop reading as "inside", so each level buys itself a little more air.
+  const extra = Math.min(depth, 3) * 6;
+  const left = CONTAINER_PADDING.left + extra;
+  const right = CONTAINER_PADDING.right + extra;
+  const bottom = CONTAINER_PADDING.bottom + extra;
+  const top = Math.max(CONTAINER_PADDING.top, Math.round(own.height + 16)) + extra;
+
   const minWidth = Math.max(CONTAINER_MIN_SIZE.width, Math.round(own.width + left + right));
   const minHeight = Math.max(CONTAINER_MIN_SIZE.height, Math.round(own.height + top + bottom));
   return {
     ...baseOptions(direction),
-    "elk.layered.spacing.nodeNodeBetweenLayers": "54",
-    "elk.spacing.nodeNode": "38",
+    "elk.layered.spacing.nodeNodeBetweenLayers": String(54 + extra),
+    "elk.spacing.nodeNode": String(38 + extra),
     "elk.padding": `[top=${String(top)},left=${String(left)},bottom=${String(bottom)},right=${String(right)}]`,
     "elk.nodeSize.constraints": "MINIMUM_SIZE",
     "elk.nodeSize.minimum": `(${String(minWidth)},${String(minHeight)})`,
@@ -102,17 +113,17 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
 
   const elkById = new Map<string, ElkNode>();
 
-  const build = (parent: string | null): ElkNode[] => {
+  const build = (parent: string | null, depth: number): ElkNode[] => {
     const children = index.childrenOf.get(parent) ?? [];
     return children.map((node) => {
-      const own = build(node.id);
+      const own = build(node.id, depth + 1);
       const elk: ElkNode =
         own.length > 0
           ? {
               id: node.id,
               children: own,
               edges: [],
-              layoutOptions: containerOptions(direction, measure(node, options.mode)),
+              layoutOptions: containerOptions(direction, measure(node, options.mode), depth),
             }
           : { id: node.id, ...measure(node, options.mode) };
       elkById.set(node.id, elk);
@@ -123,7 +134,7 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
   const root: ElkNode = {
     id: ROOT_ID,
     layoutOptions: baseOptions(direction),
-    children: build(null),
+    children: build(null, 0),
     edges: [],
   };
   elkById.set(ROOT_ID, root);

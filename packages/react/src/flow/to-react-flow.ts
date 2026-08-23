@@ -36,6 +36,16 @@ export interface CodeFlowNodeData extends Record<string, unknown> {
   /** Slot this node sits in inside its parent container: body / catch / finally. */
   slot: string | null;
   container: boolean;
+  /**
+   * The size layout worked out for this node.
+   *
+   * A container can be dragged bigger to give a cramped body room to breathe;
+   * this is the floor it can never go under, because anything smaller would clip
+   * the very structure the box exists to show. Purely visual, like position
+   * (03 §8) — the next layout run replaces it.
+   */
+  autoWidth: number;
+  autoHeight: number;
 }
 
 export interface CodeFlowEdgeData extends Record<string, unknown> {
@@ -98,6 +108,8 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
         diagnostics: diagnostics.get(node.id) ?? [],
         slot: parentSlotOf(node),
         container,
+        autoWidth: box?.width ?? fallback.width,
+        autoHeight: box?.height ?? fallback.height,
       },
       className: `cf-rf-node cf-rf-node--${node.type}${container ? " cf-rf-node--container" : ""}`,
     };
@@ -110,13 +122,27 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
 
   const edges: CodeFlowRFEdge[] = graph.edges.map((edge) => {
     const slotPort = isSlotEdge(edge, index) ? SLOT_PORTS[edge.sourcePort ?? "body"] : undefined;
+    /**
+     * A data edge that runs into (or out of) a container gets its label
+     * dropped.
+     *
+     * Its midpoint lands on the container's frame, right over the title of the
+     * `for`/`while`/`try` — and the value it names is already written on both
+     * ends: the source node's "Gives" row and the target's own field. A branch
+     * label (`true`, `false`, `error`, `body`) is never dropped: that one is the
+     * only place the diagram says which way the flow goes.
+     */
+    const crossesFrame =
+      edge.kind === "data" &&
+      (index.parentOf.get(edge.source) ?? null) !== (index.parentOf.get(edge.target) ?? null);
+
     const rfEdge: CodeFlowRFEdge = {
       id: edge.id,
       source: edge.source,
       target: edge.target,
       type: edge.kind === "data" ? "default" : "smoothstep",
       animated: edge.kind === "data",
-      label: edge.label,
+      ...(crossesFrame ? {} : { label: edge.label }),
       zIndex: 0,
       className: `cf-rf-edge cf-rf-edge--${edge.kind}${labelModifier(edge.label)}`,
       data: {

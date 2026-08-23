@@ -35,6 +35,18 @@ Demo preload ví dụ canonical: xem graph → click node → sửa channel tron
 | `@codeflow/mcp` | MCP JSON Schema → ToolDefinition (slugging tên an toàn, cursor paging, zero runtime dep) | 05 §3 |
 | `apps/demo` | app demo đầy đủ vòng xem + sửa | — |
 
+## 🎨 Update ~11:30 — FIX BUG TRẮNG TRANG + REDESIGN UI (commits `4e21161`, `28bf3e1`, `ea19ad3`, `759e7fc`)
+
+### Bug trắng trang `useCodeFlow must be used inside <CodeFlowProvider>` — ĐÃ FIX TẬN GỐC
+Không phải "HMR artifact bỏ qua được" như ghi nhận cũ. `createContext()` chạy ở module scope trong `provider.tsx` (module này còn export hooks/hằng số → không phải Fast Refresh boundary hợp lệ) → mỗi lần rebuild dist khi dev server chạy, module chạy lại → **context object thứ hai** → provider cũ và consumer mới không gặp nhau → null → throw → trắng trang. Fix 2 tầng: (1) `context.ts` cache context trên `globalThis`; (2) tách `hooks.ts`/`types.ts` để `provider.tsx` chỉ export đúng 1 component. 3 regression test (verify đỏ trước, xanh sau). Verify browser: console giờ sạch cả lỗi lẫn cảnh báo.
+
+### UI redesign (shadcn + Base UI + Tailwind v4) — 3 vòng
+- **Vòng 1**: bỏ bố cục 3 cột kiểu IDE → **canvas là nhân vật chính**, code thành drawer đóng sẵn, inspector dock phải (sheet khi màn hẹp). Design tokens thật, dark mode chuẩn. Node có icon + caption tiếng người + hình dạng riêng theo loại. Inspector thành form sản phẩm (trích dẫn specs `(06 §2)` bị tách khỏi câu chính thành footnote). Palette thành command palette có search + phím tắt. Agent tự tìm+fix 3 bug (cascade layer đảo, edge đè node, Monaco co 5px).
+- **Vòng 2**: container resize được (chỉ nới, kèm nút fit-to-contents), auto-size theo độ sâu lồng, **label nhánh có màu** (`error` đỏ / `body` teal / `true` xanh) — trước là chữ xám 9.5px không đọc nổi.
+- **Vòng 3** (t chẩn đoán, agent implement): node `End Flow` bay lên góc trên trái là vì layout adapter **bỏ mọi cạnh xuyên cấp container** khi đưa cho ELK → ELK không biết thứ tự. Fix: chiếu cạnh xuyên cấp lên **tổ tiên chung** thành cạnh proxy cho ELK (React Flow vẫn vẽ cạnh thật). Canonical không đổi (có test khóa).
+
+Screenshots before/after: `.design/` (ngoài git).
+
 ## 🐛 Update ~07:30 — SĂN BUG BẰNG MCP THẬT + HARDENING: bắt được **10 bug thật** (commits `071410a`, `cdb107a`)
 
 **Tests: 1005 → 1302** (core 1039 · mcp 110 · react 90 · cli 63). Đây là đợt giá trị nhất của cả dự án: mock không bao giờ lộ ra mấy bug này.

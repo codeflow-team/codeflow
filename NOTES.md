@@ -35,6 +35,30 @@ Demo preload ví dụ canonical: xem graph → click node → sửa channel tron
 | `@codeflow/mcp` | MCP JSON Schema → ToolDefinition (slugging tên an toàn, cursor paging, zero runtime dep) | 05 §3 |
 | `apps/demo` | app demo đầy đủ vòng xem + sửa | — |
 
+## 🚀 Update ~15:00 — QUY MÔ THẬT: flow vài trăm dòng, gallery, chat AI, eval lớn (commits `3d5484d` → `fa5bab4`)
+
+**Tests: 1005 → 1505.** 6 package (thêm `@codeflow/examples`), demo có test riêng.
+
+### Flow stress-test thật (`@codeflow/examples`)
+11 example, 4 cái **261–345 dòng**, dùng **65 tool MCP thật** từ 8 server. Flow lớn nhất: 345 dòng → **101 node, 286 edge, analyze 21.6ms** (ngân sách specs 500ms → dư 20×). Tỉ lệ node có nghĩa **79%**, toàn bộ diagnostic là `info` (code node hợp lệ), 0 error/warning.
+→ Bug thật: `isFieldValue` chỉ kiểm `kind` không kiểm payload → sai encoding thì **ghi `undefined` đè giá trị user rồi báo thành công**. Đã fix.
+
+### Demo gallery + chat AI
+Gallery 11 example theo nhóm/search/highlights, outline 101 bước cho flow dài, panel thống kê thật. **Chat AI**: tạo/sửa flow bằng tiếng người, key nằm ở dev proxy (t tự grep bundle 10MB: không lọt), sửa node đi qua **patch engine** giữ minimal patch.
+
+### Eval AI quy mô lớn — phát hiện quan trọng nhất
+47 lần gọi model, 11.597 dòng sinh ra:
+- **L0/L1 = 100% mọi lần** — không một tool bịa, không một contract sai, kể cả với API 38 tool do người khác viết.
+- **L2 sụp: 12/12 (flow nhỏ) → 0/14 (flow 150-400 dòng)**. Nguyên nhân chỉ 1 idiom: `failures.push({...})` — giấu *một bước*, không phải tool call. Flow nhỏ không tích tụ, flow 200 dòng cấu tạo bằng nó.
+- Thêm **1 style rule → 7/7 vòng đầu**, số lần gọi model giảm 56%.
+- ⚠️ Ngân sách token style guide **đã cạn** (rule 10 nén 3 lần mới lọt test <2000 token) — rule sau phải xem lại ngân sách 10 §4.
+- ⚠️ **Level ≠ đúng yêu cầu**: có flow L2 sạch nhưng âm thầm bỏ sót 1 requirement. Phải đọc level cùng quy mô.
+
+### QA chat AI trên UI → 14 vấn đề → đã fix 13
+Đáng khen: 0 lần bịa tool qua 15 lần sinh trên 5 registry (kể cả khi QA nói dối tool có tồn tại); **vòng retry chạy thật lần đầu** (invalid → L2 trong 16.3s); minimal patch đúng byte trên node sâu 5 tầng; **101/101 node id sống qua whole-file rewrite**.
+Đã sửa: reload mất hội thoại (**nguyên nhân sâu hơn t đoán**: entry `main.tsx` import non-component nên MỌI module thư viện đều có đường tới root → full-reload; đã tách 7 module + đổi entry + test khóa), timeout 240s → streaming + 900s + nút Retry (**prompt 10 yêu cầu trước hỏng 2/2 giờ đạt L2 trong 313s, 62 node/220 dòng**), sai kiểu vẫn khen "No issues" → kiểm kiểu thật ở tầng UI + sửa lời hứa, request gắn với flow, cảnh báo phạm vi rewrite.
+Không sửa: `flushSync` warning của Base UI `rc.0` (thư viện ngoài, **chỉ có ở dev**, production console sạch hoàn toàn).
+
 ## 🎨 Update ~11:30 — FIX BUG TRẮNG TRANG + REDESIGN UI (commits `4e21161`, `28bf3e1`, `ea19ad3`, `759e7fc`)
 
 ### Bug trắng trang `useCodeFlow must be used inside <CodeFlowProvider>` — ĐÃ FIX TẬN GỐC

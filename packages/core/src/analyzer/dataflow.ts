@@ -194,21 +194,39 @@ export function assignedIdentifierNames(root: Node): Set<string> {
   return names;
 }
 
-/** Names bound by a declaration name node (identifier or destructuring pattern). */
+/**
+ * Names bound by a declaration name node (identifier or destructuring pattern).
+ *
+ * Nested patterns (`const { a: { b } } = …`, `const [[x]] = …`) are flattened to
+ * the identifiers they actually bind: the question this answers is "which names
+ * does this statement introduce", and `b` is one of them. Taking the pattern's
+ * text instead would produce a binding literally called `{ b }` — a name no
+ * reader can ever resolve, so the data edge into whoever uses `b` would be
+ * missing (03 §6) and the delete dependency check (06 §2) would not see it.
+ * A nested name has no single owning property, so it carries no `property`.
+ */
 export function bindingNames(nameNode: Node): { name: string; property?: string }[] {
   if (Node.isIdentifier(nameNode)) return [{ name: nameNode.getText() }];
   const names: { name: string; property?: string }[] = [];
   if (Node.isObjectBindingPattern(nameNode)) {
     for (const element of nameNode.getElements()) {
+      const target = element.getNameNode();
+      if (!Node.isIdentifier(target)) {
+        names.push(...bindingNames(target));
+        continue;
+      }
       const propertyName = element.getPropertyNameNode()?.getText();
-      const local = element.getNameNode().getText();
+      const local = target.getText();
       names.push(propertyName === undefined ? { name: local } : { name: local, property: propertyName });
     }
     return names;
   }
   if (Node.isArrayBindingPattern(nameNode)) {
     for (const element of nameNode.getElements()) {
-      if (Node.isBindingElement(element)) names.push({ name: element.getNameNode().getText() });
+      if (!Node.isBindingElement(element)) continue;
+      const target = element.getNameNode();
+      if (Node.isIdentifier(target)) names.push({ name: target.getText() });
+      else names.push(...bindingNames(target));
     }
     return names;
   }

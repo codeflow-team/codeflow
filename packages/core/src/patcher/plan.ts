@@ -34,6 +34,7 @@ import {
   astNodeFor,
   callExpressionFor,
   findProperty,
+  hasOpaqueKey,
   lastSpreadIndex,
   statementFor,
 } from "./locate.js";
@@ -49,6 +50,7 @@ import {
   ensureImportEdits,
   identifiersIn,
   insertStatementEdit,
+  isUnbracedBody,
   retargetToolEdit,
   suggestVariableName,
   type InsertWhere,
@@ -209,6 +211,15 @@ function planFields(input: PlanInput): PatchPlan {
         throw new CodeFlowError(
           "patch-not-editable",
           `"${definition.label}" spreads another object into its argument — a new "${name}" would override a value that is not visible in the source. Edit it in the code view (06 §1).`,
+        );
+      }
+      // Same reasoning for a computed key nobody can name (`["chan" + "nel"]`):
+      // it may well *be* this field, in which case appending a second one
+      // silently overrides the value on screen. Refuse instead of guessing.
+      if (hasOpaqueKey(object)) {
+        throw new CodeFlowError(
+          "patch-not-editable",
+          `The argument of "${definition.label}" has a computed key that cannot be resolved without running the code — a new "${name}" might override it, or be overridden by it. Edit it in the code view (06 §1).`,
         );
       }
       const resolved = asFieldValue(name, value);
@@ -448,8 +459,40 @@ function planDelete(input: PlanInput): PatchPlan {
     );
   }
 
-  const edits = deleteRangeEdits(input.source, node.source.start.offset, node.source.end.offset);
+  const edits = deleteStatementEdits(input, node.source.start.offset, node.source.end.offset);
   return { edits, diagnostics: [], removed: [...doomedIds] };
+}
+
+/**
+ * Text edits that remove the statement a node owns.
+ *
+ * The one case that is not "remove the line": a statement that *is* the
+ * brace-less body of an `if`/`else`/loop. Removing its text there hands the
+ * body to the next statement — valid code that means something else. An empty
+ * block keeps the meaning and matches what deleting the only statement of a
+ * braced body already produces (`if (x) { }`).
+ */
+function deleteStatementEdits(input: PlanInput, start: number, end: number): TextEdit[] {
+  const statement = statementAt(input.sourceFile, start, end);
+  if (statement !== null && isUnbracedBody(statement)) {
+    return [{ start, end, newText: "{ }" }];
+  }
+  return deleteRangeEdits(input.source, start, end);
+}
+
+/** The statement whose range is exactly `[start, end)`, if there is one. */
+function statementAt(sourceFile: SourceFile, start: number, end: number): Node | null {
+  let found: Node | null = null;
+  const visit = (current: Node): void => {
+    if (current.getEnd() < start || current.getStart() > end) return;
+    if (Node.isStatement(current) && current.getStart() === start && current.getEnd() === end) {
+      found = current;
+      return;
+    }
+    current.forEachChild(visit);
+  };
+  visit(sourceFile);
+  return found;
 }
 
 /* -------------------------------------------------------------------------- */

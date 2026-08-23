@@ -105,7 +105,15 @@ export function resolveValue(field: string, value: FieldValue, form: OriginalFor
 /* rendering                                                                   */
 /* -------------------------------------------------------------------------- */
 
-/** Escape `text` for a string literal delimited by `quote`. */
+/**
+ * Escape `text` for a string literal delimited by `quote`.
+ *
+ * Control characters are escaped even where the grammar would accept them raw:
+ * a literal TAB (or form feed, or NUL) written into the source is invisible in
+ * an editor and is exactly the kind of character a formatter or an editor's
+ * "trim on save" silently rewrites \u2014 which would change the *value* of the
+ * string behind the user's back. `\t` costs nothing and cannot be mangled.
+ */
 export function renderStringLiteral(text: string, quote: '"' | "'"): string {
   let out = quote;
   for (const character of text) {
@@ -119,6 +127,18 @@ export function renderStringLiteral(text: string, quote: '"' | "'"): string {
       case "\r":
         out += "\\r";
         break;
+      case "\t":
+        out += "\\t";
+        break;
+      case "\b":
+        out += "\\b";
+        break;
+      case "\f":
+        out += "\\f";
+        break;
+      case "\v":
+        out += "\\v";
+        break;
       case "\u2028":
         out += "\\u2028";
         break;
@@ -126,7 +146,15 @@ export function renderStringLiteral(text: string, quote: '"' | "'"): string {
         out += "\\u2029";
         break;
       default:
-        out += character === quote ? `\\${character}` : character;
+        if (character === quote) {
+          out += `\\${character}`;
+          break;
+        }
+        if (character < " ") {
+          out += `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+          break;
+        }
+        out += character;
     }
   }
   return out + quote;

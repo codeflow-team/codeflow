@@ -36,6 +36,24 @@ export interface TsMorphParserOptions {
   file?: string;
 }
 
+/** U+FEFF, a byte-order mark, when it opens the document. */
+const BOM = 0xfeff;
+
+/**
+ * The text handed to ts-morph, in the caller's coordinate space.
+ *
+ * ts-morph strips a leading BOM from the text it parses (it remembers it for
+ * `save()`), which would put every AST offset one character ahead of the source
+ * the caller holds: node ranges would point one character short, the UI would
+ * highlight the wrong text, and every patch would land in the wrong place. A
+ * BOM is whitespace to the scanner, so substituting a single space keeps the
+ * two coordinate spaces identical without changing one token — and the document
+ * the graph carries (and that patches are applied to) keeps its BOM.
+ */
+function forParser(source: string): string {
+  return source.charCodeAt(0) === BOM ? ` ${source.slice(1)}` : source;
+}
+
 export function isTsSyntaxTree(tree: SyntaxTree): tree is TsSyntaxTree {
   const candidate = tree as Partial<TsSyntaxTree>;
   return (
@@ -72,7 +90,7 @@ export class TsMorphParser implements Parser {
    */
   parse(source: string, file: string = this.defaultFile): TsSyntaxTree {
     const path = file.startsWith("/") ? file : `/${file}`;
-    const sourceFile = this.project.createSourceFile(path, source, { overwrite: true });
+    const sourceFile = this.project.createSourceFile(path, forParser(source), { overwrite: true });
     return { file, content: source, sourceFile };
   }
 

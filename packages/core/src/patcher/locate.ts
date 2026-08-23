@@ -12,6 +12,7 @@ import { Node } from "ts-morph";
 import type { Expression, ObjectLiteralExpression, SourceFile, Statement } from "ts-morph";
 import { CodeFlowError } from "../errors.js";
 import type { WorkflowNode } from "../model/index.js";
+import { staticPropertyName } from "../util/property-names.js";
 
 /** Every AST node whose range is exactly [start, end), outermost first. */
 export function nodesAtRange(sourceFile: SourceFile, start: number, end: number): Node[] {
@@ -135,19 +136,36 @@ export interface PropertyLocation {
   shorthand: boolean;
 }
 
-/** Find a named property of an object literal, plus where it sits (06 §1 spread rules). */
+/**
+ * Find a named property of an object literal, plus where it sits (06 §1 spread
+ * rules).
+ *
+ * Matching is on the key JavaScript binds, not on how it is spelled: `channel`,
+ * `"channel"` and `["channel"]` are the same property. Matching on the source
+ * text instead would miss the quoted form and make the caller *append* a second
+ * `channel` — leaving the value the user is looking at in place while quietly
+ * overriding it (I6).
+ */
 export function findProperty(object: ObjectLiteralExpression, name: string): PropertyLocation | null {
   const properties = object.getProperties();
   for (let index = 0; index < properties.length; index++) {
     const property = properties[index];
-    if (Node.isPropertyAssignment(property) && property.getName() === name) {
+    if (staticPropertyName(property) !== name) continue;
+    if (Node.isPropertyAssignment(property)) {
       return { property, value: property.getInitializer(), index, shorthand: false };
     }
-    if (Node.isShorthandPropertyAssignment(property) && property.getName() === name) {
+    if (Node.isShorthandPropertyAssignment(property)) {
       return { property, value: undefined, index, shorthand: true };
     }
   }
   return null;
+}
+
+/** True when the literal holds a key that cannot be named without running code. */
+export function hasOpaqueKey(object: ObjectLiteralExpression): boolean {
+  return object
+    .getProperties()
+    .some((property) => !Node.isSpreadAssignment(property) && staticPropertyName(property) === null);
 }
 
 /** Index of the last spread element, or -1 — 06 §1. */

@@ -12,6 +12,7 @@ import type { Expression, Statement } from "ts-morph";
 import type { NodePort, Schema, WorkflowNode } from "../model/index.js";
 import { isNamedFieldsSchema } from "../model/schema.js";
 import { inputSchemaFieldNames } from "../registry/validate.js";
+import { staticPropertyName } from "../util/property-names.js";
 import {
   PathScope,
   callSegment,
@@ -86,6 +87,12 @@ interface ArgumentInfo {
   text: string;
   editable: boolean;
   hasSpread: boolean;
+  /**
+   * True when the literal holds a key that cannot be named without running code
+   * (`{ ["chan" + "nel"]: x }`). Such a key is invisible to the inspector, so —
+   * exactly like a spread (06 §1) — nothing may be inserted next to it.
+   */
+  hasOpaqueKey: boolean;
   fields: Record<string, string> | null;
   /**
    * Fields whose value is the literal placeholder `undefined` — what the
@@ -97,36 +104,45 @@ interface ArgumentInfo {
 
 function describeArguments(call: Node): ArgumentInfo {
   if (!Node.isCallExpression(call)) {
-    return { text: "", editable: false, hasSpread: false, fields: null, placeholders: [] };
+    return { text: "", editable: false, hasSpread: false, hasOpaqueKey: false, fields: null, placeholders: [] };
   }
   const args = call.getArguments();
   const text = args.map((a) => a.getText()).join(", ");
   if (args.length !== 1) {
-    return { text, editable: false, hasSpread: false, fields: null, placeholders: [] };
+    return { text, editable: false, hasSpread: false, hasOpaqueKey: false, fields: null, placeholders: [] };
   }
   const only = unwrap(args[0]);
   if (only === undefined || !Node.isObjectLiteralExpression(only)) {
-    return { text, editable: false, hasSpread: false, fields: null, placeholders: [] };
+    return { text, editable: false, hasSpread: false, hasOpaqueKey: false, fields: null, placeholders: [] };
   }
   const fields: Record<string, string> = {};
   const placeholders: string[] = [];
   let hasSpread = false;
+  let hasOpaqueKey = false;
   for (const property of only.getProperties()) {
     if (Node.isSpreadAssignment(property)) {
       hasSpread = true;
       continue;
     }
+    // The key as JavaScript binds it, not as it is spelled: `"channel"` and
+    // `["channel"]` are the field `channel`, and a key nobody can name
+    // statically is recorded as such rather than shown under its source text.
+    const name = staticPropertyName(property);
+    if (name === null) {
+      hasOpaqueKey = true;
+      continue;
+    }
     if (Node.isPropertyAssignment(property)) {
       const value = property.getInitializerOrThrow().getText();
-      fields[property.getName()] = value;
-      if (value === "undefined") placeholders.push(property.getName());
+      fields[name] = value;
+      if (value === "undefined") placeholders.push(name);
       continue;
     }
     if (Node.isShorthandPropertyAssignment(property)) {
-      fields[property.getName()] = property.getName();
+      fields[name] = name;
     }
   }
-  return { text, editable: true, hasSpread, fields, placeholders };
+  return { text, editable: true, hasSpread, hasOpaqueKey, fields, placeholders };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -513,6 +529,9 @@ function createCallNode(
         argumentText: args.text,
         argumentsEditable: args.editable,
         argumentsHaveSpread: args.hasSpread,
+        // Only present when true: it is a rare degradation flag, and every
+        // node's `data` is a reviewed fixture snapshot (11 §3.2).
+        ...(args.hasOpaqueKey ? { argumentsHaveOpaqueKey: true } : {}),
         ...(tool?.icon === undefined ? {} : { icon: tool.icon }),
       },
     });
@@ -545,6 +564,9 @@ function createCallNode(
         argumentText: args.text,
         argumentsEditable: args.editable,
         argumentsHaveSpread: args.hasSpread,
+        // Only present when true: it is a rare degradation flag, and every
+        // node's `data` is a reviewed fixture snapshot (11 §3.2).
+        ...(args.hasOpaqueKey ? { argumentsHaveOpaqueKey: true } : {}),
         ...(definition?.icon === undefined ? {} : { icon: definition.icon }),
       },
     });
@@ -566,6 +588,9 @@ function createCallNode(
         argumentText: args.text,
         argumentsEditable: args.editable,
         argumentsHaveSpread: args.hasSpread,
+        // Only present when true: it is a rare degradation flag, and every
+        // node's `data` is a reviewed fixture snapshot (11 §3.2).
+        ...(args.hasOpaqueKey ? { argumentsHaveOpaqueKey: true } : {}),
       },
     });
   }

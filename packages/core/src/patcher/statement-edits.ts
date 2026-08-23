@@ -38,6 +38,43 @@ export function deleteRangeEdits(source: string, start: number, end: number): Te
   return [{ start, end: cut, newText: "" }];
 }
 
+/**
+ * True when `statement` is the *entire* brace-less body of an enclosing
+ * construct: `if (x) continue;`, `else return 1;`, `for (…) doIt();`.
+ *
+ * Deleting the text of such a statement does not delete a step — it promotes
+ * whatever comes next into the body:
+ *
+ *     if (pr.draft) continue;          →   if (pr.draft)
+ *     await tools.slack.send(…);            await tools.slack.send(…);
+ *
+ * which still parses, still type-checks, and now sends the message only for
+ * draft PRs. A silent change of meaning is the worst outcome the patch engine
+ * has (I6, and O2's "only the region the user edited changes"), so the caller
+ * leaves an empty block behind instead — the same thing the braced form
+ * already produces when its only statement is deleted.
+ */
+export function isUnbracedBody(statement: Node): boolean {
+  if (Node.isBlock(statement)) return false;
+  const parent = statement.getParent();
+  if (parent === undefined) return false;
+  if (Node.isIfStatement(parent)) {
+    return parent.getThenStatement() === statement || parent.getElseStatement() === statement;
+  }
+  if (
+    Node.isForStatement(parent) ||
+    Node.isForOfStatement(parent) ||
+    Node.isForInStatement(parent) ||
+    Node.isWhileStatement(parent) ||
+    Node.isDoStatement(parent) ||
+    Node.isLabeledStatement(parent) ||
+    Node.isWithStatement(parent)
+  ) {
+    return parent.getStatement() === statement;
+  }
+  return false;
+}
+
 export type InsertWhere = "before" | "after" | "append";
 
 /** Insert a statement as its own line, indented like its new neighbours. */

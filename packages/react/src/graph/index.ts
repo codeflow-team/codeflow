@@ -130,18 +130,46 @@ function contains(node: WorkflowNode, offset: number): boolean {
   return offset >= node.source.start.offset && offset <= node.source.end.offset;
 }
 
-/**
- * Innermost node whose source range covers `offset` — the canvas side of the
- * two-way selection sync (07 §2). Smallest range wins, so a tool call inside a
- * loop is preferred over the loop that contains it.
- */
-export function nodeAtOffset(graph: WorkflowGraph | null | undefined, offset: number): WorkflowNode | null {
+function innermostAt(graph: WorkflowGraph | null | undefined, offset: number): WorkflowNode | null {
   let best: WorkflowNode | null = null;
   for (const node of graph?.nodes ?? []) {
     if (!contains(node, offset)) continue;
     if (best === null || rangeLength(node) < rangeLength(best)) best = node;
   }
   return best;
+}
+
+/**
+ * Innermost node whose source range covers `offset` — the canvas side of the
+ * two-way selection sync (07 §2). Smallest range wins, so a tool call inside a
+ * loop is preferred over the loop that contains it.
+ *
+ * A caret sitting in the **indentation** of a line is treated as a caret on that
+ * line's statement. Taken literally, column 1 of an indented line is outside
+ * every statement on it — the containing `for`/`try` is the innermost node that
+ * covers it — so pressing Home would jump the selection from the step the user
+ * is reading to its container, and on an unindented statement it would select
+ * nothing at all. The line is what a reader means by "here", so leading
+ * whitespace resolves forward to the first thing on it, never to something
+ * larger than the literal answer.
+ */
+export function nodeAtOffset(graph: WorkflowGraph | null | undefined, offset: number): WorkflowNode | null {
+  const direct = innermostAt(graph, offset);
+  const content = graph?.source.content;
+  if (content === undefined) return direct;
+
+  const lineStart = content.lastIndexOf("\n", Math.max(offset - 1, 0)) + 1;
+  if (offset > lineStart && content.slice(lineStart, offset).trim().length > 0) return direct;
+
+  let scan = offset;
+  while (scan < content.length && (content[scan] === " " || content[scan] === "\t")) scan++;
+  if (scan === offset) return direct;
+
+  const snapped = innermostAt(graph, scan);
+  if (snapped === null) return direct;
+  if (direct === null) return snapped;
+  // Never let the snap widen the answer: it only ever refines it.
+  return rangeLength(snapped) <= rangeLength(direct) ? snapped : direct;
 }
 
 /**

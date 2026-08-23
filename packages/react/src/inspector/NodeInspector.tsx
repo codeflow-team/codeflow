@@ -51,6 +51,22 @@ interface DraftState {
 
 const EMPTY_DRAFT: DraftState = { text: {}, checked: {}, template: {} };
 
+/**
+ * DOM id for one form control of this inspector.
+ *
+ * Every control gets an `id` **and** a `name`, and its visible label points at
+ * it with `htmlFor`. Wrapping a control in a `<label>` associates the two
+ * implicitly, but it leaves the control itself anonymous — which is what the
+ * browser reports as "a form field element should have an id or name
+ * attribute", and what costs assistive tech the explicit relationship, autofill
+ * a key, and tests an addressable handle. Ids are scoped by node id so two
+ * inspectors on one page never collide, and the name is sanitised because a
+ * field name comes from a tool's schema, not from us.
+ */
+function controlId(nodeId: string, name: string): string {
+  return `cf-${nodeId}-${name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+}
+
 export function NodeInspector(props: NodeInspectorProps): ReactNode {
   const {
     graph,
@@ -303,6 +319,7 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
             return (
               <FieldRow
                 key={field.name}
+                nodeId={node.id}
                 field={field}
                 spec={spec}
                 text={draft.text[field.name] ?? spec.value}
@@ -345,8 +362,14 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
           >
             Revert
           </button>
-          <label className="cf-checkbox">
-            <input type="checkbox" checked={preview} onChange={(event) => { setPreview(event.target.checked); }} />
+          <label className="cf-checkbox" htmlFor={controlId(node.id, "preview")}>
+            <input
+              type="checkbox"
+              id={controlId(node.id, "preview")}
+              name="preview"
+              checked={preview}
+              onChange={(event) => { setPreview(event.target.checked); }}
+            />
             Preview diff
           </label>
         </div>
@@ -376,9 +399,13 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
 
       {model.toolChange !== null && registry !== null ? (
         <section className="cf-section" data-testid="tool-change">
-          <h3 className="cf-section__title">Tool</h3>
+          <label className="cf-section__title" htmlFor={controlId(node.id, "tool")}>
+            Tool
+          </label>
           <select
             className="cf-select"
+            id={controlId(node.id, "tool")}
+            name="tool"
             value={toolTarget ?? model.toolChange.current}
             disabled={!editingEnabled || busy}
             onChange={(event) => { setToolTarget(event.target.value); }}
@@ -502,6 +529,8 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
 }
 
 interface FieldRowProps {
+  /** Owning node — scopes the control ids so two inspectors never collide. */
+  nodeId: string;
   field: InspectorField;
   spec: FieldEditorSpec;
   text: string;
@@ -524,10 +553,11 @@ function FieldRow(props: FieldRowProps): ReactNode {
 
   const inputClass = `cf-input${spec.kind === "expression" || spec.kind === "code" ? " cf-input--code" : ""}`;
   const title = reason ?? undefined;
+  const id = controlId(props.nodeId, `field-${field.name}`);
 
   return (
-    <label className={`cf-field${field.display.friendly ? "" : " cf-field--code"}`}>
-      <span className="cf-field__label">
+    <div className={`cf-field${field.display.friendly ? "" : " cf-field--code"}`}>
+      <label className="cf-field__label" htmlFor={id}>
         {field.label}
         {field.schema !== undefined && typeof field.schema === "string" ? (
           <span className="cf-field__schema">{field.schema}</span>
@@ -535,12 +565,14 @@ function FieldRow(props: FieldRowProps): ReactNode {
         {!field.declaredEditable ? <span className="cf-field__tag">not declared editable</span> : null}
         {!field.display.friendly ? <span className="cf-field__tag">code mode</span> : null}
         {field.patch !== null && field.patch !== "field" ? <span className="cf-field__tag">{field.patch}</span> : null}
-      </span>
+      </label>
 
       {spec.kind === "checkbox" ? (
         <input
           type="checkbox"
           className="cf-checkbox__box"
+          id={id}
+          name={field.name}
           data-field={field.name}
           disabled={disabled}
           title={title}
@@ -550,6 +582,8 @@ function FieldRow(props: FieldRowProps): ReactNode {
       ) : spec.kind === "code" ? (
         <textarea
           className={inputClass}
+          id={id}
+          name={field.name}
           data-field={field.name}
           disabled={disabled}
           title={title}
@@ -561,6 +595,8 @@ function FieldRow(props: FieldRowProps): ReactNode {
       ) : (
         <input
           className={inputClass}
+          id={id}
+          name={field.name}
           data-field={field.name}
           disabled={disabled}
           title={title}
@@ -595,7 +631,7 @@ function FieldRow(props: FieldRowProps): ReactNode {
       {field.blockedReason === null && spec.hint !== null ? (
         <span className="cf-field__hint">{spec.hint}</span>
       ) : null}
-    </label>
+    </div>
   );
 }
 

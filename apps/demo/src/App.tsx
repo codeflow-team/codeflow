@@ -43,6 +43,7 @@ import {
   useDiagnosticCounts,
   useTheme,
   useToast,
+  type RunView,
 } from "@codeflow/react";
 import {
   ChevronDown,
@@ -53,14 +54,25 @@ import {
   LoaderCircle,
   PanelBottom,
   PanelRight,
+  Play,
   Plus,
   RefreshCw,
   Sparkles,
+  Square,
   TriangleAlert,
   Workflow,
 } from "lucide-react";
 import { registryInstanceFor } from "./registry.js";
-import { EXAMPLES, type FlowExample } from "./examples-source.js";
+import { EXAMPLES, registryFor, type FlowExample } from "./examples-source.js";
+import { RunPanel } from "./RunPanel.js";
+import {
+  EMPTY_RUN,
+  fetchRunStatus,
+  runRequestFor,
+  startRun,
+  type RunHandle,
+  type RunSnapshot,
+} from "./run.js";
 import { ExampleGallery } from "./ExampleGallery.js";
 import { FlowAbout } from "./FlowAbout.js";
 import { OutlinePanel } from "./OutlinePanel.js";
@@ -109,6 +121,10 @@ export function App() {
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [ai, setAi] = useState<AiStatus>({ configured: false, model: "" });
+  const [runnerAvailable, setRunnerAvailable] = useState(false);
+  const [run, setRun] = useState<RunSnapshot>(EMPTY_RUN);
+  const [runOpen, setRunOpen] = useState(false);
+  const runHandle = useRef<RunHandle | null>(null);
   const [theme, setTheme] = useTheme("light");
 
   const wide = useMediaQuery("(min-width: 1024px)");
@@ -141,7 +157,89 @@ export function App() {
 
   useEffect(() => {
     void fetchAiStatus().then(setAi);
+    void fetchRunStatus().then((status) => { setRunnerAvailable(status.available); });
   }, []);
+
+  /*
+   * Running the flow — 09 §1.
+   *
+   * The library does not execute anything and must not (00 §5, I7). What it
+   * hands over is the projection: `nodeRanges(graph)` says which node owns which
+   * piece of the file. The dev server takes that plus the source, runs it in a
+   * worker thread, and reports back a `RunEvent` per step; everything the canvas
+   * shows is a fold of those events.
+   */
+  const stopRun = useCallback(() => {
+    runHandle.current?.stop();
+    runHandle.current = null;
+  }, []);
+
+  const beginRun = useCallback(() => {
+    if (graph === null) return;
+    runHandle.current?.stop();
+    setRun({ ...EMPTY_RUN, status: "starting" });
+    setRunOpen(true);
+    // The graph the ranges come from must be the graph on screen, or a step
+    // would light up next to code it does not own.
+    runHandle.current = startRun(
+      runRequestFor(graph, graph.source.content, registryFor(example)),
+      setRun,
+    );
+  }, [graph, example]);
+
+  // A run describes one version of one file. Switching example, or re-analyzing
+  // into a different graph, retires it rather than leaving stale marks behind.
+  useEffect(() => {
+    stopRun();
+    setRun(EMPTY_RUN);
+    setRunOpen(false);
+  }, [example.id, stopRun]);
+
+  useEffect(() => () => { runHandle.current?.stop(); }, []);
+
+  const runView = useMemo<RunView | null>(() => {
+    if (run.status === "idle") return null;
+    return {
+      status:
+        run.status === "starting" || run.status === "running"
+          ? "running"
+          : run.status === "ok"
+            ? "ok"
+            : run.status === "cancelled"
+              ? "cancelled"
+              : "failed",
+      nodes: run.nodes,
+      activeNodeId: run.activeNodeId,
+      untraced: run.untraced,
+      tracked: run.tracked,
+    };
+  }, [run]);
+
+  const running = run.status === "starting" || run.status === "running";
+
+  /*
+   * A run that ended on an error selects the step it ended on.
+   *
+   * On an 87-node canvas the red border is findable only if you already know
+   * where to look; selecting the step pans the canvas to it and opens the
+   * inspector on the value and the message, which is the whole question a
+   * failed run raises.
+   */
+  const failureShownRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (run.status !== "failed" && run.status !== "timeout") return;
+    // Earliest failure, not latest: the step that threw fails first and its
+    // enclosing `try`/loop fail after it, so the newest failed node is an
+    // ancestor and the oldest one is the culprit.
+    const failed = [...run.nodes.values()]
+      .filter((state) => state.status === "failed")
+      .sort((a, b) => a.lastAt - b.lastAt)[0];
+    if (failed === undefined) return;
+    const key = `${run.plan?.runId ?? ""}:${failed.nodeId}`;
+    if (failureShownRef.current === key) return;
+    failureShownRef.current = key;
+    setSelectedNodeId(failed.nodeId);
+  }, [run.status, run.nodes, run.plan]);
 
   // ⌘K palette · ⌘O examples · ⌘J chat · ⌘B outline — the four things this demo
   // is for, each one key away.
@@ -296,6 +394,7 @@ export function App() {
       onPatched={onPatched}
       onGraphSync={(next) => { setGraph(decorate(next)); }}
       onReanalyze={() => { void analyze(source); }}
+      run={runView}
       defaultMode="expanded"
     >
       <div className="flex h-dvh flex-col overflow-hidden bg-canvas text-ink">
@@ -336,9 +435,54 @@ export function App() {
             </Button>
           </Hint>
 
+          {runnerAvailable ? (
+            <Hint
+              label={
+                running
+                  ? "Stop the run"
+                  : graph === null
+                    ? "Draw the diagram first"
+                    : "Run this flow for real and watch each step light up"
+              }
+            >
+              <Button
+                variant={running ? "soft" : "primary"}
+                size="md"
+                data-testid="run"
+                disabled={graph === null}
+                aria-label={running ? "Stop the run" : "Run this flow"}
+                onClick={() => { running ? stopRun() : beginRun(); }}
+              >
+                {running ? <Square /> : <Play />}
+                {running ? "Stop" : "Run"}
+              </Button>
+            </Hint>
+          ) : null}
+
+          {running ? (
+            <span className="hidden items-center gap-1.5 text-[11.5px] text-ink-dim sm:flex" data-testid="run-inline-progress">
+              <LoaderCircle className="size-3 animate-spin text-accent" />
+              {run.nodes.size} step{run.nodes.size === 1 ? "" : "s"} · {run.elapsedMs}ms
+            </span>
+          ) : null}
+
           <GraphSummary elapsed={elapsed} />
 
           <div className="ml-auto flex items-center gap-2">
+            {run.status === "idle" ? null : (
+              <Hint label={runOpen ? "Hide the run log" : "Show the run log"}>
+                <Button
+                  variant={runOpen ? "soft" : "ghost"}
+                  size="icon"
+                  data-testid="toggle-run-log"
+                  aria-label="Show the run log"
+                  aria-pressed={runOpen}
+                  onClick={() => { setRunOpen((open) => !open); }}
+                >
+                  <Play />
+                </Button>
+              </Hint>
+            )}
             <Hint label={outlineOpen ? "Hide the step list" : "Show the step list"}>
               <Button
                 variant={outlineOpen ? "soft" : "ghost"}
@@ -392,6 +536,16 @@ export function App() {
         {/* outline + canvas + inspector                                      */}
         {/* ---------------------------------------------------------------- */}
         <div className="flex min-h-0 flex-1">
+          {wide && runOpen ? (
+            <aside className="w-[20rem] shrink-0 border-r border-line xl:w-[22rem]">
+              <RunPanel
+                run={run}
+                onStart={beginRun}
+                onStop={stopRun}
+                onClose={() => { setRunOpen(false); }}
+              />
+            </aside>
+          ) : null}
           {wide && outlineOpen ? (
             <aside className="w-[15rem] shrink-0 border-r border-line xl:w-[17rem]">
               <OutlinePanel onClose={() => { setOutlineOpen(false); }} />

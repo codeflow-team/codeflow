@@ -59,7 +59,12 @@ describe("Fast Refresh boundaries", () => {
 
   for (const file of files) {
     const name = relative(SRC, file);
-    it(`${name} exports only components`, async () => {
+    // Importing one `.tsx` pulls its whole dependency graph through the
+    // transform, which costs about a second on an idle machine and several
+    // under `turbo run test` with five other packages compiling beside it. The
+    // 5s default made this fail on load rather than on content — the one thing
+    // a rule-enforcing test must never do.
+    it(`${name} exports only components`, { timeout: 60_000 }, async () => {
       const module = (await import(file)) as Record<string, unknown>;
       const offenders = Object.entries(module)
         .filter(([key]) => key !== "__esModule" && key !== "default")

@@ -1,0 +1,347 @@
+/**
+ * One run, from source text to a stream of frames.
+ *
+ * Transport-free on purpose: the dev server wraps this in SSE, and
+ * `scripts/run-examples.mjs` drives the same function straight from a terminal
+ * to sweep the whole gallery. A runner that can only be exercised through a
+ * browser is a runner nobody checks.
+ *
+ * ```text
+ * source + nodeRanges
+ *   → instrument()      markers before and after each statement
+ *   → scratch dir       flow.ts + lib.ts, deleted when the run ends
+ *   → Worker            node:worker_threads — killable, credential-free
+ *   → frames            emitted the instant they arrive, never batched
+ * ```
+ *
+ * ⚠️ Demo runner, **not a sandbox**. The worker has the developer's own
+ * permissions; what it does not have is credentials, a network client other
+ * than the allow-listed MCP transports, or anywhere to write except a
+ * throwaway directory. A production runtime must isolate properly (09 §1).
+ */
+
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { Worker } from "node:worker_threads";
+
+import { instrument, type ProbeRange, type SkippedProbe } from "./instrument.ts";
+import { synthesizeInput } from "./input.ts";
+import { planFor, stubReason, type McpServerPlan } from "./mcp-servers.ts";
+import type { ToolBinding, WorkerJob } from "./worker.ts";
+
+export const DEFAULT_TIMEOUT_MS = 120_000;
+export const MAX_TIMEOUT_MS = 600_000;
+export const MAX_PREVIEW_CHARS = 600;
+/** A runaway flow can emit events faster than a browser can draw them. */
+export const MAX_EVENTS = 20_000;
+
+export interface RunRequest {
+  exampleId?: string;
+  source: string;
+  ranges?: ProbeRange[];
+  tools?: ToolBinding[];
+  functions?: { name: string; code?: string; modulePath?: string }[];
+  input?: unknown;
+  timeoutMs?: number;
+  /** Leave the scratch directory behind so its files can be shown. */
+  keepScratch?: boolean;
+}
+
+export interface BindingReport {
+  namespace: string;
+  mode: "mcp" | "stub";
+  server?: string;
+  safety?: string;
+  reason?: string;
+}
+
+export type RunFrame =
+  | {
+      type: "plan";
+      runId: string;
+      scratch: string;
+      workspace: string;
+      probed: string[];
+      skipped: SkippedProbe[];
+      droppedImports: string[];
+      bindings: BindingReport[];
+      timeoutMs: number;
+      libraryFunctions: string[];
+      note: string;
+    }
+  | { type: "input"; input: unknown }
+  | { type: "event"; nodeId: string; phase: string; at: number; durationMs?: number; preview?: unknown; error?: { message: string; stack?: string } }
+  | { type: "call"; at: number; tool: string; mode: "mcp" | "stub"; ms: number; ok: boolean; nodeId: string | null; detail?: string }
+  | { type: "ready"; namespaces: { namespace: string; mode: string; server?: string; tools?: number }[] }
+  | { type: "done"; status: "ok" | "failed" | "timeout" | "cancelled"; ms?: number; result?: unknown; error?: { message: string; stack?: string } };
+
+export interface RunHandle {
+  runId: string;
+  /** Stop the worker and remove the scratch directory. Idempotent. */
+  cancel: () => void;
+  /** Resolves once the final frame has been emitted. Never rejects. */
+  finished: Promise<void>;
+}
+
+/**
+ * Write the module the worker imports.
+ *
+ * `@flows/lib` is a real import in the flow's own text (05 §4) and the library
+ * functions are real code the registry carries, so they are written next to the
+ * flow and the import is repointed at them — they run for real. Every other
+ * import is blanked by `instrument()`: `../generated/tools` is a `.d.ts` that
+ * only exists at author time.
+ */
+function writeModule(
+  scratch: string,
+  source: string,
+  ranges: ProbeRange[],
+  functions: { name: string; code?: string }[],
+): ReturnType<typeof instrument> & { entry: string } {
+  const result = instrument(source, ranges, { rewriteImports: { "@flows/lib": "./lib.ts" } });
+
+  const bodies = functions
+    .map((fn) => fn.code?.trim())
+    .filter((code): code is string => code !== undefined && code.length > 0)
+    .map((code) => (code.startsWith("export ") ? code : `export ${code}`));
+  writeFileSync(
+    join(scratch, "lib.ts"),
+    `/* Library functions, from the registry (05 §4). Real code, really run. */\n${bodies.join("\n\n")}\n`,
+    "utf8",
+  );
+
+  const entry = join(scratch, "flow.ts");
+  writeFileSync(entry, result.code, "utf8");
+  return { ...result, entry };
+}
+
+/**
+ * A tiny, believable project for a flow to work on.
+ *
+ * A filesystem MCP server rooted at an empty directory makes every flow in the
+ * gallery stop at its first step with "no files found", which demonstrates
+ * nothing. So the scratch directory starts as a small source tree — a couple of
+ * modules, a test, a doc, a stale doc — chosen so the real flows have something
+ * true to say about it: `doc-freshness-audit` finds a doc older than the module
+ * it documents, `memory-graph-sync` finds modules to turn into entities.
+ *
+ * All of it is created fresh per run and deleted with the run.
+ */
+function seedWorkspace(workspace: string): void {
+  const files: Record<string, string> = {
+    "README.md": "# Demo workspace\n\nCreated for one CodeFlow run, and deleted after it.\n",
+    // Scoped dependency names on their own lines: the flows that read a
+    // manifest look for `@` per line rather than parsing JSON, which is what a
+    // real flow written against a `requirements`-style file does.
+    "package.json": JSON.stringify(
+      {
+        name: "demo-workspace",
+        version: "1.0.0",
+        type: "module",
+        dependencies: {
+          "@modelcontextprotocol/sdk": "^1.30.0",
+          "@codeflow/core": "^0.1.0",
+          zod: "^3.24.1",
+        },
+      },
+      null,
+      2,
+    ),
+    // Flat, not nested under `src/`: the real filesystem server matches
+    // `search_files` patterns against the file *name*, so a flow that asks for
+    // `*.ts` — as several of these do — has to be able to find something.
+    "index.ts":
+      "export { parseOrder } from './orders.ts';\nexport { formatMoney } from './money.ts';\n\nexport const VERSION = '1.0.0';\n",
+    "orders.ts":
+      "export interface Order { id: string; total: number; }\n\n/** Parse an order coming off the queue. */\nexport function parseOrder(raw: string): Order {\n  const parsed = JSON.parse(raw) as Order;\n  if (typeof parsed.id !== 'string') throw new Error('order has no id');\n  return parsed;\n}\n",
+    "money.ts":
+      "export function formatMoney(cents: number): string {\n  return `$${(cents / 100).toFixed(2)}`;\n}\n",
+    "session.ts":
+      "/** Auth: whether a session issued at `issuedAt` has aged out. */\nexport function isExpired(issuedAt: number, ttlMs: number): boolean {\n  return Date.now() - issuedAt > ttlMs;\n}\n",
+    "orders.test.ts":
+      "import { parseOrder } from './orders.ts';\n\nit('parses', () => { parseOrder('{\"id\":\"a\",\"total\":1}'); });\n",
+    "docs/orders.md": "# Orders\n\nHow an order moves through the system.\n",
+    "docs/money.md": "# Money\n\nEverything is cents.\n",
+    "CHANGELOG.md": "# Changelog\n\n## 1.0.0\n- first cut\n",
+    // A drop folder of delimited data, because several flows in the gallery are
+    // about folding one. An empty inbox makes them return `empty-inbox` on
+    // their second step, which demonstrates the early return and nothing else.
+    "drop-east.csv":
+      "id,region,amount\nE-1,east,1200.50\nE-2,east,880\nE-3,east,not-a-number\nE-4,,410.25\n",
+    "drop-west.csv":
+      "id,region,amount\nW-1,west,2200\nW-2,central,145.75\nW-3,west,90.10\n",
+  };
+
+  for (const [relative, contents] of Object.entries(files)) {
+    const full = join(workspace, relative);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, contents, "utf8");
+  }
+
+  // One doc deliberately older than the module it documents, so a freshness
+  // audit has something real to find rather than a manufactured nothing.
+  const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000);
+  utimesSync(join(workspace, "docs/orders.md"), old, old);
+}
+
+/**
+ * Make every file path in `input` exist.
+ *
+ * A flow that is handed `ledgerPath` usually writes it — and often reads it
+ * first, to append. `data-pipeline` does exactly that, and stopped 32 steps in
+ * with `ENOENT` on a file whose whole purpose was to be created. An empty file
+ * is the honest starting state for "the ledger from last time", so any path the
+ * input points at inside the workspace is created if it is not there.
+ *
+ * Scoped to the workspace: a path outside it is not this runner's to touch, and
+ * the filesystem server would refuse it anyway.
+ */
+function ensureInputFiles(input: unknown, workspace: string): void {
+  if (typeof input !== "object" || input === null) return;
+  for (const value of Object.values(input as Record<string, unknown>)) {
+    if (typeof value !== "string") continue;
+    if (!value.startsWith(`${workspace}/`)) continue;
+    if (!/\.[a-z0-9]+$/i.test(value)) continue;
+    if (existsSync(value)) continue;
+    mkdirSync(dirname(value), { recursive: true });
+    writeFileSync(value, "", "utf8");
+  }
+}
+
+/**
+ * Start a run. `emit` is called synchronously for every frame — do not buffer
+ * it: the whole point is that a viewer sees each step light up as it happens.
+ */
+export function startRun(request: RunRequest, workerEntry: string, emit: (frame: RunFrame) => void): RunHandle {
+  const runId = `run_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const ranges = request.ranges ?? [];
+  const tools = request.tools ?? [];
+  const functions = request.functions ?? [];
+  const timeoutMs = Math.min(Math.max(request.timeoutMs ?? DEFAULT_TIMEOUT_MS, 1_000), MAX_TIMEOUT_MS);
+
+  let settle: () => void = () => undefined;
+  const finished = new Promise<void>((resolve) => { settle = resolve; });
+
+  const scratch = mkdtempSync(join(tmpdir(), "codeflow-run-"));
+  const workspace = join(scratch, "workspace");
+  seedWorkspace(workspace);
+
+  let worker: Worker | null = null;
+  let timer: NodeJS.Timeout | null = null;
+  let over = false;
+  let events = 0;
+
+  const stop = (): void => {
+    if (timer !== null) { clearTimeout(timer); timer = null; }
+    const dying = worker;
+    worker = null;
+    const sweep = (): void => {
+      if (request.keepScratch !== true) rmSync(scratch, { recursive: true, force: true });
+    };
+    if (dying === null) { sweep(); return; }
+    void dying.terminate().then(sweep, sweep);
+  };
+
+  const done = (frame: Extract<RunFrame, { type: "done" }>): void => {
+    if (over) return;
+    over = true;
+    emit(frame);
+    stop();
+    settle();
+  };
+
+  try {
+    const built = writeModule(scratch, request.source, ranges, functions);
+
+    const namespaces = [...new Set(tools.map((tool) => tool.name.split(".")[0]).filter((ns) => ns.length > 0))];
+    const servers: Record<string, McpServerPlan> = {};
+    const bindings: BindingReport[] = namespaces.map((namespace) => {
+      const plan = planFor(namespace);
+      if (plan === undefined) return { namespace, mode: "stub", reason: stubReason(namespace) };
+      servers[namespace] = plan;
+      return { namespace, mode: "mcp", server: plan.server, safety: plan.safety };
+    });
+
+    emit({
+      type: "plan",
+      runId,
+      scratch,
+      workspace,
+      probed: built.probed,
+      skipped: built.skipped,
+      droppedImports: built.droppedImports,
+      bindings,
+      timeoutMs,
+      libraryFunctions: functions.map((fn) => fn.name),
+      note: "Demo runner — a worker thread on the dev server, not a production sandbox (09 §1).",
+    });
+
+    const input = request.input ?? synthesizeInput(request.source, { scratch: workspace });
+    ensureInputFiles(input, workspace);
+
+    const job: WorkerJob = {
+      entry: pathToFileURL(built.entry).href,
+      input,
+      tools,
+      servers,
+      scratch: workspace,
+      maxPreviewChars: MAX_PREVIEW_CHARS,
+    };
+    emit({ type: "input", input: job.input });
+
+    worker = new Worker(workerEntry, { workerData: job, stdout: true, stderr: true });
+    timer = setTimeout(() => {
+      done({
+        type: "done",
+        status: "timeout",
+        ms: timeoutMs,
+        error: { message: `The run passed its ${String(Math.round(timeoutMs / 1000))}s ceiling and was stopped.` },
+      });
+    }, timeoutMs);
+
+    worker.on("message", (message: RunFrame) => {
+      if (over) return;
+      if (message.type === "event") {
+        events += 1;
+        if (events > MAX_EVENTS) {
+          done({
+            type: "done",
+            status: "failed",
+            error: { message: `This run produced more than ${String(MAX_EVENTS)} trace events and was stopped.` },
+          });
+          return;
+        }
+      }
+      if (message.type === "done") { done(message); return; }
+      emit(message);
+    });
+
+    worker.on("error", (error: Error) => {
+      done({ type: "done", status: "failed", error: { message: error.message, stack: error.stack } });
+    });
+
+    worker.on("exit", (code) => {
+      done(
+        code === 0
+          ? { type: "done", status: "ok" }
+          : { type: "done", status: "failed", error: { message: `The run thread exited with code ${String(code)}.` } },
+      );
+    });
+  } catch (cause) {
+    done({
+      type: "done",
+      status: "failed",
+      error: { message: cause instanceof Error ? cause.message : String(cause) },
+    });
+  }
+
+  return {
+    runId,
+    cancel: () => {
+      done({ type: "done", status: "cancelled" });
+    },
+    finished,
+  };
+}

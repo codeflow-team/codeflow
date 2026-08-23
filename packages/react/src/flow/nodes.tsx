@@ -163,6 +163,7 @@ function NodeHeader({
 }): ReactNode {
   const caption = nodeCaption(data.node, data.mode);
   const compact = data.mode === "compact";
+  const { badge } = useRunMark(data.node.id);
   return (
     <header className={cn("flex items-center gap-2.5 px-3", compact ? "py-2.5" : "pb-2 pt-3")}>
       <span className="cf-node__chip">
@@ -174,7 +175,7 @@ function NodeHeader({
         </span>
         {/* The status word rides with the caption rather than the title: a long
             step name should run out of room before a badge does. */}
-        {caption === null && data.diagnostics.length === 0 ? null : (
+        {caption === null && data.diagnostics.length === 0 && badge === null ? null : (
           <span className="flex min-w-0 items-center gap-1.5">
             {caption === null ? null : (
               <span
@@ -187,6 +188,7 @@ function NodeHeader({
               </span>
             )}
             <StatusBadge diagnostics={data.diagnostics} />
+            {badge}
           </span>
         )}
       </span>
@@ -231,17 +233,118 @@ function useChangedClass(nodeId: string): string {
   return cf !== null && cf.changedNodeIds.has(nodeId) ? " is-changed" : "";
 }
 
+/**
+ * How a run marks a node — 09 §1.
+ *
+ * Four states, and the fourth is the one that keeps the picture honest:
+ *
+ *  - **running** — the step executing right now. Exactly one node can be in
+ *    this state, which is what makes it worth looking at.
+ *  - **ran** — finished, with the time it took, and `×n` when a loop put it
+ *    through more than once.
+ *  - **failed** — threw, or was still open when something inside it threw.
+ *  - **untraced** — the runtime said it could not report on this step (an
+ *    unbraced body it would have had to rewrite). Dimming it as "not reached"
+ *    would be a lie, so it says so instead.
+ *
+ * A node with no state at all during a run is simply not reached, and is dimmed
+ * — the absence is the message.
+ */
+interface RunMark {
+  className: string;
+  badge: ReactNode;
+}
+
+function useRunMark(nodeId: string): RunMark {
+  const cf = useOptionalCodeFlow();
+  const run = cf?.run ?? null;
+  if (run === null) return { className: "", badge: null };
+  // Owns no code, so the run has nothing to say about it either way.
+  if (run.tracked !== null && !run.tracked.has(nodeId)) return { className: "", badge: null };
+
+  if (run.untraced.has(nodeId)) {
+    return {
+      className: " cf-run--untraced",
+      badge: (
+        <span
+          className="cf-run-badge cf-run-badge--untraced"
+          title="This step could not be traced without changing what the code does, so the run says nothing about it."
+        >
+          not traced
+        </span>
+      ),
+    };
+  }
+
+  const state = run.nodes.get(nodeId);
+  if (state === undefined) {
+    return { className: run.status === "running" ? " cf-run--waiting" : " cf-run--missed", badge: null };
+  }
+
+  const runs = state.runs > 1 ? <span className="cf-run-badge__count">×{state.runs}</span> : null;
+
+  if (nodeId === run.activeNodeId) {
+    return {
+      className: " cf-run--running",
+      badge: (
+        <span className="cf-run-badge cf-run-badge--running" title="Running now">
+          running{runs}
+        </span>
+      ),
+    };
+  }
+
+  if (state.status === "failed") {
+    return {
+      className: " cf-run--failed",
+      badge: (
+        <span className="cf-run-badge cf-run-badge--failed" title={state.error?.message ?? "This step failed."}>
+          failed{runs}
+        </span>
+      ),
+    };
+  }
+
+  if (state.status === "running") {
+    // Started, not finished, but something deeper is the active step — this is
+    // a container waiting on its own body.
+    return {
+      className: " cf-run--running cf-run--container",
+      badge: (
+        <span className="cf-run-badge cf-run-badge--running" title="Waiting on the steps inside it">
+          in progress{runs}
+        </span>
+      ),
+    };
+  }
+
+  const ms = state.runs > 1 ? state.totalMs : state.durationMs ?? state.totalMs;
+  return {
+    className: " cf-run--ok",
+    badge: (
+      <span
+        className="cf-run-badge cf-run-badge--ok"
+        title={state.runs > 1 ? `${String(state.runs)} runs, ${String(ms)}ms in total` : `${String(ms)}ms`}
+      >
+        {ms < 1 ? "<1ms" : `${String(ms)}ms`}
+        {runs}
+      </span>
+    ),
+  };
+}
+
 /** Leaf node — every non-container type. */
 export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>): ReactNode {
   const type = data.node.type;
   const changed = useChangedClass(id);
+  const { className: runClass } = useRunMark(id);
   const attention = data.diagnostics.some((diagnostic) => diagnostic.code === "needs-configuration");
   return (
     <div
       className={
         ["cf-node", `cf-node--${type}`, `cf-node--${data.mode}`, selected === true ? "is-selected" : "", attention ? "is-attention" : ""]
           .filter(Boolean)
-          .join(" ") + changed
+          .join(" ") + changed + runClass
       }
       data-node-type={type}
     >
@@ -260,6 +363,7 @@ export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>):
 export function CodeFlowContainerNode({ id, data, selected, width, height }: NodeProps<CodeFlowRFNode>): ReactNode {
   const type = data.node.type;
   const changed = useChangedClass(id);
+  const { className: runClass } = useRunMark(id);
   // Pulled out of shape by hand: offer the way back.
   const resized = (width ?? 0) > data.autoWidth + 1 || (height ?? 0) > data.autoHeight + 1;
   return (
@@ -267,7 +371,7 @@ export function CodeFlowContainerNode({ id, data, selected, width, height }: Nod
       className={
         ["cf-container", `cf-container--${type}`, `cf-node--${data.mode}`, selected === true ? "is-selected" : ""]
           .filter(Boolean)
-          .join(" ") + changed
+          .join(" ") + changed + runClass
       }
       data-node-type={type}
     >

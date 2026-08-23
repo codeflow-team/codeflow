@@ -27,6 +27,7 @@ export {
 export { EDITING_DISABLED_REASON } from "./context/types.js";
 export type {
   CodeFlowContextValue,
+  RunView,
   PatchFailure,
   PatchSuccess,
   PatchOutcome,

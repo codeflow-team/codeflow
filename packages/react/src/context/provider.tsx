@@ -39,6 +39,7 @@ import { buildIndex, diagnosticsByNode, nodeAtOffset } from "../graph/index.js";
 import { EDITING_DISABLED_REASON } from "./types.js";
 import type {
   CodeFlowContextValue,
+  RunView,
   PatchFailure,
   PatchOutcome,
   PatchSuccess,
@@ -79,6 +80,15 @@ export interface CodeFlowProviderProps {
   onModeChange?: (mode: DisclosureMode) => void;
   selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string | null) => void;
+  /**
+   * What a runtime is reporting about the flow right now (09 §1).
+   *
+   * The library never executes anything — this is the host handing over the
+   * result of folding `RunEvent`s with `summarizeRun`, and the canvas renders
+   * it. `null` (the default) means "no run has happened", which is a different
+   * thing from "the run reached nothing".
+   */
+  run?: RunView | null;
   children: ReactNode;
 }
 
@@ -275,6 +285,7 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       changedNodeIds,
       requestReanalyze,
       canReanalyze: onReanalyze !== undefined,
+      run: props.run ?? null,
     }),
     [
       graph,
@@ -300,6 +311,7 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       changedNodeIds,
       requestReanalyze,
       onReanalyze,
+      props.run,
     ],
   );
 

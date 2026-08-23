@@ -11,6 +11,7 @@ import type {
   CodeFlowSession,
   Diagnostic,
   GraphChange,
+  NodeRunState,
   PatchResult,
   RegistryLookup,
   SourceMapping,
@@ -51,6 +52,42 @@ export type PatchOutcome =
 export type PreviewOutcome =
   | { ok: true; patches: TextPatch[]; diagnostics: Diagnostic[] }
   | { ok: false; code: CodeFlowErrorCode | "unknown"; message: string };
+
+/**
+ * What a run looks like to the canvas — 09-future.md §1.
+ *
+ * The library does not execute anything and never will (00 §5, I7); it renders
+ * what a runtime reports. A host that has a runtime (the demo has one, in its
+ * dev server) folds `RunEvent`s with `summarizeRun` and hands the result down.
+ *
+ * `activeNodeId` is deliberately singular. A loop body that has run twenty
+ * times has twenty runs behind it and is *not* running now — showing all of
+ * them lit would turn the one useful signal into wallpaper.
+ */
+export interface RunView {
+  status: "running" | "ok" | "failed" | "cancelled";
+  /** Folded per-node state, keyed by node id. */
+  nodes: Map<string, NodeRunState>;
+  /** The one step executing right now, or `null` between steps and after. */
+  activeNodeId: string | null;
+  /**
+   * Steps the runtime said it cannot report on.
+   *
+   * They must read as "not traced", never as "not reached": claiming a step did
+   * not run when the truth is that nobody watched is exactly the silent
+   * inaccuracy 07 §5 forbids.
+   */
+  untraced: Set<string>;
+  /**
+   * Nodes the runtime was asked to report on at all; `null` means "all of them".
+   *
+   * A synthetic node — the trigger, a merge, an implicit end — owns no source of
+   * its own (`nodeRanges` leaves it out, 09 §1), so the absence of events about
+   * it is not evidence of anything. Fading it as "never reached" would be an
+   * invented fact, so it is left unmarked instead.
+   */
+  tracked: Set<string> | null;
+}
 
 export interface CodeFlowContextValue {
   graph: WorkflowGraph | null;
@@ -98,6 +135,9 @@ export interface CodeFlowContextValue {
   /** Ask the host to re-analyze its current source (offered after a conflict). */
   requestReanalyze: () => void;
   canReanalyze: boolean;
+
+  /** The current (or last) run, when the host has a runtime. `null` otherwise. */
+  run: RunView | null;
 }
 
 export const EDITING_DISABLED_REASON =

@@ -299,12 +299,26 @@ function aiProxy(env: Record<string, string>): Plugin {
   };
 }
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(async ({ mode }) => {
   // No prefix filter: OPENROUTER_* is a server-side secret and must never be
   // exposed through `import.meta.env`, so it is read here and used here only.
   const env = loadEnv(mode, REPO_ROOT, "");
+
+  /*
+   * The run endpoint is imported at *runtime*, not bundled into this config.
+   *
+   * Vite loads a TypeScript config by pre-bundling it with esbuild, which would
+   * pull `server/**` into that bundle along with `typescript` and the MCP SDK.
+   * A dynamic import keeps the whole runner in Node's own module graph, where
+   * its `.ts` files are type-stripped natively and `new Worker("…/worker.ts")`
+   * resolves to a file that actually exists.
+   */
+  const { runPlugin } = (await import(
+    new URL("./server/run-plugin.ts", import.meta.url).href
+  )) as typeof import("./server/run-plugin.js");
+
   return {
-    plugins: [react(), tailwindcss(), aiProxy(env)],
+    plugins: [react(), tailwindcss(), aiProxy(env), runPlugin({ appDir: HERE }) as Plugin],
     server: { port: 5173, strictPort: true },
     build: {
       // Monaco is large; the demo is a dev harness, not a shipped bundle.

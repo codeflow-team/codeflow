@@ -29,6 +29,9 @@ importers:
       '@codeflow/examples':
         specifier: workspace:*
         version: link:../../packages/examples
+      '@codeflow/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@codeflow/react':
         specifier: workspace:*
         version: link:../../packages/react
@@ -51,9 +54,15 @@ importers:
         specifier: ^19.2.0
         version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.30.0
+        version: 1.30.0(zod@4.4.3)
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0))
+      '@types/node':
+        specifier: ^22.10.2
+        version: 22.20.1
       '@types/react':
         specifier: ^19.2.2
         version: 19.2.18

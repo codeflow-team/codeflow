@@ -21,12 +21,15 @@
     "noEmit": true,
     "resolveJsonModule": true,
     "types": [
-      "vite/client"
-    ]
+      "vite/client",
+      "node"
+    ],
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src",
     "test",
+    "server",
     "vite.config.ts"
   ]
 }

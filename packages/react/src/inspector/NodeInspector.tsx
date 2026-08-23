@@ -353,6 +353,11 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
 
       <div className="cf-scroll min-h-0 flex-1 overflow-y-auto pb-4">
         {/* -------------------------------------------------------------- */}
+        {/* what the last run said about this step                          */}
+        {/* -------------------------------------------------------------- */}
+        <RunSection nodeId={node.id} />
+
+        {/* -------------------------------------------------------------- */}
         {/* what the flow says about this step                              */}
         {/* -------------------------------------------------------------- */}
         {diagnostics.length > 0 ||
@@ -899,6 +904,117 @@ function PortList({ title, node, which }: { title: string; node: WorkflowNode; w
           </li>
         ))}
       </ul>
+    </Section>
+  );
+}
+
+/**
+ * What the last run did here — 09-future.md §1.
+ *
+ * The rest of the inspector is about the code: which tool, which arguments,
+ * what the schema allows. This is the one part that is about a *particular
+ * execution* — how long the step took, how many times a loop put it through,
+ * and the value it actually produced. That value is the payoff of running at
+ * all, so it is shown verbatim (truncated by the runtime, which says when it
+ * truncated) rather than summarised into something unfalsifiable.
+ *
+ * `live` / `sample` is not decoration. A step bound to a real MCP server and a
+ * step answered from its own output schema look identical once the value is on
+ * screen, and letting a reader mistake one for the other would undo the point
+ * of running for real.
+ */
+function RunSection({ nodeId }: { nodeId: string }): ReactNode {
+  const { run } = useCodeFlow();
+  if (run === null) return null;
+  if (run.tracked !== null && !run.tracked.has(nodeId)) return null;
+
+  if (run.untraced.has(nodeId)) {
+    return (
+      <Section title="Last run">
+        <p className="m-0 text-[11.5px] leading-snug text-ink-dim">
+          This step could not be traced without changing what the code does, so the run says nothing
+          about it — neither that it ran nor that it did not.
+        </p>
+      </Section>
+    );
+  }
+
+  const state = run.nodes.get(nodeId);
+  if (state === undefined) {
+    return (
+      <Section title="Last run">
+        <p className="m-0 text-[11.5px] leading-snug text-ink-dim">
+          {run.status === "running" ? "Not reached yet." : "This step was never reached."}
+        </p>
+      </Section>
+    );
+  }
+
+  const preview = state.preview as { tool?: string; source?: string; value?: unknown } | undefined;
+  const value = preview !== undefined && "value" in preview ? preview.value : state.preview;
+  const text =
+    value === undefined
+      ? null
+      : typeof value === "string"
+        ? value
+        : JSON.stringify(value, null, 2);
+
+  return (
+    <Section title="Last run" testId="inspector-run">
+      <dl className="m-0 flex flex-col gap-1.5">
+        <div className="flex items-baseline gap-3 text-[11.5px]">
+          <dt className="w-24 shrink-0 text-ink-faint">Outcome</dt>
+          <dd className="m-0 min-w-0 flex-1 text-ink">
+            {nodeId === run.activeNodeId
+              ? "running now"
+              : state.status === "failed"
+                ? "failed"
+                : state.status === "running"
+                  ? "in progress"
+                  : "finished"}
+          </dd>
+        </div>
+        <div className="flex items-baseline gap-3 text-[11.5px]">
+          <dt className="w-24 shrink-0 text-ink-faint">Ran</dt>
+          <dd className="m-0 min-w-0 flex-1 tabular-nums text-ink">
+            {state.runs} time{state.runs === 1 ? "" : "s"}
+            {state.totalMs > 0 ? ` · ${String(state.totalMs)}ms total` : ""}
+          </dd>
+        </div>
+        {preview?.tool === undefined ? null : (
+          <div className="flex items-baseline gap-3 text-[11.5px]">
+            <dt className="w-24 shrink-0 text-ink-faint">Data from</dt>
+            <dd className="m-0 flex min-w-0 flex-1 items-center gap-1.5 text-ink">
+              <code className="font-mono text-[11px]">{preview.tool}</code>
+              <Badge tone={preview.source === "mcp" ? "ok" : "warn"}>
+                {preview.source === "mcp" ? "live MCP" : "sample data"}
+              </Badge>
+            </dd>
+          </div>
+        )}
+      </dl>
+
+      {state.error !== undefined ? (
+        <Notice tone="danger" title="This step threw">
+          {state.error.message}
+          {state.error.stack === undefined ? null : (
+            <details className="mt-1.5">
+              {/* Folded away by default: the message is the answer, the stack is
+                  the evidence, and only one of them is worth the space. */}
+              <summary className="cursor-pointer text-[11px] text-ink-faint">Stack</summary>
+              <pre className="cf-scroll m-0 mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-4 text-ink-faint">
+                {state.error.stack.split("\n").slice(0, 12).join("\n")}
+              </pre>
+            </details>
+          )}
+        </Notice>
+      ) : null}
+
+      {text === null ? null : (
+        <pre className="cf-scroll m-0 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-2 p-2 font-mono text-[10.5px] leading-4 text-ink-dim">
+          {text}
+        </pre>
+      )}
     </Section>
   );
 }

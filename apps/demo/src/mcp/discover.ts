@@ -98,7 +98,14 @@ export function toRecords(tools: readonly McpTool[], namespace: string, server: 
 export async function discoverServer(input: DiscoverInput): Promise<DiscoverOutcome> {
   if (input.transport !== "stdio" && typeof input.url === "string" && input.url.length > 0) {
     const direct = await discoverInBrowser(input);
-    if (direct.ok) return direct;
+    if (direct.ok && direct.discovery.tools.length > 0) return direct;
+    // A browser answer of "this server has no tools" is far more often a
+    // transport quirk this small client mishandled than the truth, so the SDK
+    // on the dev server gets a turn before that is reported as a fact.
+    if (direct.ok) {
+      const second = await discoverOnServer(input);
+      return second.ok ? second : direct;
+    }
     // Not a failure yet — the endpoint may simply not allow this origin. Ask
     // the dev server, and if there is none, report the browser's own error.
     const viaServer = await discoverOnServer(input);
@@ -135,39 +142,92 @@ async function rpc(
   body: unknown,
   signal: AbortSignal,
 ): Promise<{ response: Response; message: JsonRpcResponse | null }> {
+  // No `MCP-Protocol-Version` header, on purpose.
+  //
+  // The transport spec asks for it on requests *after* `initialize`, and a
+  // server that does not see it falls back to a revision that still speaks
+  // `tools/list` — which is the only method this client ever calls. Sending it
+  // costs a CORS preflight that several otherwise-open endpoints reject
+  // (`Access-Control-Allow-Headers` does not list it), and a rejected preflight
+  // is a red console error plus a needless round-trip through the dev server.
+  // The version is negotiated in the `initialize` body regardless.
   const response = await fetch(url, {
     method: "POST",
     signal,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
-      "MCP-Protocol-Version": PROTOCOL_VERSION,
       ...headers,
     },
     body: JSON.stringify(body),
   });
 
   if (response.status === 202 || response.status === 204) return { response, message: null };
-  const text = await response.text();
   if (!response.ok) {
+    const text = await response.text().catch(() => "");
     throw new Error(`HTTP ${String(response.status)}${text.length > 0 ? `: ${text.slice(0, 200)}` : ""}`);
   }
+
   const type = response.headers.get("content-type") ?? "";
-  if (type.includes("text/event-stream")) {
-    for (const line of text.split("\n")) {
+  if (!type.includes("text/event-stream")) {
+    const text = await response.text();
+    return { response, message: text.length === 0 ? null : (JSON.parse(text) as JsonRpcResponse) };
+  }
+
+  /*
+   * The answer arrives on a stream that may stay open afterwards.
+   *
+   * `await response.text()` waits for the *server* to close it, and at least
+   * one published endpoint (GitMCP) holds each stream open for ten seconds
+   * after answering — three requests, thirty seconds, a discovery that times
+   * out for no reason. So the body is read frame by frame and the moment the
+   * reply to this request is in hand the stream is cancelled.
+   */
+  if (response.body === null) return { response, message: null };
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  /** The reply to *this* request, if this frame carries it. */
+  const answerIn = (frame: string): JsonRpcResponse | null => {
+    for (const line of frame.split("\n")) {
       if (!line.startsWith("data:")) continue;
       const payload = line.slice(5).trim();
       if (payload.length === 0) continue;
       try {
         const parsed = JSON.parse(payload) as JsonRpcResponse & { id?: unknown };
-        if (parsed.id !== undefined) return { response, message: parsed };
+        // A server is free to push notifications down the same stream first;
+        // only something carrying an `id` is an answer.
+        if (parsed.id !== undefined) return parsed;
       } catch {
-        /* a frame that is not the answer; keep reading */
+        /* not JSON — keep reading */
       }
     }
-    return { response, message: null };
+    return null;
+  };
+
+  try {
+    for (;;) {
+      const step = await reader.read();
+      if (step.done) {
+        // A stream that closes without a trailing blank line still delivered a
+        // frame; dropping it would silently report "this server has no tools".
+        const answer = answerIn(buffer);
+        return { response, message: answer };
+      }
+      buffer += decoder.decode(step.value, { stream: true }).replace(/\r\n/g, "\n");
+      let cut = buffer.indexOf("\n\n");
+      while (cut !== -1) {
+        const frame = buffer.slice(0, cut);
+        buffer = buffer.slice(cut + 2);
+        cut = buffer.indexOf("\n\n");
+        const answer = answerIn(frame);
+        if (answer !== null) return { response, message: answer };
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
   }
-  return { response, message: text.length === 0 ? null : (JSON.parse(text) as JsonRpcResponse) };
 }
 
 async function discoverInBrowser(input: DiscoverInput): Promise<DiscoverOutcome> {

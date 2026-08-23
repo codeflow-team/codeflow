@@ -17,7 +17,7 @@ import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
 import { useOptionalCodeFlow } from "../context/hooks.js";
 import { cn } from "../ui/cn.js";
 import { NodeGlyph } from "./glyphs.js";
-import { developerLines, nodeCaption, nodeSummaryRows, nodeTitle } from "./summary.js";
+import { developerLines, hasNodeBody, nodeCaption, nodeSummaryRows, nodeTitle } from "./summary.js";
 import { isMinorNode } from "../layout/measure.js";
 import { insideLabel } from "./collapse.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
@@ -132,7 +132,7 @@ function StatusBadge({ diagnostics }: { diagnostics: Diagnostic[] }): ReactNode 
  * the node that still reads the binding, and the inspector shows it — the button
  * never removes anything quietly, and never leaves code that would not compile.
  */
-function DeleteButton({ node }: { node: WorkflowNode }): ReactNode {
+function DeleteButton({ node, small = false }: { node: WorkflowNode; small?: boolean }): ReactNode {
   const cf = useOptionalCodeFlow();
   if (cf === null || !cf.editingEnabled || !node.capabilities.deletable) return null;
   return (
@@ -142,7 +142,11 @@ function DeleteButton({ node }: { node: WorkflowNode }): ReactNode {
       aria-label={`Delete ${node.label}`}
       data-testid={`node-delete-${node.id}`}
       className={cn(
-        "ml-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0",
+        "ml-1 grid shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0",
+        // On a chip the affordance matches the 18px glyph well: at 20px it is
+        // the tallest thing in the header, and a selected chip would then be
+        // two pixels taller than the box layout gave it.
+        small ? "size-4.5" : "size-5",
         "text-ink-faint outline-none transition-colors hover:bg-danger-soft hover:text-danger",
         "focus-visible:ring-2 focus-visible:ring-ring/70",
       )}
@@ -242,7 +246,10 @@ function FoldedSummary({ nodeId, inner }: { nodeId: string; inner: number }): Re
       type="button"
       data-testid={`node-open-${nodeId}`}
       className={cn(
-        "mx-3 mb-2.5 flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-1.5 py-1 text-left",
+        // `mb-3` is the card's bottom padding: on a folded box this button is
+        // the last block, so it is the one that owes the reader the same air
+        // under it that the header has above it.
+        "mx-3 mb-3 flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-1.5 py-1 text-left",
         "bg-[color:color-mix(in_srgb,var(--node)_10%,transparent)] text-[11.5px] font-medium leading-4",
         "text-ink-dim transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/70",
       )}
@@ -261,11 +268,17 @@ function NodeHeader({
   data,
   selected,
   before,
+  last = false,
 }: {
   data: CodeFlowRFNode["data"];
   selected: boolean;
   /** Extra affordance shown left of the delete button (container "fit"). */
   before?: ReactNode;
+  /**
+   * True when nothing is drawn under this header, which makes it the block that
+   * owes the card its bottom padding (`pb-3` rather than the 8px block gap).
+   */
+  last?: boolean;
 }): ReactNode {
   const caption = nodeCaption(data.node, data.mode);
   const compact = data.mode === "compact";
@@ -283,28 +296,51 @@ function NodeHeader({
     <header
       className={cn(
         "flex items-center px-3",
-        minor ? "gap-1.5 px-2 py-1.5" : compact ? "gap-2.5 py-2.5" : "gap-2.5 pb-2 pt-3",
+        /*
+         * `pt-3` at the top and `pb-3` under the last block are the card's own
+         * padding and are deliberately the same number. The `pb-2` case is not
+         * padding at all — it is the gap down to the body, which carries the
+         * `pb-3` instead. `measure.ts` mirrors exactly this.
+         */
+        minor
+          ? "gap-1.5 px-2 py-1.5"
+          : compact
+            ? "gap-2.5 py-2.5"
+            : cn("gap-2.5 pt-3", last ? "pb-3" : "pb-2"),
       )}
     >
       <span className="cf-node__chip">
         <NodeGlyph node={data.node} className={minor ? "size-3" : "size-3.5"} />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span className="flex min-w-0 flex-1 flex-col">
         <span
           className={cn(
-            "truncate leading-tight tracking-[-0.005em]",
+            "truncate tracking-[-0.005em]",
+            // `leading-4` has to come *after* the size: `cn` merges through
+            // tailwind-merge, which treats a font-size as overriding any
+            // line-height set before it. Written the other way round the
+            // leading is silently dropped and the title line grows to the
+            // canvas default — which is how the header came to be 3px taller
+            // than anything had measured it at.
             minor ? "text-[11px] font-medium text-ink-dim" : "text-[13px] font-semibold text-ink",
+            "leading-4",
           )}
           title={title === data.node.label ? data.node.label : `${data.node.label}\n(shown as: ${title})`}
         >
           {title}
         </span>
-        {/* The status word rides with the caption rather than the title: a long
-            step name should run out of room before a badge does. On a chip
-            there is no second line to ride on, so the marks move up beside the
-            title instead (below). */}
-        {minor || (caption === null && !isWorthMarking(data.diagnostics) && badge === null) ? null : (
-          <span className="flex min-w-0 items-center gap-1.5">
+        {/*
+         * The caption line, held open at the badge height whether or not a
+         * badge is on it.
+         *
+         * The status word rides here rather than with the title: a long step
+         * name should run out of room before a badge does. Reserving the line
+         * is what keeps the card the size ELK measured — a diagnostic, or a run
+         * writing `142ms ×12` onto every step, must not make the box taller
+         * than the one it was laid out in.
+         */}
+        {compact ? null : (
+          <span className="flex h-[17px] min-w-0 items-center gap-1.5">
             {caption === null ? null : (
               <span
                 className={cn(
@@ -320,24 +356,40 @@ function NodeHeader({
           </span>
         )}
       </span>
-      {minor ? (
+      {/* At the beginner level there is no caption to ride with, so the marks
+          sit beside the title — where they cost the header no height at all,
+          the chip being taller than any of them. */}
+      {compact ? (
         <>
-          <StatusDot diagnostics={data.diagnostics} />
+          {minor ? (
+            <StatusDot diagnostics={data.diagnostics} />
+          ) : (
+            <StatusBadge diagnostics={data.diagnostics} />
+          )}
           {badge}
         </>
       ) : null}
       {before}
-      {selected ? <DeleteButton node={data.node} /> : null}
+      {selected ? <DeleteButton node={data.node} small={minor} /> : null}
     </header>
   );
 }
 
-function NodeBody({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
+function NodeBody({ data, tight = false }: { data: CodeFlowRFNode["data"]; tight?: boolean }): ReactNode {
   if (data.mode === "compact") return null;
+  // `pb-3` is the card's bottom padding, matched to the header's `pt-3`; `pb-2`
+  // is what the body takes when something else (a folded box's summary) is the
+  // last block and owes the padding instead.
+  const pad = tight ? "pb-2" : "pb-3";
 
   if (data.mode === "developer") {
     return (
-      <pre className="m-0 flex flex-col overflow-hidden whitespace-pre px-3 pb-2.5 font-mono text-[11px] leading-4 text-ink-dim">
+      <pre
+        className={cn(
+          "m-0 flex flex-col overflow-hidden whitespace-pre px-3 font-mono text-[11px] leading-4 text-ink-dim",
+          pad,
+        )}
+      >
         {developerLines(data.node).map((line, i) => (
           <span key={i}>{line}</span>
         ))}
@@ -348,7 +400,7 @@ function NodeBody({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
   const rows = nodeSummaryRows(data.node, data.links);
   if (rows.length === 0) return null;
   return (
-    <dl className="m-0 flex flex-col gap-0.5 px-3 pb-2.5">
+    <dl className={cn("m-0 flex flex-col gap-0.5 px-3", pad)}>
       {rows.map((row) => (
         /*
          * A `takes` row is the written form of a data edge the canvas is not
@@ -364,7 +416,11 @@ function NodeBody({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
           key={row.id ?? row.key}
         >
           <dt className="shrink-0 text-ink-faint">{row.key}</dt>
-          <dd className="m-0 min-w-0 flex-1 truncate text-ink-dim" title={row.kind === "takes" ? row.value : undefined}>
+          {/* A value wider than the card is truncated, never wrapped — a row
+              that wrapped would be a row the layout did not measure. The full
+              text stays one hover away, on every row and not just the
+              provenance ones. */}
+          <dd className="m-0 min-w-0 flex-1 truncate text-ink-dim" title={row.value}>
             <Value text={row.value} />
           </dd>
         </div>
@@ -502,7 +558,7 @@ export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>):
       data-node-type={type}
     >
       <Handle type="target" position={Position.Top} className="cf-handle" />
-      <NodeHeader data={data} selected={selected === true} />
+      <NodeHeader data={data} selected={selected === true} last={!hasNodeBody(data.node, data.mode, data.links)} />
       <NodeBody data={data} />
       <Handle type="source" position={Position.Bottom} className="cf-handle" />
     </div>
@@ -549,7 +605,9 @@ export function CodeFlowContainerNode({ id, data, selected, width, height }: Nod
           selected={selected === true}
           before={<FoldButton nodeId={id} inner={data.collapsedInner ?? inner} folded />}
         />
-        <NodeBody data={data} />
+        {/* The summary is the last block here, so the body gives the bottom
+            padding back to it. */}
+        <NodeBody data={data} tight />
         <FoldedSummary nodeId={id} inner={data.collapsedInner ?? inner} />
         <Handle type="source" position={Position.Bottom} className="cf-handle" />
       </div>
@@ -588,6 +646,7 @@ export function CodeFlowContainerNode({ id, data, selected, width, height }: Nod
         <NodeHeader
           data={data}
           selected={selected === true}
+          last={!hasNodeBody(data.node, data.mode, data.links)}
           before={
             <>
               {selected === true && resized ? (

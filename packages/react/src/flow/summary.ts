@@ -395,6 +395,24 @@ export function developerLines(node: WorkflowNode): string[] {
   return [...lines.slice(0, DEVELOPER_MAX_LINES), "…"];
 }
 
+/**
+ * Whether a card draws a block under its header at this level.
+ *
+ * The answer decides which block owes the card its bottom padding, so the
+ * component and `measureNode` have to agree on it exactly — hence one function,
+ * asked by both.
+ */
+export function hasNodeBody(
+  node: WorkflowNode,
+  mode: DisclosureMode,
+  links?: NodeDataLinks | null,
+): boolean {
+  if (mode === "compact") return false;
+  // The developer level always has something to show: the source verbatim.
+  if (mode === "developer") return true;
+  return nodeSummaryRows(node, links).length > 0;
+}
+
 /** Rows a given mode actually renders — used by both the component and `measureNode`. */
 export function rowsForMode(
   node: WorkflowNode,

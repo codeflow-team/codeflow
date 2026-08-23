@@ -186,8 +186,17 @@ export function McpManager(props: McpManagerProps): ReactNode {
     }
   };
 
-  const addAndDiscover = (config: McpServerConfig): void => {
+  /**
+   * `onCommitted` runs only once the server is really being added.
+   *
+   * A stdio add can sit behind the warning modal for as long as it takes to
+   * read it, and the reader is allowed to say no. Clearing the form at the
+   * moment of the *click* threw away a command they had just typed the instant
+   * they pressed Cancel — the one outcome the warning exists to make easy.
+   */
+  const addAndDiscover = (config: McpServerConfig, onCommitted?: () => void): void => {
     const start = (): void => {
+      onCommitted?.();
       state.addServer(config);
       setSelectedId(config.id);
       void runDiscovery(config);
@@ -258,35 +267,38 @@ export function McpManager(props: McpManagerProps): ReactNode {
           </div>
         }
       >
-        {state.storageError === null ? null : (
-          <div className="mb-3">
+        {/* `Modal` renders its children flush — the padding is the host's, so
+            that a panel can go edge to edge when it wants to. This one does
+            not: it is a settings surface and needs room to breathe. */}
+        <div className="cf-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
+          {state.storageError === null ? null : (
             <Notice tone="warn" title="This list is not being saved">{state.storageError}</Notice>
-          </div>
-        )}
+          )}
 
-        {tab === "add" ? (
-          <AddTab
-            status={status}
-            existing={state.servers}
-            onAdd={addAndDiscover}
-            busy={busyId !== null}
-          />
-        ) : tab === "dts" ? (
-          <DtsTab lookup={props.lookup} fromMcp={props.fromMcp} fallbackLabel={props.fallbackLabel} />
-        ) : (
-          <ServersTab
-            state={state}
-            selected={selected}
-            onSelect={setSelectedId}
-            busyId={busyId}
-            onDiscover={(config) => {
-              if (config.transport === "stdio") guardStdio(() => { void runDiscovery(config); });
-              else void runDiscovery(config);
-            }}
-            collisionFor={collisionFor}
-            onAdd={() => { setTab("add"); }}
-          />
-        )}
+          {tab === "add" ? (
+            <AddTab
+              status={status}
+              existing={state.servers}
+              onAdd={addAndDiscover}
+              busy={busyId !== null}
+            />
+          ) : tab === "dts" ? (
+            <DtsTab lookup={props.lookup} fromMcp={props.fromMcp} fallbackLabel={props.fallbackLabel} />
+          ) : (
+            <ServersTab
+              state={state}
+              selected={selected}
+              onSelect={setSelectedId}
+              busyId={busyId}
+              onDiscover={(config) => {
+                if (config.transport === "stdio") guardStdio(() => { void runDiscovery(config); });
+                else void runDiscovery(config);
+              }}
+              collisionFor={collisionFor}
+              onAdd={() => { setTab("add"); }}
+            />
+          )}
+        </div>
       </Modal>
 
       <Modal
@@ -322,7 +334,7 @@ export function McpManager(props: McpManagerProps): ReactNode {
           </div>
         }
       >
-        <div className="flex flex-col gap-3 text-[12.5px] leading-relaxed text-ink-dim">
+        <div className="flex flex-col gap-3 px-5 py-4 text-[12.5px] leading-relaxed text-ink-dim">
           <Notice tone="danger" title="A stdio server is a command, and the command runs here">
             The dev server behind this page will start the program you typed, as a child process, with
             your user account&rsquo;s permissions. It can read and write your files and reach your
@@ -364,7 +376,10 @@ function RegistrySummary(props: {
   fallbackLabel: string;
 }): ReactNode {
   const tokens = useMemo(() => tokenCostOf(props.lookup), [props.lookup]);
-  const enabled = props.state.servers.filter((server) => server.enabled && server.discovery !== null).length;
+  // Servers that actually put a tool in, not servers that are switched on: one
+  // that lost a namespace collision, or that has every tool deselected, is
+  // enabled and contributes nothing, and counting it would be a small lie.
+  const contributing = props.state.composed.contributing.length;
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-dim">
@@ -373,8 +388,9 @@ function RegistrySummary(props: {
         {props.fromMcp ? "Your servers are the registry" : `Using ${props.fallbackLabel}`}
       </span>
       <span>
-        {props.lookup.listTools().length} tools · {props.lookup.listToolNamespaces().length} namespaces
-        {props.fromMcp ? ` · from ${String(enabled)} server${enabled === 1 ? "" : "s"}` : ""}
+        {props.lookup.listTools().length} tool{props.lookup.listTools().length === 1 ? "" : "s"} ·{" "}
+        {props.lookup.listToolNamespaces().length} namespace{props.lookup.listToolNamespaces().length === 1 ? "" : "s"}
+        {props.fromMcp ? ` · from ${String(contributing)} server${contributing === 1 ? "" : "s"}` : ""}
       </span>
       <span title="Rough estimate at ~4 characters per token — enough to tell 'fits' from 'needs scoping' (10 §4).">
         tools.d.ts ≈ <strong className="font-semibold text-ink">{tokens.dts.toLocaleString()}</strong> tokens
@@ -433,15 +449,15 @@ function ServersTab(props: {
   }
 
   return (
-    <div className="flex min-h-[26rem] gap-4">
-      <div className="flex w-[19rem] shrink-0 flex-col gap-1.5">
+    <div className="flex min-h-[26rem] gap-6">
+      <div className="flex w-[19rem] shrink-0 flex-col gap-2">
         <div className="flex items-center justify-between px-0.5">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Configured</span>
           <Button variant="ghost" size="icon-sm" aria-label="Add a server" onClick={props.onAdd}>
             <Plus />
           </Button>
         </div>
-        <div className="cf-scroll flex max-h-[30rem] flex-col gap-1.5 overflow-y-auto pr-1">
+        <div className="flex flex-col gap-2">
           {props.state.servers.map((server) => (
             <ServerRow
               key={server.id}
@@ -478,11 +494,9 @@ function StatusDot({ config }: { config: McpServerConfig }): ReactNode {
     status === "connected" ? "bg-ok" : status === "failed" ? "bg-danger" : "bg-ink-faint";
   const label =
     status === "connected" ? "connected" : status === "failed" ? "failed" : "not connected";
-  return (
-    <Hint label={label}>
-      <span className={cn("size-2 shrink-0 rounded-full", tone)} aria-label={label} role="img" />
-    </Hint>
-  );
+  // `title`, not `<Hint>`: this dot is rendered inside a button, and a tooltip
+  // trigger is itself focusable — one interactive element inside another.
+  return <span className={cn("size-2 shrink-0 rounded-full", tone)} title={label} aria-label={label} role="img" />;
 }
 
 function Switch(props: { checked: boolean; onChange: () => void; label: string; disabled?: boolean }): ReactNode {
@@ -532,39 +546,44 @@ function ServerRow(props: {
   const total = config.discovery?.tools.length ?? 0;
   const picked = includedTools(config).length;
 
+  // A row is two controls, not one: the switch decides whether the server is in
+  // the registry, the rest of the row decides what the panel is showing. They
+  // are siblings rather than nested (a `<button>` inside a `<button>` is
+  // invalid HTML and React says so out loud).
   return (
-    <button
-      type="button"
+    <div
       data-testid="mcp-server-row"
       data-server-name={config.name}
-      onClick={props.onSelect}
       className={cn(
-        "flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors duration-150",
+        "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors duration-150",
         props.active
           ? "border-accent/50 bg-accent-soft"
           : "border-line bg-surface-2 hover:border-line-strong hover:bg-surface-3",
       )}
     >
       <Switch checked={config.enabled} onChange={props.onToggle} label={`Use ${config.name}`} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-[12.5px] font-medium text-ink">{config.name}</span>
-          {props.busy ? <LoaderCircle className="size-3 shrink-0 animate-spin text-accent" /> : <StatusDot config={config} />}
+      <button
+        type="button"
+        onClick={props.onSelect}
+        aria-current={props.active ? "true" : undefined}
+        className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring/70"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-[12.5px] font-medium text-ink">{config.name}</span>
+            {props.busy ? <LoaderCircle className="size-3 shrink-0 animate-spin text-accent" /> : <StatusDot config={config} />}
+          </span>
+          <span className="mt-0.5 flex items-center gap-2">
+            <code className="truncate font-mono text-[10.5px] text-ink-dim">tools.{config.namespace}.*</code>
+            <TransportBadge transport={config.transport} />
+          </span>
         </span>
-        <span className="mt-0.5 flex items-center gap-2">
-          <code className="truncate font-mono text-[10.5px] text-ink-dim">tools.{config.namespace}.*</code>
-          <TransportBadge transport={config.transport} />
+        {props.collision ? <TriangleAlert className="size-3.5 shrink-0 text-warn" aria-label="Namespace already taken" /> : null}
+        <span className="shrink-0 text-[10.5px] tabular-nums text-ink-faint">
+          {total === 0 ? "—" : picked === total ? `${String(total)}` : `${String(picked)}/${String(total)}`}
         </span>
-      </span>
-      {props.collision ? (
-        <Hint label="Namespace already taken">
-          <TriangleAlert className="size-3.5 shrink-0 text-warn" />
-        </Hint>
-      ) : null}
-      <span className="shrink-0 text-[10.5px] tabular-nums text-ink-faint">
-        {total === 0 ? "—" : picked === total ? `${String(total)}` : `${String(picked)}/${String(total)}`}
-      </span>
-    </button>
+      </button>
+    </div>
   );
 }
 
@@ -613,8 +632,8 @@ function ServerDetail(props: {
   }, [config, picked.length]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="flex flex-wrap items-start gap-3 rounded-xl border border-line bg-surface-2 p-3">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex flex-wrap items-start gap-3 rounded-xl border border-line bg-surface-2 p-3.5">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="m-0 truncate text-[13.5px] font-semibold text-ink">{config.name}</h3>
@@ -664,7 +683,7 @@ function ServerDetail(props: {
         </Notice>
       ) : null}
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-start gap-5">
         <Field className="w-[16rem]">
           <FieldLabel htmlFor={`ns-${config.id}`}>Namespace</FieldLabel>
           <Input
@@ -733,8 +752,8 @@ function ServerDetail(props: {
             : "This server answered, but listed no tools."}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
               Tools in the registry
             </span>
@@ -773,7 +792,7 @@ function ServerDetail(props: {
             </div>
           </div>
 
-          <div className="cf-scroll grid max-h-[18rem] grid-cols-1 gap-1 overflow-y-auto pr-1 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
             {filtered.map((tool) => {
               const on = isSelected(config, tool.method);
               return (
@@ -783,7 +802,7 @@ function ServerDetail(props: {
                   data-method={tool.method}
                   data-selected={on}
                   className={cn(
-                    "flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 transition-colors duration-150",
+                    "flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors duration-150",
                     on ? "border-line-strong bg-surface-2" : "border-line bg-surface opacity-70 hover:opacity-100",
                   )}
                 >
@@ -823,7 +842,7 @@ function ServerDetail(props: {
 function AddTab(props: {
   status: McpServerStatus;
   existing: readonly McpServerConfig[];
-  onAdd: (config: McpServerConfig) => void;
+  onAdd: (config: McpServerConfig, onCommitted?: () => void) => void;
   busy: boolean;
 }): ReactNode {
   const [kind, setKind] = useState<"remote" | "stdio">(props.status.stdio ? "stdio" : "remote");
@@ -867,8 +886,9 @@ function AddTab(props: {
         if (headerValue.length > 0) setSessionToken(id, headerValue);
       }
     }
-    props.onAdd(base);
-    setName(""); setCommandLine(""); setUrl(""); setHeaderName(""); setHeaderValue(""); setNamespace("");
+    props.onAdd(base, () => {
+      setName(""); setCommandLine(""); setUrl(""); setHeaderName(""); setHeaderValue(""); setNamespace("");
+    });
   };
 
   const quickAdd = (entry: CatalogEntry): void => {
@@ -890,8 +910,8 @@ function AddTab(props: {
   };
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="rounded-xl border border-line bg-surface-2 p-3.5">
+    <div className="flex flex-col gap-6">
+      <div className="rounded-xl border border-line bg-surface-2 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <Segmented<"remote" | "stdio">
             aria-label="Transport"
@@ -907,7 +927,7 @@ function AddTab(props: {
           )}
         </div>
 
-        <div className="mt-3.5 flex flex-col gap-3">
+        <div className="mt-4 flex flex-col gap-4">
           {kind === "stdio" ? (
             <Field>
               <FieldLabel htmlFor="mcp-command">Command</FieldLabel>
@@ -1013,7 +1033,7 @@ function AddTab(props: {
       </div>
 
       {CATALOG.length === 0 ? null : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-3">
           <div>
             <p className="m-0 text-[12.5px] font-semibold text-ink">Quick add</p>
             <p className="m-0 text-[11.5px] text-ink-dim">
@@ -1021,7 +1041,7 @@ function AddTab(props: {
               before it was put on this list; the count is what it answered then.
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {[...REMOTE_CATALOG, ...(props.status.stdio ? STDIO_CATALOG : [])].map((entry) => (
               <button
                 key={entry.id}
@@ -1031,7 +1051,7 @@ function AddTab(props: {
                 disabled={props.busy}
                 onClick={() => { quickAdd(entry); }}
                 className={cn(
-                  "flex flex-col gap-1 rounded-lg border border-line bg-surface-2 p-2.5 text-left",
+                  "flex flex-col gap-1.5 rounded-lg border border-line bg-surface-2 p-3 text-left",
                   "transition-colors duration-150 hover:border-line-strong hover:bg-surface-3",
                   "disabled:cursor-not-allowed disabled:opacity-60",
                 )}
@@ -1047,6 +1067,14 @@ function AddTab(props: {
                 {entry.note === undefined ? null : (
                   <span className="text-[10.5px] text-warn">{entry.note}</span>
                 )}
+                {/* An endpoint that refuses cross-origin calls needs the dev
+                    server to make them. Where there is none, say so *before*
+                    the click rather than after it. */}
+                {entry.transport !== "stdio" && entry.cors !== true && !props.status.available ? (
+                  <span className="text-[10.5px] text-danger">
+                    This one refuses browser-direct calls, and this build has no server to call it for you.
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
@@ -1079,8 +1107,8 @@ function DtsTab(props: { lookup: RegistryLookup; fromMcp: boolean; fallbackLabel
   const cost = useMemo(() => tokenCostOf(props.lookup), [props.lookup]);
 
   return (
-    <div className="flex min-h-[26rem] flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+    <div className="flex min-h-[26rem] flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <p className="m-0 text-[12.5px] leading-relaxed text-ink-dim">
           Generated from the registry above — the same file the analyzer resolves calls against, the
           AI writes code from, and the runtime binds (05 §2). {props.fromMcp ? "It is your servers." : `Right now it is ${props.fallbackLabel}.`}
@@ -1112,7 +1140,7 @@ function DtsTab(props: { lookup: RegistryLookup; fromMcp: boolean; fallbackLabel
       {generated.error === null ? (
         <pre
           data-testid="mcp-dts"
-          className="cf-scroll m-0 max-h-[32rem] flex-1 overflow-auto rounded-xl border border-line bg-surface-2 p-3 font-mono text-[11.5px] leading-[1.55] text-ink"
+          className="cf-scroll m-0 max-h-[32rem] flex-1 overflow-auto rounded-xl border border-line bg-surface-2 p-4 font-mono text-[11.5px] leading-[1.55] text-ink"
         >
           {generated.text}
         </pre>

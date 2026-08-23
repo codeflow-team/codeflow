@@ -50,16 +50,17 @@ const CHECKED = "2026-08-23";
 /**
  * Remote endpoints — the ones that work without a dev server behind the page.
  *
- * Every entry here answered `initialize` + `tools/list` anonymously **and**
- * returned `Access-Control-Allow-Origin: *` on a real preflight from
- * `http://localhost:5173`, which is what makes browser-direct discovery
- * possible and therefore what makes them usable on the hosted build.
+ * Every entry here answered `initialize` + `tools/list` anonymously, and every
+ * one was added through this UI and its tools counted before it was listed.
+ * `cors` records the second, sharper question: did the *browser* complete the
+ * whole handshake by itself, with no dev server involved? All seven did, which
+ * is what makes them usable on the hosted build. An open endpoint that fails
+ * that test is deliberately left off rather than shipped as an entry that works
+ * in a checkout and dies on a CDN — AWS Knowledge, Astro Docs and CoinGecko all
+ * answer anonymously but send no usable CORS headers.
  *
- * Endpoints deliberately left off, and why: AWS Knowledge, Astro Docs and
- * CoinGecko all answer without auth but send no usable CORS headers, so they
- * would work in a checkout and silently fail on the deployed page — exactly the
- * "an entry that fails on click" case. Sentry, Semgrep, Grafana, Linear, Notion,
- * Stripe, Vercel, Neon and the rest of the hosted set all answered 401. The old
+ * Also left off: Sentry, Semgrep, Grafana, Linear, Notion, Stripe, Vercel, Neon
+ * and the rest of the hosted set, all of which answered 401. The old
  * `remote.mcpservers.org` aggregator no longer resolves at all.
  */
 export const REMOTE_CATALOG: CatalogEntry[] = [

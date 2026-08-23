@@ -126,7 +126,12 @@ export function selectAll(config: McpServerConfig, on: boolean): McpServerConfig
  * (05 §2) and TypeScript has to parse it.
  */
 export function defaultNamespace(name: string): string {
-  const slug = slugifyNamespace(name.replace(/^@[^/]+\//, "").replace(/^(?:mcp|server)[-_]/i, ""));
+  const trimmed = name.replace(/^@[^/]+\//, "").replace(/^(?:mcp|server)[-_]/i, "");
+  // A name with nothing identifier-shaped in it slugs to the adapter's own
+  // placeholder (`tool`), and `tools.tool.readFile` reads like a bug. `mcp` at
+  // least says what it is.
+  if (!/[A-Za-z0-9]/.test(trimmed)) return "mcp";
+  const slug = slugifyNamespace(trimmed);
   return slug.length === 0 ? "mcp" : slug;
 }
 

@@ -35,6 +35,29 @@ Demo preload ví dụ canonical: xem graph → click node → sửa channel tron
 | `@codeflow/mcp` | MCP JSON Schema → ToolDefinition (slugging tên an toàn, cursor paging, zero runtime dep) | 05 §3 |
 | `apps/demo` | app demo đầy đủ vòng xem + sửa | — |
 
+## 🐛 Update ~07:30 — SĂN BUG BẰNG MCP THẬT + HARDENING: bắt được **10 bug thật** (commits `071410a`, `cdb107a`)
+
+**Tests: 1005 → 1302** (core 1039 · mcp 110 · react 90 · cli 63). Đây là đợt giá trị nhất của cả dự án: mock không bao giờ lộ ra mấy bug này.
+
+### Từ MCP server thật (8 server, 65 schema thật, đã commit vào repo, test chạy offline)
+1. **`*/` trong description phá nát `tools.d.ts`** — server filesystem CHÍNH THỨC của Anthropic có glob `'**/*.ext'` trong mô tả → đóng sớm JSDoc → 379 lỗi TS. Build-breaker.
+2. **`$ref` sinh type không tồn tại** — mọi server dùng zod đều dính. Giờ resolve inline.
+
+### Từ hardening (206 case ác)
+3. **Xóa body không ngoặc làm `if` nuốt statement kế** — `if (pr.draft) continue;` xóa continue → `if` ôm luôn dòng dưới. Code vẫn parse, vẫn type-check, nhưng NGHĨA KHÁC. Nghiêm trọng nhất.
+4. **Quoted key `{"channel": x}`** → patch append property thứ 2, âm thầm override (vi phạm I6).
+5. **Computed key** cho phép override giá trị không nhìn thấy.
+6. **BOM lệch mọi offset 1 ký tự** → mọi patch trên file có BOM đều fail.
+7. **Nested destructuring** `const {a:{b}}` tạo binding tên `{ b }` → mất data edge + mất dependency check khi xóa.
+8. **TAB thô ghi vào string literal** (vô hình, bị trim-on-save phá).
+9. Cursor cột 1 chọn container (ghi nhận e2e) — fixed.
+10. Inspector thiếu id/label (a11y, ghi nhận e2e) — fixed.
+
+Catalog đầy đủ: `packages/core/test/hardening/README.md` — mỗi case ghi rõ vì sao khó + invariant nào bảo vệ. 10 `it.todo` = nợ kỹ thuật nhìn thấy được.
+
+### 🎯 Điểm yếu nhất của library (đánh giá của agent, t đồng ý)
+**Patcher ở mức statement (delete/insert)** — field edit thì AST canh từng bước, còn delete/insert vẫn dùng số học dòng/offset, không biết statement cha là ai. Bug #3 sống đúng chỗ đó, và validator transactional KHÔNG bắt được lớp lỗi này vì kết quả hỏng vẫn parse + vẫn đúng flow contract. Thứ nhì: chỗ nào lấy tên từ text nguồn thay vì resolve (`getText()` as identity) — bug #4 và #7 là cùng một lỗi ở 2 module.
+
 ## 🔨 Đang chạy (sau khi m dậy, ~06:30)
 
 1. **E2E qua đúng Claude in Chrome: PASS** (commit `7ac48ff`) — acceptance/delete-blocked/degradation + console sạch, screenshots `e2e/claude-in-chrome/`. Việc treo duy nhất từ đêm qua đã đóng.

@@ -14,6 +14,7 @@ import {
   type DisclosureMode,
 } from "../flow/summary.js";
 import type { NodeDataLinks } from "../flow/data-links.js";
+import { insideLabel } from "../flow/collapse.js";
 
 export interface NodeSize {
   width: number;
@@ -58,6 +59,25 @@ const MAX_WIDTH = 440;
 const MONO_MAX_WIDTH = 470;
 
 /**
+ * The `12 steps inside` line on a folded container, and the width it earns.
+ *
+ * A folded box is a *summary of twelve things*, so it is drawn at least as wide
+ * as a comfortable card — shrinking it to the width of its title would make the
+ * one box that stands for the most content the smallest thing on the canvas.
+ */
+const FOLD_ROW_HEIGHT = 34;
+const FOLD_MIN_WIDTH = 236;
+/**
+ * Room on a container's title line for its fold chevron.
+ *
+ * Every `loop` and `try` carries one, open or shut, so the title has to be
+ * measured against a header that is that much narrower — otherwise "For Each
+ * testCase in cases" truncates to "For Each testCase i…" on the one box that
+ * is standing in for seventy-five steps.
+ */
+const FOLD_CHEVRON_ROOM = 34;
+
+/**
  * Padding a container reserves around its children.
  *
  * `top` is only a floor: the real inset follows the container's own header
@@ -76,7 +96,36 @@ export function isMinorNode(node: WorkflowNode, mode: DisclosureMode): boolean {
   return mode === "compact" && node.type === "code";
 }
 
+/**
+ * Size of one node, at a given level, with a given amount of provenance on it.
+ *
+ * `collapsedInner` is the number of steps folded inside this container, or
+ * `null` for everything else: a folded box is drawn as a *card* (header plus a
+ * `12 steps inside` line) rather than as a frame around children, so it has to
+ * be measured as one.
+ */
 export function measureNode(
+  node: WorkflowNode,
+  mode: DisclosureMode,
+  links?: NodeDataLinks | null,
+  collapsedInner?: number | null,
+): NodeSize {
+  const open = measureOpen(node, mode, links);
+  if (collapsedInner === undefined || collapsedInner === null) return open;
+
+  const label = insideLabel(collapsedInner);
+  const bare = open.height <= (mode === "compact" ? HEADER_HEIGHT_COMPACT : HEADER_HEIGHT);
+  return {
+    width: clamp(
+      Math.max(open.width, ROW_PADDING_X + (label.length + 4) * ROW_CHAR),
+      FOLD_MIN_WIDTH,
+      MAX_WIDTH,
+    ),
+    height: open.height + FOLD_ROW_HEIGHT + (bare ? PADDING_Y : 0),
+  };
+}
+
+function measureOpen(
   node: WorkflowNode,
   mode: DisclosureMode,
   links?: NodeDataLinks | null,
@@ -85,7 +134,8 @@ export function measureNode(
   // adding to it; its face is smaller, hence the 0.55 factor.
   const caption = nodeCaption(node, mode);
   const titleChars = Math.max(nodeTitle(node, mode).length, (caption?.length ?? 0) * 0.55);
-  const headerWidth = PADDING_X + BADGE_ROOM + titleChars * CHAR;
+  const chevron = node.type === "loop" || node.type === "try" ? FOLD_CHEVRON_ROOM : 0;
+  const headerWidth = PADDING_X + BADGE_ROOM + chevron + titleChars * CHAR;
 
   if (mode === "compact") {
     if (isMinorNode(node, mode)) {
@@ -127,4 +177,5 @@ export type Measurer = (
   node: WorkflowNode,
   mode: DisclosureMode,
   links?: NodeDataLinks | null,
+  collapsedInner?: number | null,
 ) => NodeSize;

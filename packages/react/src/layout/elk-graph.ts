@@ -15,6 +15,7 @@ import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
 import { buildIndex, isSlotEdge, type GraphIndex } from "../graph/index.js";
 import type { DisclosureMode } from "../flow/summary.js";
 import { buildDataLinks, type NodeDataLinks } from "../flow/data-links.js";
+import { EMPTY_COLLAPSE, standIn, type CollapseView } from "../flow/collapse.js";
 import { CONTAINER_MIN_SIZE, CONTAINER_PADDING, measureNode, type Measurer } from "./measure.js";
 
 export type LayoutDirection = "DOWN" | "RIGHT";
@@ -35,6 +36,15 @@ export interface ElkGraphOptions {
    * from the graph when omitted.
    */
   dataLinks?: Map<string, NodeDataLinks>;
+  /**
+   * Which containers are folded shut (`flow/collapse.ts`).
+   *
+   * A folded container is laid out as a *leaf*: its children are not given to
+   * ELK at all, so the box is the size of a card rather than of the twelve
+   * steps it stands for. Edges that ended inside it are re-pointed at the box,
+   * which is what keeps the spine continuous instead of dangling into nothing.
+   */
+  collapse?: CollapseView;
 }
 
 export interface ElkGraphResult {
@@ -175,24 +185,36 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
   const kinds = options.edgeKinds ?? (["control"] as const);
   const index = options.index ?? buildIndex(graph);
   const dataLinks = options.dataLinks ?? buildDataLinks(graph, index);
-  const sizeOf = (node: Parameters<Measurer>[0]): { width: number; height: number } =>
-    measure(node, options.mode, dataLinks.get(node.id) ?? null);
+  const collapse = options.collapse ?? EMPTY_COLLAPSE;
+  const sizeOf = (
+    node: Parameters<Measurer>[0],
+    folded: boolean,
+  ): { width: number; height: number } =>
+    measure(
+      node,
+      options.mode,
+      dataLinks.get(node.id) ?? null,
+      folded ? collapse.innerCount.get(node.id) ?? 0 : null,
+    );
 
   const elkById = new Map<string, ElkNode>();
 
   const build = (parent: string | null, depth: number): ElkNode[] => {
     const children = index.childrenOf.get(parent) ?? [];
     return children.map((node) => {
-      const own = build(node.id, depth + 1);
+      const folded = collapse.collapsed.has(node.id);
+      // A folded box has no children as far as layout is concerned — that is
+      // the entire saving, and it is why the box comes out card-sized.
+      const own = folded ? [] : build(node.id, depth + 1);
       const elk: ElkNode =
         own.length > 0
           ? {
               id: node.id,
               children: own,
               edges: [],
-              layoutOptions: containerOptions(direction, sizeOf(node), depth),
+              layoutOptions: containerOptions(direction, sizeOf(node, false), depth),
             }
-          : { id: node.id, ...sizeOf(node) };
+          : { id: node.id, ...sizeOf(node, folded) };
       elkById.set(node.id, elk);
       return elk;
     });
@@ -221,7 +243,22 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
       continue;
     }
 
-    const lifted = proxyEndpoints(edge.source, edge.target, index);
+    /*
+     * Re-point both ends at whatever is actually on the canvas.
+     *
+     * An edge into a folded container's third step becomes an edge into the
+     * box. An edge *between* two steps that are both inside the same folded box
+     * has nothing left to say about placement, so it is dropped — which is why
+     * folding removes crossings as well as nodes.
+     */
+    const source = standIn(collapse, edge.source);
+    const target = standIn(collapse, edge.target);
+    if (source === target) {
+      skippedEdgeIds.push(edge.id);
+      continue;
+    }
+
+    const lifted = proxyEndpoints(source, target, index);
     if (lifted === null) {
       skippedEdgeIds.push(edge.id);
       continue;
@@ -232,9 +269,9 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
       continue;
     }
 
-    const direct = lifted.source === edge.source && lifted.target === edge.target;
+    const direct = lifted.source === source && lifted.target === target;
     if (direct) {
-      (container.edges ??= []).push({ id: edge.id, sources: [edge.source], targets: [edge.target] });
+      (container.edges ??= []).push({ id: edge.id, sources: [source], targets: [target] });
       continue;
     }
 

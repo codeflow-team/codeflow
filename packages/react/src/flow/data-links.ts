@@ -40,14 +40,32 @@ export const EMPTY_DATA_LINKS: NodeDataLinks = { incoming: [], outgoing: [] };
 /**
  * How much of the data layer the canvas is drawing right now.
  *
- * - `none` — the beginner level. A clean control spine and nothing else.
- * - `selected` — only the edges touching the selected step, highlighted. This
- *   is the moment data flow is genuinely useful: one step is being examined.
+ * - `none` — a clean control spine and nothing else. Not used by the shipped
+ *   levels: even the beginner one reveals the selected step's own values, and
+ *   this stays for a host that wants the spine and nothing but the spine.
+ * - `selected` — only the edges touching the selected step, highlighted. The
+ *   default at every disclosure level, because it is the moment data flow is
+ *   genuinely useful: one step is being examined, and the question is where its
+ *   input came from.
  * - `all` — the power-user override behind "Show data links". Even here the
  *   data layer is drawn much fainter than the control layer: control is the
  *   spine of the picture, data is annotation on it.
  */
 export type DataEdgeMode = "none" | "selected" | "all";
+
+/**
+ * The rule the provider applies — one line, in one place, so it can be tested.
+ *
+ * Select-to-reveal at **every** disclosure level. An earlier pass tied it to the
+ * level and made Simple mean "no data edges ever", which read progressive
+ * disclosure backwards: the question a beginner asks first is "where does this
+ * step get its input from", and pointing at a step is how they ask it. Four to
+ * seven lines answer it and clutter nothing. What clutters is all 172 at once —
+ * and that is what the toggle is for, at every level equally.
+ */
+export function resolveDataEdgeMode(showDataLinks: boolean): DataEdgeMode {
+  return showDataLinks ? "all" : "selected";
+}
 
 /**
  * Index every data edge by both of its endpoints.

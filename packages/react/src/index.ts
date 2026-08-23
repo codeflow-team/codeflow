@@ -133,12 +133,30 @@ export {
 
 export {
   buildDataLinks,
+  resolveDataEdgeMode,
   takesLines,
   takesText,
   EMPTY_DATA_LINKS,
   MAX_TAKES_ROWS,
 } from "./flow/data-links.js";
 export type { DataLink, NodeDataLinks, DataEdgeMode } from "./flow/data-links.js";
+
+export {
+  autoCollapse,
+  ancestorsOf,
+  buildCollapseView,
+  expandFor,
+  innerCounts,
+  insideLabel,
+  isSameFlow,
+  standIn,
+  SAME_FLOW_OVERLAP,
+  EMPTY_COLLAPSE,
+  FOLD_ABOVE,
+  FOLD_MIN_INNER,
+  FOLD_TRY_MAX_SHARE,
+} from "./flow/collapse.js";
+export type { CollapseView, AutoCollapseOptions } from "./flow/collapse.js";
 export type {
   CodeFlowNodeData,
   CodeFlowEdgeData,

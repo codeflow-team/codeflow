@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type React
 import {
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   MarkerType,
   MiniMap,
@@ -20,7 +21,7 @@ import {
   type NodeMouseHandler,
   type NodeTypes,
 } from "@xyflow/react";
-import { LoaderCircle, TriangleAlert, Workflow } from "lucide-react";
+import { FoldVertical, LoaderCircle, Maximize, TriangleAlert, UnfoldVertical, Workflow } from "lucide-react";
 import { useCodeFlow } from "../context/hooks.js";
 import type { DisclosureMode } from "../flow/summary.js";
 import { CodeFlowContainerNode, CodeFlowNode } from "../flow/nodes.js";
@@ -55,8 +56,32 @@ const defaultEdgeOptions = {
  * whole graph, practically nothing. So the fit is floored: past that point it
  * shows the start of the flow at a size that can still be read, and the minimap,
  * the outline and the scroll wheel take over from there.
+ *
+ * The floor was 0.42, which is where a 101-step flow actually lands, and that
+ * was the bug rather than the fix: measured in the browser on `browser-qa-runner`
+ * the 13px step title renders at 5.5px there and the 11.5px settings rows at
+ * 4.8px — legible as *shapes*, not as words. Stepping the same canvas up
+ * showed where the words come back: titles at ~0.55, the settings and `Takes`
+ * rows at ~0.70, everything comfortable at 0.80. So the floor is 0.80 — the
+ * flow scrolls, and the outline, the minimap and the folded boxes are what make
+ * scrolling navigable.
+ *
+ * Seeing the whole thing at once is still one click away — the Controls' own
+ * fit button uses `FIT_ALL`, which has no floor.
  */
-const FIT = { minZoom: 0.42 } as const;
+const READABLE_ZOOM = 0.8;
+/** A small flow is a picture, not a poster — it is not blown up past life size. */
+const MAX_ZOOM = 1.15;
+const FIT = { minZoom: READABLE_ZOOM, maxZoom: MAX_ZOOM } as const;
+/**
+ * The escape hatch: everything on screen, at whatever size that costs.
+ *
+ * `MIN_ZOOM` is the same number the canvas allows by hand, so "fit everything"
+ * can never land somewhere the zoom-out button could not have reached — a view
+ * the controls cannot get back to is a trap.
+ */
+const MIN_ZOOM = 0.05;
+const FIT_ALL = { minZoom: MIN_ZOOM, padding: 0.1, duration: 260 } as const;
 
 const MINIMAP_TYPES = new Set([
   "trigger",
@@ -141,11 +166,14 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
     selectNode,
     dataEdgeMode,
     dataLinks,
+    collapse,
+    expandAll,
+    collapseAll,
   } = useCodeFlow();
   const mode = props.mode ?? providerMode;
   const direction = props.direction ?? "DOWN";
 
-  const { layout, pending, error } = useElkLayout(graph, { mode, direction });
+  const { layout, pending, error } = useElkLayout(graph, { mode, direction, collapse });
 
   const mapped = useMemo(() => {
     if (graph === null) return { nodes: [] as CodeFlowRFNode[], edges: [] as CodeFlowRFEdge[] };
@@ -157,6 +185,7 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
       selectedNodeId,
       dataEdges: dataEdgeMode,
       dataLinks,
+      collapse,
     });
     return { nodes, edges };
     /*
@@ -169,43 +198,65 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
      * view switch should do to a view.
      */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, mode, layout, nodeDiagnostics, index, dataLinks]);
+  }, [graph, mode, layout, nodeDiagnostics, index, dataLinks, collapse]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<CodeFlowRFNode>(mapped.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CodeFlowRFEdge>(mapped.edges);
 
-  const { fitView, setCenter, getViewport, getInternalNode } = useReactFlow();
+  const { fitView, setCenter, setViewport, getViewport, getInternalNode } = useReactFlow();
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  /** Outer box of the current layout — read by the fit, which runs on a timer. */
+  const boundsRef = useRef<ReturnType<typeof rootBounds>>(null);
+  boundsRef.current = useMemo(() => rootBounds(mapped.nodes), [mapped.nodes]);
+
+  /**
+   * The opening view: as much of the flow as fits, never smaller than readable,
+   * and anchored to the start when it does not all fit.
+   *
+   * Computed here rather than by chaining `fitView` and a correction, because
+   * that chain had a race with itself: `getViewport()` read *during* a running
+   * fit animation returns an interpolated zoom, and writing that back froze the
+   * canvas at 0.38 — the exact unreadable zoom this whole change exists to get
+   * rid of, reached by the code meant to prevent it. One computation, one
+   * write, nothing to interleave with.
+   *
+   * Anchoring is vertical only. A flow is read from its trigger down, so a
+   * diagram taller than the window opens at its top; a diagram that fits is
+   * centred like any picture.
+   */
+  const fitAndAnchor = useCallback(
+    (padding: number) => {
+      const element = wrapperRef.current;
+      const bounds = boundsRef.current;
+      if (element === null || bounds === null || bounds.width <= 0 || bounds.height <= 0) return;
+      const rect = element.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
+      const usableWidth = rect.width * (1 - padding * 2);
+      const usableHeight = rect.height * (1 - padding * 2);
+      const zoom = Math.min(
+        MAX_ZOOM,
+        Math.max(READABLE_ZOOM, Math.min(usableWidth / bounds.width, usableHeight / bounds.height)),
+      );
+      const x = (rect.width - bounds.width * zoom) / 2 - bounds.x * zoom;
+      const fits = bounds.height * zoom <= rect.height;
+      const y = fits
+        ? (rect.height - bounds.height * zoom) / 2 - bounds.y * zoom
+        : rect.height * padding - bounds.y * zoom;
+      void setViewport({ x, y, zoom }, { duration: 220 });
+    },
+    [setViewport],
+  );
 
   useEffect(() => {
     setNodes(mapped.nodes);
     setEdges(mapped.edges);
     if (mapped.nodes.length === 0 || props.fitView === false) return;
     // ELK just moved everything; refit once the new positions are committed.
-    const frame = requestAnimationFrame(() => {
-      void fitView({ ...FIT, padding: 0.12, duration: 200 });
-      /**
-       * When the fit hit its floor the diagram is taller than the window, and
-       * centring it would open the flow somewhere in the middle of itself. A
-       * flow is read from the start, so the view is nudged to the top instead.
-       */
-      window.setTimeout(() => {
-        const element = wrapperRef.current;
-        const bounds = rootBounds(mapped.nodes);
-        if (element === null || bounds === null) return;
-        const rect = element.getBoundingClientRect();
-        const { zoom } = getViewport();
-        if (bounds.height * zoom <= rect.height) return;
-        setCenter(
-          bounds.x + bounds.width / 2,
-          bounds.y + rect.height / (2 * zoom) - 24 / zoom,
-          { zoom, duration: 220 },
-        );
-      }, 260);
-    });
+    const frame = requestAnimationFrame(() => { fitAndAnchor(0.12); });
     return () => { cancelAnimationFrame(frame); };
-  }, [mapped, setNodes, setEdges, fitView, getViewport, setCenter, props.fitView]);
+  }, [mapped, setNodes, setEdges, fitAndAnchor, props.fitView]);
 
   useEffect(() => {
     setNodes((current) =>
@@ -289,11 +340,11 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
     const observer = new ResizeObserver(() => {
       if (first) { first = false; return; }
       clearTimeout(timer);
-      timer = setTimeout(() => { void fitView({ ...FIT, padding: 0.14, duration: 200 }); }, 140);
+      timer = setTimeout(() => { fitAndAnchor(0.14); }, 140);
     });
     observer.observe(element);
     return () => { observer.disconnect(); clearTimeout(timer); };
-  }, [fitView]);
+  }, [fitAndAnchor]);
 
   const onNodeClick = useCallback<NodeMouseHandler<CodeFlowRFNode>>(
     (_event, node) => {
@@ -305,6 +356,17 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
   const onPaneClick = useCallback(() => {
     selectNode(null);
   }, [selectNode]);
+
+  /*
+   * Which way round the fold control reads.
+   *
+   * On *any* box being shut it offers to open everything, not only when all of
+   * them are: after a large flow arrives folded, "show me all of it" is the
+   * request a reader actually has, and a button that offered to fold further
+   * would be answering a question nobody asked.
+   */
+  const hasFolds = index.containerIds.size > 0;
+  const anyFolded = collapse.collapsed.size > 0;
 
   return (
     <div
@@ -340,13 +402,40 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
           onPaneClick={onPaneClick}
           fitView={props.fitView ?? true}
           fitViewOptions={{ ...FIT, padding: 0.15 }}
-          minZoom={0.15}
+          minZoom={MIN_ZOOM}
           maxZoom={2}
           proOptions={{ hideAttribution: false }}
         >
           {(props.background ?? true) ? <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} /> : null}
           {(props.controls ?? true) ? (
-            <Controls showInteractive={false} position="bottom-right" className="!bottom-3 !right-3" />
+            <Controls
+              showInteractive={false}
+              showFitView={false}
+              position="bottom-right"
+              className="!bottom-3 !right-3"
+            >
+              {/*
+                Three ways of asking "show me the flow", because they are three
+                different questions and the default can only answer one.
+
+                `Fit` is the honest "all of it" — it drops the readability floor,
+                which on a 101-step flow means a picture you can navigate by and
+                not read. It is offered rather than imposed: the default view is
+                the readable one.
+              */}
+              <ControlButton onClick={() => { void fitView(FIT_ALL); }} title="Fit the whole flow on screen" aria-label="Fit the whole flow on screen">
+                <Maximize />
+              </ControlButton>
+              {hasFolds ? (
+                <ControlButton
+                  onClick={anyFolded ? expandAll : collapseAll}
+                  title={anyFolded ? "Open every folded box and show all the steps" : "Fold every loop and try into one box"}
+                  aria-label={anyFolded ? "Open every box" : "Fold every box"}
+                >
+                  {anyFolded ? <UnfoldVertical /> : <FoldVertical />}
+                </ControlButton>
+              ) : null}
+            </Controls>
           ) : null}
           {/* A minimap earns its space once the flow stops fitting on screen;
               below that it is decoration over a diagram the user can already

@@ -22,6 +22,7 @@ import type {
 import type { GraphIndex } from "../graph/index.js";
 import type { DisclosureMode } from "../flow/summary.js";
 import type { DataEdgeMode, NodeDataLinks } from "../flow/data-links.js";
+import type { CollapseView } from "../flow/collapse.js";
 
 /** Why an edit was refused — `code` is the patch engine's, not a UI invention. */
 export interface PatchFailure {
@@ -121,13 +122,30 @@ export interface CodeFlowContextValue {
   showDataLinks: boolean;
   setShowDataLinks: (show: boolean) => void;
   /**
-   * What the canvas actually draws, resolved from `mode` + `showDataLinks`:
-   * `none` at the beginner level, `selected` once settings are on show, `all`
-   * whenever the toggle is on.
+   * What the canvas actually draws, resolved from `showDataLinks`: `selected`
+   * — the selected step's own values, at *every* disclosure level — until the
+   * toggle asks for `all`.
    */
   dataEdgeMode: DataEdgeMode;
   /** Every step's data provenance, in words — see `flow/data-links.ts`. */
   dataLinks: Map<string, NodeDataLinks>;
+
+  /* --- folding (flow/collapse.ts) ---------------------------------------- */
+
+  /**
+   * Which containers are folded, and what that hides — resolved once and shared
+   * by the layout and the canvas so the two can never disagree about which
+   * steps exist.
+   */
+  collapse: CollapseView;
+  /** The raw fold set. `collapse` is the derived, validated view of it. */
+  collapsedNodeIds: ReadonlySet<string>;
+  /** Fold a container shut, or open it. */
+  toggleCollapsed: (nodeId: string) => void;
+  /** Open every box — "show me all 101 steps". */
+  expandAll: () => void;
+  /** Fold every box — the shortest reading of the flow. */
+  collapseAll: () => void;
 
   /** Source range the code panel should reveal/highlight; canvas → code panel. */
   focusedRange: SourceMapping | null;

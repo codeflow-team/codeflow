@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { WorkflowNode } from "@codeflow/core";
-import { buildDataLinks, takesLines } from "../src/flow/data-links.js";
+import { buildDataLinks, resolveDataEdgeMode, takesLines } from "../src/flow/data-links.js";
 import { nodeTitle, plainCondition, takesRows, rowsForMode } from "../src/flow/summary.js";
 import { buildIndex } from "../src/graph/index.js";
 import { measureNode } from "../src/layout/measure.js";
@@ -80,6 +80,30 @@ describe("plainCondition — only exact translations", () => {
     node.label = "Pull request is a draft";
     node.data["labelSource"] = "registry";
     expect(nodeTitle(node, "compact")).toBe("Pull request is a draft");
+  });
+});
+
+/**
+ * The one rule the first decluttering pass got wrong.
+ *
+ * It read "progressive disclosure" as "the beginner level shows less of
+ * everything" and turned select-to-reveal off at Simple. That inverted the
+ * point: the question a beginner asks first is "where does this step get its
+ * input from", and pointing at a step is how they ask it. Four to seven lines
+ * answer it and clutter nothing; the hundred and seventy at once are what
+ * clutter, and those are what the toggle is for — at every level equally.
+ */
+describe("select-to-reveal is the rule at every level", () => {
+  it("reveals the selected step's values whatever the disclosure level", () => {
+    expect(resolveDataEdgeMode(false)).toBe("selected");
+  });
+
+  it("still puts every edge behind the toggle", () => {
+    expect(resolveDataEdgeMode(true)).toBe("all");
+  });
+
+  it("never resolves to the spine-only view — that would drop select-reveal", () => {
+    expect([resolveDataEdgeMode(false), resolveDataEdgeMode(true)]).not.toContain("none");
   });
 });
 

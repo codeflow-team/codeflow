@@ -6,6 +6,11 @@
  * parent-relative one ELK produced. Parents are emitted before their children,
  * which React Flow requires.
  *
+ * Folding (`flow/collapse.ts`) works on the same pass: a folded container's
+ * children are not emitted at all, and every edge that ended inside one is
+ * re-pointed at the box that now stands for it — so the spine stays continuous
+ * and no line dangles into a node that is not on the canvas.
+ *
  * Pure and DOM-free so it can be unit-tested without a browser.
  */
 
@@ -31,6 +36,7 @@ import {
   type DataEdgeMode,
   type NodeDataLinks,
 } from "./data-links.js";
+import { EMPTY_COLLAPSE, standIn, type CollapseView } from "./collapse.js";
 
 export const NODE_TYPE_LEAF = "codeflowNode";
 export const NODE_TYPE_CONTAINER = "codeflowContainer";
@@ -61,6 +67,14 @@ export interface CodeFlowNodeData extends Record<string, unknown> {
    * deletion of information.
    */
   links: NodeDataLinks;
+  /**
+   * Steps folded inside this container, or `null` when nothing is folded here.
+   *
+   * The number is the truth — every descendant, counted recursively — because
+   * the whole bargain of folding is that the box says how much it is standing
+   * for. `0` never appears: an empty container is not worth folding.
+   */
+  collapsedInner: number | null;
 }
 
 export interface CodeFlowEdgeData extends Record<string, unknown> {
@@ -89,6 +103,8 @@ export interface ToReactFlowOptions {
   /** How much of the data layer to draw. Defaults to `selected` (07 §4). */
   dataEdges?: DataEdgeMode;
   dataLinks?: Map<string, NodeDataLinks>;
+  /** Folded containers — see `flow/collapse.ts`. Nothing folded by default. */
+  collapse?: CollapseView;
 }
 
 /**
@@ -166,13 +182,20 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
   const selected = options.selectedNodeId ?? null;
   const dataEdges = options.dataEdges ?? "selected";
   const dataLinks = options.dataLinks ?? buildDataLinks(graph, index);
+  const collapse = options.collapse ?? EMPTY_COLLAPSE;
 
-  const nodes: CodeFlowRFNode[] = orderedNodes(graph, index).map((node) => {
+  const nodes: CodeFlowRFNode[] = orderedNodes(graph, index)
+    // Everything inside a folded container: not drawn, because the box it is in
+    // is now standing for it. `expandFor` is how anything gets back to it.
+    .filter((node) => !collapse.hidden.has(node.id))
+    .map((node) => {
     const parentId = index.parentOf.get(node.id) ?? null;
     const container = isContainerNode(node, index);
+    const folded = collapse.collapsed.has(node.id);
+    const collapsedInner = folded ? collapse.innerCount.get(node.id) ?? 0 : null;
     const box = boxes?.get(node.id);
     const links = dataLinks.get(node.id) ?? EMPTY_DATA_LINKS;
-    const fallback = measureNode(node, options.mode, links);
+    const fallback = measureNode(node, options.mode, links, collapsedInner);
 
     const rfNode: CodeFlowRFNode = {
       id: node.id,
@@ -186,8 +209,10 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
       // top so no line is ever drawn across a step's title, while a container
       // stays at the bottom. A container's fill is translucent (styles.css), so
       // the edges underneath it still read through — which is why they can be
-      // left below the whole node layer instead of fighting it.
-      zIndex: container ? 0 : 20,
+      // left below the whole node layer instead of fighting it. A *folded*
+      // container has nothing on top of it any more, so it joins the card
+      // layer — otherwise a data edge would be drawn across its title.
+      zIndex: container && !folded ? 0 : 20,
       data: {
         node,
         mode: options.mode,
@@ -197,8 +222,12 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
         autoWidth: box?.width ?? fallback.width,
         autoHeight: box?.height ?? fallback.height,
         links,
+        collapsedInner,
       },
-      className: `cf-rf-node cf-rf-node--${node.type}${container ? " cf-rf-node--container" : ""}`,
+      className:
+        `cf-rf-node cf-rf-node--${node.type}` +
+        (container ? " cf-rf-node--container" : "") +
+        (folded ? " cf-rf-node--collapsed" : ""),
     };
     if (parentId !== null) {
       rfNode.parentId = parentId;
@@ -207,8 +236,34 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
     return rfNode;
   });
 
-  const edges: CodeFlowRFEdge[] = graph.edges.map((edge) => {
-    const slotPort = isSlotEdge(edge, index) ? SLOT_PORTS[edge.sourcePort ?? "body"] : undefined;
+  const edges: CodeFlowRFEdge[] = [];
+  /*
+   * Two graph edges can land on the same pair of boxes once a container is
+   * folded — six steps inside it all feeding the step after it become six
+   * copies of one line. Drawing them stacked would thicken the stroke and put
+   * six arrowheads in one place, which reads as a heavier relationship than the
+   * flow has. The first is kept; the rest are the same statement.
+   *
+   * A *control* edge keeps its label in the key, because `true` / `false` /
+   * `error` / `body` is the one place the diagram says which way the flow goes
+   * and two branches must never merge into one line. A data edge's label is
+   * already dropped when the line crosses a container frame (below), so there
+   * is nothing left for it to distinguish.
+   */
+  const drawn = new Set<string>();
+
+  for (const edge of graph.edges) {
+    const source = standIn(collapse, edge.source);
+    const target = standIn(collapse, edge.target);
+    // Both ends inside the same folded box: the box is the statement now.
+    if (source === target) continue;
+    const rerouted = source !== edge.source || target !== edge.target;
+    const key = `${source} ${target} ${edge.kind} ${edge.kind === "control" ? edge.label ?? "" : ""}`;
+    if (rerouted && drawn.has(key)) continue;
+    drawn.add(key);
+
+    const slotPort =
+      !rerouted && isSlotEdge(edge, index) ? SLOT_PORTS[edge.sourcePort ?? "body"] : undefined;
     /**
      * A data edge that runs into (or out of) a container gets its label
      * dropped.
@@ -221,7 +276,7 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
      */
     const crossesFrame =
       edge.kind === "data" &&
-      (index.parentOf.get(edge.source) ?? null) !== (index.parentOf.get(edge.target) ?? null);
+      (index.parentOf.get(source) ?? null) !== (index.parentOf.get(target) ?? null);
 
     /*
      * The data layer is drawn on demand, not by default.
@@ -235,8 +290,8 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
      */
     const rfEdge: CodeFlowRFEdge = {
       id: edge.id,
-      source: edge.source,
-      target: edge.target,
+      source,
+      target,
       type: edge.kind === "data" ? "default" : "smoothstep",
       animated: false,
       zIndex: 0,
@@ -251,13 +306,16 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
       },
     };
     if (edge.kind === "data") {
-      Object.assign(rfEdge, dataEdgeVisuals(rfEdge.data?.value, dataEdgeState(edge, dataEdges, selected)));
+      Object.assign(
+        rfEdge,
+        dataEdgeVisuals(rfEdge.data?.value, dataEdgeState({ source, target }, dataEdges, selected)),
+      );
     } else if (edge.label !== undefined) {
       rfEdge.label = edge.label;
     }
     if (slotPort !== undefined) rfEdge.sourceHandle = slotHandleId(slotPort);
-    return rfEdge;
-  });
+    edges.push(rfEdge);
+  }
 
   return { nodes, edges, index };
 }

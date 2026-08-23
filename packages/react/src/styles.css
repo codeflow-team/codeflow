@@ -323,6 +323,23 @@
     border-bottom: 1px solid color-mix(in srgb, var(--node) 22%, var(--cf-border));
   }
 
+  /*
+   * A folded container is a card, not a frame.
+   *
+   * The open box is translucent so the edges underneath read through it; folded
+   * there is nothing underneath any more, and a see-through card on a dotted
+   * background is a card that is hard to read. So it takes the solid surface
+   * and the shadow every other step has — it *is* a step now, one that happens
+   * to stand for twelve.
+   */
+  .cf-container.is-collapsed {
+    background: var(--cf-surface);
+    box-shadow: var(--cf-shadow-node);
+    border-style: solid;
+    border-color: color-mix(in srgb, var(--node) 45%, var(--cf-border));
+    overflow: hidden;
+  }
+
   /* --- edges ------------------------------------------------------------- */
 
   .cf-rf-edge--control .react-flow__edge-path {

@@ -11,7 +11,7 @@
 
 import { useCallback, type ReactNode } from "react";
 import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import { Shrink, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Shrink, Trash2 } from "lucide-react";
 import type { Diagnostic, WorkflowNode } from "@codeflow/core";
 import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
 import { useOptionalCodeFlow } from "../context/hooks.js";
@@ -19,6 +19,7 @@ import { cn } from "../ui/cn.js";
 import { NodeGlyph } from "./glyphs.js";
 import { developerLines, nodeCaption, nodeSummaryRows, nodeTitle } from "./summary.js";
 import { isMinorNode } from "../layout/measure.js";
+import { insideLabel } from "./collapse.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
 
 /**
@@ -190,6 +191,68 @@ function FitButton({ nodeId, width, height }: { nodeId: string; width: number; h
       }}
     >
       <Shrink className="size-3" />
+    </button>
+  );
+}
+
+/**
+ * The fold control on a `for` / `while` / `try`.
+ *
+ * Always on the header, never only on hover or only when selected: on a big
+ * flow the folded boxes are what the reader is navigating by, and a control you
+ * have to discover is a control most readers never find. It states the number
+ * it is about to reveal — "open the 12 steps inside" — so the click is never a
+ * jump into an unknown amount of diagram.
+ */
+function FoldButton({ nodeId, inner, folded }: { nodeId: string; inner: number; folded: boolean }): ReactNode {
+  const cf = useOptionalCodeFlow();
+  if (cf === null || inner === 0) return null;
+  return (
+    <button
+      type="button"
+      title={folded ? `Open the ${insideLabel(inner)}` : "Fold these steps into one box"}
+      aria-label={folded ? `Open the ${insideLabel(inner)}` : `Fold ${insideLabel(inner)} into one box`}
+      aria-expanded={!folded}
+      data-testid={`node-fold-${nodeId}`}
+      className={cn(
+        "grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0",
+        "text-ink-faint outline-none transition-colors hover:bg-surface-2 hover:text-ink",
+        "focus-visible:ring-2 focus-visible:ring-ring/70",
+      )}
+      onClick={(event) => {
+        event.stopPropagation();
+        cf.toggleCollapsed(nodeId);
+      }}
+    >
+      {folded ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+    </button>
+  );
+}
+
+/**
+ * The one line a folded box owes the reader: how much is behind it.
+ *
+ * The count is every step inside, counted recursively — not the direct children
+ * — because "12 steps inside" has to survive being checked against the outline.
+ */
+function FoldedSummary({ nodeId, inner }: { nodeId: string; inner: number }): ReactNode {
+  const cf = useOptionalCodeFlow();
+  return (
+    <button
+      type="button"
+      data-testid={`node-open-${nodeId}`}
+      className={cn(
+        "mx-3 mb-2.5 flex cursor-pointer items-center gap-1.5 rounded-md border-0 px-1.5 py-1 text-left",
+        "bg-[color:color-mix(in_srgb,var(--node)_10%,transparent)] text-[11.5px] font-medium leading-4",
+        "text-ink-dim transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-ring/70",
+      )}
+      onClick={(event) => {
+        event.stopPropagation();
+        cf?.toggleCollapsed(nodeId);
+      }}
+    >
+      <ChevronRight className="size-3 shrink-0" />
+      {insideLabel(inner)}
     </button>
   );
 }
@@ -454,8 +517,45 @@ export function CodeFlowContainerNode({ id, data, selected, width, height }: Nod
   const type = data.node.type;
   const changed = useChangedClass(id);
   const { className: runClass } = useRunMark(id);
+  const cf = useOptionalCodeFlow();
+  const inner = cf?.collapse.innerCount.get(id) ?? 0;
+  const folded = data.collapsedInner !== null;
   // Pulled out of shape by hand: offer the way back.
-  const resized = (width ?? 0) > data.autoWidth + 1 || (height ?? 0) > data.autoHeight + 1;
+  const resized =
+    !folded && ((width ?? 0) > data.autoWidth + 1 || (height ?? 0) > data.autoHeight + 1);
+
+  /*
+   * Folded, this is a card, not a frame.
+   *
+   * No resizer and no slot handles: both exist to serve children, and a folded
+   * box has none on the canvas. Everything else — the type colour, the run
+   * ring, the changed marker, the selection ring — is the same shell, because
+   * a folded `for each` is still that `for each` and must look like it.
+   */
+  if (folded) {
+    return (
+      <div
+        className={
+          ["cf-container", "is-collapsed", `cf-container--${type}`, `cf-node--${data.mode}`, selected === true ? "is-selected" : ""]
+            .filter(Boolean)
+            .join(" ") + changed + runClass
+        }
+        data-node-type={type}
+        data-collapsed="true"
+      >
+        <Handle type="target" position={Position.Top} className="cf-handle" />
+        <NodeHeader
+          data={data}
+          selected={selected === true}
+          before={<FoldButton nodeId={id} inner={data.collapsedInner ?? inner} folded />}
+        />
+        <NodeBody data={data} />
+        <FoldedSummary nodeId={id} inner={data.collapsedInner ?? inner} />
+        <Handle type="source" position={Position.Bottom} className="cf-handle" />
+      </div>
+    );
+  }
+
   return (
     <div
       className={
@@ -489,9 +589,12 @@ export function CodeFlowContainerNode({ id, data, selected, width, height }: Nod
           data={data}
           selected={selected === true}
           before={
-            selected === true && resized ? (
-              <FitButton nodeId={id} width={data.autoWidth} height={data.autoHeight} />
-            ) : null
+            <>
+              {selected === true && resized ? (
+                <FitButton nodeId={id} width={data.autoWidth} height={data.autoHeight} />
+              ) : null}
+              <FoldButton nodeId={id} inner={inner} folded={false} />
+            </>
           }
         />
         <NodeBody data={data} />

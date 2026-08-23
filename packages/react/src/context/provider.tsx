@@ -36,7 +36,8 @@ import {
 } from "@codeflow/core";
 import { computePatch } from "@codeflow/core";
 import { buildIndex, diagnosticsByNode, nodeAtOffset } from "../graph/index.js";
-import { buildDataLinks, type DataEdgeMode } from "../flow/data-links.js";
+import { buildDataLinks, resolveDataEdgeMode, type DataEdgeMode } from "../flow/data-links.js";
+import { autoCollapse, buildCollapseView, expandFor, isSameFlow } from "../flow/collapse.js";
 import { EDITING_DISABLED_REASON } from "./types.js";
 import type {
   CodeFlowContextValue,
@@ -84,6 +85,13 @@ export interface CodeFlowProviderProps {
    * `CodeFlowContextValue.showDataLinks` for why.
    */
   defaultShowDataLinks?: boolean;
+  /**
+   * Let a large flow arrive with its containers folded. On by default — see
+   * `flow/collapse.ts` for why a 101-step flow drawn whole is not readable.
+   * `false` keeps every box open, which is the right choice for a host that
+   * only ever shows small flows.
+   */
+  autoCollapse?: boolean;
   selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string | null) => void;
   /**
@@ -126,18 +134,120 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
   const nodeDiagnostics = useMemo(() => diagnosticsByNode(graph), [graph]);
   const dataLinks = useMemo(() => buildDataLinks(graph, index), [graph, index]);
 
-  /*
-   * The disclosure level sets the *baseline* for the data layer and the toggle
-   * overrides it — 07 §4 read onto three levels:
+  /* --- folding (flow/collapse.ts) ---------------------------------------- */
+
+  const [collapsedNodeIds, setCollapsedNodeIds] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  /**
+   * Which graph the current folds belong to.
    *
-   *   Simple  — control flow only. A clean vertical spine, nothing crossing it.
-   *   Details — the settings are on show, so the selected step's values are too.
-   *   Code    — same, plus "Show data links" for someone who wants all of it.
-   *
-   * Nothing is lost at the beginner level: the provenance a hidden edge carried
-   * is written on the card as `Takes  rows ← Read Text File`.
+   * Adjusted *during render* rather than in an effect on purpose: a flow that
+   * folds one commit after it first paints would draw all 101 steps, re-run
+   * ELK, and redraw — a visible flash of the exact picture folding exists to
+   * avoid. `undefined` is the "nothing seen yet" sentinel, distinct from the
+   * `null` that means "nothing analyzed".
    */
-  const dataEdgeMode: DataEdgeMode = showDataLinks ? "all" : mode === "compact" ? "none" : "selected";
+  const [foldedGraph, setFoldedGraph] = useState<WorkflowGraph | null | undefined>(undefined);
+  if (foldedGraph !== graph) {
+    setFoldedGraph(graph);
+    if (graph === null) {
+      if (collapsedNodeIds.size > 0) setCollapsedNodeIds(new Set<string>());
+    } else if (isSameFlow(foldedGraph, graph)) {
+      // The same flow, analyzed again: an edit can retire a node id, and a fold
+      // on an id that no longer exists would silently hide nothing. Folding is
+      // *not* recomputed — the user may have opened boxes by hand, and undoing
+      // that on every keystroke would be the app arguing with them.
+      const kept = new Set<string>();
+      for (const id of collapsedNodeIds) if (index.containerIds.has(id)) kept.add(id);
+      if (kept.size !== collapsedNodeIds.size) setCollapsedNodeIds(kept);
+    } else {
+      // A different flow — the only moment folding is decided for the user.
+      setCollapsedNodeIds(props.autoCollapse === false ? new Set<string>() : autoCollapse(index));
+    }
+  }
+
+  const collapse = useMemo(() => buildCollapseView(index, collapsedNodeIds), [index, collapsedNodeIds]);
+
+  const toggleCollapsed = useCallback((nodeId: string) => {
+    setCollapsedNodeIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(nodeId)) next.add(nodeId);
+      return next;
+    });
+  }, []);
+
+  const expandAll = useCallback(() => { setCollapsedNodeIds(new Set<string>()); }, []);
+  const collapseAll = useCallback(() => {
+    setCollapsedNodeIds(new Set(index.containerIds));
+  }, [index]);
+
+  /**
+   * A selected step is never inside a closed box.
+   *
+   * This one effect is what makes folding safe, because *everything* that can
+   * point at a step arrives here: the outline, the code panel's caret, a
+   * diagnostic, the step a failed run ended on, and a click on the canvas. The
+   * folds between the step and the canvas open, and the existing pan-to-
+   * selection does the rest. Without it, "select this step" could silently
+   * resolve to nothing on screen — which is exactly the kind of quiet failure
+   * 07 §5 forbids.
+   */
+  useEffect(() => {
+    if (selectedNodeId === null) return;
+    setCollapsedNodeIds((current) => expandFor(selectedNodeId, index, current) ?? current);
+  }, [selectedNodeId, index]);
+
+  /**
+   * Neither is the step that is running right now (09 §1).
+   *
+   * A run is the one moment the canvas is *watched* rather than read, and a
+   * summary box saying "12 steps inside" while one of those twelve is executing
+   * would be showing the least useful thing at the most useful moment. Only the
+   * folds the run actually enters open, once each, so a loop that runs twenty
+   * times costs one re-layout and the branches never taken stay folded.
+   */
+  const activeNodeId = props.run?.activeNodeId ?? null;
+  useEffect(() => {
+    if (activeNodeId === null) return;
+    setCollapsedNodeIds((current) => expandFor(activeNodeId, index, current) ?? current);
+  }, [activeNodeId, index]);
+
+  /**
+   * Nor is a step an edit just added or changed.
+   *
+   * Inserting a step into a folded loop and being told "13 steps inside" is a
+   * true sentence and a useless one: the user is looking for the thing they
+   * just made. The green "changed" marker is on it, so the box it is in opens.
+   */
+  useEffect(() => {
+    if (changedNodeIds.size === 0) return;
+    setCollapsedNodeIds((current) => {
+      let next = current;
+      for (const id of changedNodeIds) next = expandFor(id, index, next) ?? next;
+      return next;
+    });
+  }, [changedNodeIds, index]);
+
+  /*
+   * Select-to-reveal is the *rule*, at every level; the levels only differ in
+   * what is drawn when nothing is selected — 07 §4 read onto three levels:
+   *
+   *   Simple  — nothing by default; the selected step's own values on click.
+   *   Details — the same.
+   *   Code    — the same, plus "Show data links" for someone who wants all of it.
+   *
+   * An earlier pass made Simple mean "no data edges *ever*", and that was the
+   * wrong reading of "progressive disclosure". The question a beginner asks
+   * first is "where does this step get its input from" — pointing at a step and
+   * seeing four or seven lines appear is the answer, and four lines do not
+   * clutter anything. What clutters is the hundred and seventy drawn at once,
+   * and those are still off until the toggle says otherwise.
+   *
+   * Nothing is lost when they are hidden either: the provenance a hidden edge
+   * carried is written on the card as `Takes  rows ← Read Text File`.
+   */
+  const dataEdgeMode: DataEdgeMode = resolveDataEdgeMode(showDataLinks);
 
   const source = props.source ?? graph?.source.content ?? "";
   const sourceDirty = graph !== null && source !== graph.source.content;
@@ -296,6 +406,11 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       setShowDataLinks,
       dataEdgeMode,
       dataLinks,
+      collapse,
+      collapsedNodeIds,
+      toggleCollapsed,
+      expandAll,
+      collapseAll,
       focusedRange,
       focusRange: setFocusedRange,
       editingEnabled,
@@ -326,6 +441,11 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       showDataLinks,
       dataEdgeMode,
       dataLinks,
+      collapse,
+      collapsedNodeIds,
+      toggleCollapsed,
+      expandAll,
+      collapseAll,
       focusedRange,
       editingEnabled,
       disabledReason,

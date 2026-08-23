@@ -36,6 +36,7 @@ import {
 } from "@codeflow/core";
 import { computePatch } from "@codeflow/core";
 import { buildIndex, diagnosticsByNode, nodeAtOffset } from "../graph/index.js";
+import { buildDataLinks, type DataEdgeMode } from "../flow/data-links.js";
 import { EDITING_DISABLED_REASON } from "./types.js";
 import type {
   CodeFlowContextValue,
@@ -78,6 +79,11 @@ export interface CodeFlowProviderProps {
   /** Controlled disclosure level. */
   mode?: DisclosureMode;
   onModeChange?: (mode: DisclosureMode) => void;
+  /**
+   * Start with every data edge drawn. Off by default — see
+   * `CodeFlowContextValue.showDataLinks` for why.
+   */
+  defaultShowDataLinks?: boolean;
   selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string | null) => void;
   /**
@@ -107,6 +113,7 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
 
   const [internalSelected, setInternalSelected] = useState<string | null>(null);
   const [internalMode, setInternalMode] = useState<DisclosureMode>(props.defaultMode ?? "expanded");
+  const [showDataLinks, setShowDataLinks] = useState<boolean>(props.defaultShowDataLinks ?? false);
   const [focusedRange, setFocusedRange] = useState<SourceMapping | null>(null);
   const [patchError, setPatchError] = useState<PatchFailure | null>(null);
   const [lastPatch, setLastPatch] = useState<PatchSuccess | null>(null);
@@ -117,6 +124,20 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
 
   const index = useMemo(() => buildIndex(graph), [graph]);
   const nodeDiagnostics = useMemo(() => diagnosticsByNode(graph), [graph]);
+  const dataLinks = useMemo(() => buildDataLinks(graph, index), [graph, index]);
+
+  /*
+   * The disclosure level sets the *baseline* for the data layer and the toggle
+   * overrides it — 07 §4 read onto three levels:
+   *
+   *   Simple  — control flow only. A clean vertical spine, nothing crossing it.
+   *   Details — the settings are on show, so the selected step's values are too.
+   *   Code    — same, plus "Show data links" for someone who wants all of it.
+   *
+   * Nothing is lost at the beginner level: the provenance a hidden edge carried
+   * is written on the card as `Takes  rows ← Read Text File`.
+   */
+  const dataEdgeMode: DataEdgeMode = showDataLinks ? "all" : mode === "compact" ? "none" : "selected";
 
   const source = props.source ?? graph?.source.content ?? "";
   const sourceDirty = graph !== null && source !== graph.source.content;
@@ -271,6 +292,10 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       selectNodeAtOffset,
       mode,
       setMode,
+      showDataLinks,
+      setShowDataLinks,
+      dataEdgeMode,
+      dataLinks,
       focusedRange,
       focusRange: setFocusedRange,
       editingEnabled,
@@ -298,6 +323,9 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       selectNodeAtOffset,
       mode,
       setMode,
+      showDataLinks,
+      dataEdgeMode,
+      dataLinks,
       focusedRange,
       editingEnabled,
       disabledReason,

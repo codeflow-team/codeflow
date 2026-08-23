@@ -28,6 +28,7 @@ import {
   Button,
   CodePanel,
   CodeFlowProvider,
+  DataLinksToggle,
   DiagnosticsPanel,
   DisclosureToggle,
   Hint,
@@ -571,6 +572,10 @@ export function App() {
                   }
                 />
                 <IssuesButton />
+                {/* Next to the canvas, not up in the top bar: it changes what
+                    is drawn a few pixels away, and a view switch belongs beside
+                    the view it switches. */}
+                <DataLinksToggle iconOnly={!roomy} className="bg-surface/85 shadow-xs backdrop-blur" />
               </div>
               {!wide && selectedNodeId !== null && !inspectorOpen ? (
                 <div className="pointer-events-auto ml-auto">

@@ -172,7 +172,7 @@ describe("schemas", () => {
     const outputSchema = { type: "object", properties: { url: { type: "string" } } };
     const definition = mcpToolToDefinition({ ...getIssue, outputSchema }, { namespace: "github" });
     expect(definition.outputSchema).toBe(outputSchema);
-    // No output schema → none on the definition; codegen then emits Promise<void>.
+    // No output schema → none on the definition; codegen then emits Promise<unknown>.
     expect(mcpToolToDefinition(getIssue, { namespace: "github" }).outputSchema).toBeUndefined();
   });
 

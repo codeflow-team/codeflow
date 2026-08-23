@@ -52,7 +52,7 @@ describe("init → generate", () => {
     expect(tools).toContain("getNewPRs(input: { repo: string }): Promise<");
     expect(tools).toContain("getFiles(input: { pr: {");
     expect(tools).toContain("slack: {");
-    expect(tools).toContain("send(input: { channel: string; message: string }): Promise<void>;");
+    expect(tools).toContain("send(input: { channel: string; message: string }): Promise<unknown>;");
     // JSDoc from the tool description — this is what the AI reads.
     expect(tools).toContain("/** Get new pull requests for a repository */");
     expect(tools).toContain("DO NOT EDIT");

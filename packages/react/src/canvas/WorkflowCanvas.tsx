@@ -27,6 +27,9 @@ import { CodeFlowContainerNode, CodeFlowNode } from "../flow/nodes.js";
 import {
   NODE_TYPE_CONTAINER,
   NODE_TYPE_LEAF,
+  dataEdgeClassName,
+  dataEdgeState,
+  dataEdgeVisuals,
   toReactFlow,
   type CodeFlowRFEdge,
   type CodeFlowRFNode,
@@ -129,7 +132,16 @@ export function WorkflowCanvas(props: WorkflowCanvasProps): ReactNode {
 }
 
 function CanvasInner(props: WorkflowCanvasProps): ReactNode {
-  const { graph, index, nodeDiagnostics, mode: providerMode, selectedNodeId, selectNode } = useCodeFlow();
+  const {
+    graph,
+    index,
+    nodeDiagnostics,
+    mode: providerMode,
+    selectedNodeId,
+    selectNode,
+    dataEdgeMode,
+    dataLinks,
+  } = useCodeFlow();
   const mode = props.mode ?? providerMode;
   const direction = props.direction ?? "DOWN";
 
@@ -143,12 +155,21 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
       diagnostics: nodeDiagnostics,
       index,
       selectedNodeId,
+      dataEdges: dataEdgeMode,
+      dataLinks,
     });
     return { nodes, edges };
-    // `selectedNodeId` intentionally excluded: selection is applied below so a
-    // click does not force a full re-map of every node.
+    /*
+     * `selectedNodeId` and `dataEdgeMode` are intentionally excluded.
+     *
+     * Both are re-applied by the effects below, over the edges that already
+     * exist. Putting them in here would rebuild `mapped`, and a new `mapped` is
+     * what triggers the re-fit — so turning "Show data links" on would throw
+     * away the pan and zoom the user had set, which is the opposite of what a
+     * view switch should do to a view.
+     */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, mode, layout, nodeDiagnostics, index]);
+  }, [graph, mode, layout, nodeDiagnostics, index, dataLinks]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<CodeFlowRFNode>(mapped.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CodeFlowRFEdge>(mapped.edges);
@@ -191,6 +212,31 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
       current.map((node) => (node.selected === (node.id === selectedNodeId) ? node : { ...node, selected: node.id === selectedNodeId })),
     );
   }, [selectedNodeId, setNodes]);
+
+  /**
+   * Selecting a step reveals *its* values, and only its values.
+   *
+   * This is the half of the data layer that earns its ink: the flow-wide view
+   * is a control spine, and the moment someone points at one step the diagram
+   * answers "where did this get its input, and who uses its output" with real
+   * lines. Applied here rather than in the mapping memo so a click costs one
+   * pass over the edges instead of a full re-map and a re-layout of 101 nodes —
+   * and so that switching the view never moves the view.
+   *
+   * `mapped` is a dependency because a fresh mapping resets the edges to
+   * whatever `toReactFlow` decided; this pass is what puts the current
+   * selection and the current toggle back on top of them.
+   */
+  useEffect(() => {
+    setEdges((current) =>
+      current.map((edge) => {
+        if (edge.data?.kind !== "data") return edge;
+        const state = dataEdgeState(edge, dataEdgeMode, selectedNodeId);
+        if (edge.hidden === state.hidden && edge.className === dataEdgeClassName(state.focused)) return edge;
+        return { ...edge, ...dataEdgeVisuals(edge.data.value, state) };
+      }),
+    );
+  }, [mapped, selectedNodeId, dataEdgeMode, setEdges]);
 
   /**
    * Bring the selected step into view — but only when it is not already there.

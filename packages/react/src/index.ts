@@ -58,6 +58,8 @@ export { useDiagnosticCounts } from "./diagnostics/use-diagnostic-counts.js";
 export type { DiagnosticsPanelProps } from "./diagnostics/DiagnosticsPanel.js";
 
 export { DisclosureToggle } from "./controls/DisclosureToggle.js";
+export { DataLinksToggle } from "./controls/DataLinksToggle.js";
+export type { DataLinksToggleProps } from "./controls/DataLinksToggle.js";
 export { ThemeToggle } from "./controls/ThemeToggle.js";
 export { applyTheme, useTheme } from "./controls/theme.js";
 export type { CodeFlowTheme } from "./controls/theme.js";
@@ -122,9 +124,21 @@ export type { GraphIndex, ContainerSlot } from "./graph/index.js";
 export {
   toReactFlow,
   slotHandleId,
+  dataEdgeState,
+  dataEdgeClassName,
+  dataEdgeVisuals,
   NODE_TYPE_LEAF,
   NODE_TYPE_CONTAINER,
 } from "./flow/to-react-flow.js";
+
+export {
+  buildDataLinks,
+  takesLines,
+  takesText,
+  EMPTY_DATA_LINKS,
+  MAX_TAKES_ROWS,
+} from "./flow/data-links.js";
+export type { DataLink, NodeDataLinks, DataEdgeMode } from "./flow/data-links.js";
 export type {
   CodeFlowNodeData,
   CodeFlowEdgeData,
@@ -140,14 +154,17 @@ export { runLayout } from "./layout/run.js";
 export type { LayoutResult } from "./layout/run.js";
 export { useElkLayout } from "./layout/use-layout.js";
 export type { UseElkLayoutOptions, UseElkLayoutState } from "./layout/use-layout.js";
-export { measureNode, CONTAINER_PADDING, CONTAINER_MIN_SIZE } from "./layout/measure.js";
+export { measureNode, isMinorNode, CONTAINER_PADDING, CONTAINER_MIN_SIZE } from "./layout/measure.js";
 export type { NodeSize, Measurer } from "./layout/measure.js";
 
 export {
   nodeIcon,
   nodeCaption,
   nodeKindLabel,
+  nodeTitle,
+  plainCondition,
   nodeSummaryRows,
+  takesRows,
   nodeSourceText,
   developerLines,
   rowsForMode,

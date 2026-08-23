@@ -10,8 +10,10 @@ import {
   developerLines,
   nodeCaption,
   nodeSummaryRows,
+  nodeTitle,
   type DisclosureMode,
 } from "../flow/summary.js";
+import type { NodeDataLinks } from "../flow/data-links.js";
 
 export interface NodeSize {
   width: number;
@@ -30,7 +32,20 @@ const MONO_CHAR = 6.6;
 /** Title row: 12px top padding + 24px chip + caption line + 8px bottom. */
 const HEADER_HEIGHT = 46;
 const HEADER_HEIGHT_COMPACT = 44;
+/**
+ * A `code` step at the beginner level is drawn as a chip, not as a card.
+ *
+ * Twenty-one "Custom Code" boxes on an 87-step flow is a fifth of the diagram
+ * spent on the part that is *not* a business step — the fold, the reshape, the
+ * bit of TypeScript between two tool calls. They still have to be there (hiding
+ * them would be the diagram lying about what runs), but they have no business
+ * being the same size and weight as "Send Slack message".
+ */
+const HEADER_HEIGHT_COMPACT_MINOR = 32;
+const MIN_WIDTH_MINOR = 132;
 const ROW_HEIGHT = 20;
+/** A provenance line sits under the settings and reads at a smaller size. */
+const TAKES_ROW_HEIGHT = 17;
 /** Horizontal chrome: 12px padding + 24px chip + 10px gap + 12px padding. */
 const PADDING_X = 58;
 const ROW_PADDING_X = 34;
@@ -56,14 +71,29 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-export function measureNode(node: WorkflowNode, mode: DisclosureMode): NodeSize {
+/** True for the "machinery" steps drawn as a quiet chip at the beginner level. */
+export function isMinorNode(node: WorkflowNode, mode: DisclosureMode): boolean {
+  return mode === "compact" && node.type === "code";
+}
+
+export function measureNode(
+  node: WorkflowNode,
+  mode: DisclosureMode,
+  links?: NodeDataLinks | null,
+): NodeSize {
   // The caption sits *under* the title now, so it competes for width instead of
   // adding to it; its face is smaller, hence the 0.55 factor.
   const caption = nodeCaption(node, mode);
-  const titleChars = Math.max(node.label.length, (caption?.length ?? 0) * 0.55);
+  const titleChars = Math.max(nodeTitle(node, mode).length, (caption?.length ?? 0) * 0.55);
   const headerWidth = PADDING_X + BADGE_ROOM + titleChars * CHAR;
 
   if (mode === "compact") {
+    if (isMinorNode(node, mode)) {
+      return {
+        width: clamp(30 + titleChars * 6.1, MIN_WIDTH_MINOR, 260),
+        height: HEADER_HEIGHT_COMPACT_MINOR,
+      };
+    }
     return { width: clamp(headerWidth, MIN_WIDTH, MAX_WIDTH), height: HEADER_HEIGHT_COMPACT };
   }
 
@@ -76,15 +106,25 @@ export function measureNode(node: WorkflowNode, mode: DisclosureMode): NodeSize 
     };
   }
 
-  const rows = nodeSummaryRows(node);
+  const rows = nodeSummaryRows(node, links);
   const rowWidth = rows.reduce(
-    (max, row) => Math.max(max, ROW_PADDING_X + (row.key.length + row.value.length + 3) * ROW_CHAR),
+    (max, row) =>
+      Math.max(
+        max,
+        ROW_PADDING_X +
+          (row.key.length + row.value.length + 3) * (row.kind === "takes" ? ROW_CHAR * 0.92 : ROW_CHAR),
+      ),
     0,
   );
+  const height = rows.reduce((total, row) => total + (row.kind === "takes" ? TAKES_ROW_HEIGHT : ROW_HEIGHT), 0);
   return {
     width: clamp(Math.max(headerWidth, rowWidth), MIN_WIDTH, MAX_WIDTH),
-    height: HEADER_HEIGHT + rows.length * ROW_HEIGHT + (rows.length > 0 ? PADDING_Y : 0),
+    height: HEADER_HEIGHT + height + (rows.length > 0 ? PADDING_Y : 0),
   };
 }
 
-export type Measurer = (node: WorkflowNode, mode: DisclosureMode) => NodeSize;
+export type Measurer = (
+  node: WorkflowNode,
+  mode: DisclosureMode,
+  links?: NodeDataLinks | null,
+) => NodeSize;

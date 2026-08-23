@@ -17,7 +17,8 @@ import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
 import { useOptionalCodeFlow } from "../context/hooks.js";
 import { cn } from "../ui/cn.js";
 import { NodeGlyph } from "./glyphs.js";
-import { developerLines, nodeCaption, nodeSummaryRows } from "./summary.js";
+import { developerLines, nodeCaption, nodeSummaryRows, nodeTitle } from "./summary.js";
+import { isMinorNode } from "../layout/measure.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
 
 /**
@@ -48,9 +49,51 @@ function Value({ text }: { text: string }): ReactNode {
   );
 }
 
+/**
+ * The chip form of the status badge, for a node drawn small.
+ *
+ * A "Note" on a code node is the commonest diagnostic in the product — every
+ * `code` step carries one — so on a chip it is dropped entirely: a mark that
+ * every single one of twenty-one boxes wears tells the reader nothing. A
+ * warning or an error still gets a dot, because those are precisely the boxes
+ * someone is looking for.
+ */
+function StatusDot({ diagnostics }: { diagnostics: Diagnostic[] }): ReactNode {
+  const severity = worstSeverity(diagnostics);
+  if (severity === null || !isWorthMarking(diagnostics)) return null;
+  const title = diagnostics.map((d) => `${d.severity}: ${d.message}`).join("\n");
+  return (
+    <span
+      title={title}
+      aria-label={`${String(diagnostics.length)} ${severity}`}
+      className={cn(
+        "size-1.5 shrink-0 rounded-full",
+        severity === "error" ? "bg-danger" : "bg-warn",
+      )}
+    />
+  );
+}
+
+/**
+ * True when a node's diagnostics are worth a mark on the canvas.
+ *
+ * An `info` note is not. The one every `code` node carries — "custom code is
+ * kept verbatim" — is a statement about the *kind* of step, already made by the
+ * step's dashed border and its "Custom code" caption, and printing NOTE on
+ * twenty-one boxes turns a status colour into wallpaper: after the third one
+ * nobody looks at the badge again, including on the node that has a real
+ * warning. Notes stay in the diagnostics panel and in the step's own details,
+ * where they are read on purpose rather than glanced past.
+ */
+function isWorthMarking(diagnostics: readonly Diagnostic[]): boolean {
+  return diagnostics.some(
+    (diagnostic) => diagnostic.severity !== "info" || diagnostic.code === "needs-configuration",
+  );
+}
+
 function StatusBadge({ diagnostics }: { diagnostics: Diagnostic[] }): ReactNode {
   const severity = worstSeverity(diagnostics);
-  if (severity === null) return null;
+  if (severity === null || !isWorthMarking(diagnostics)) return null;
 
   const needsSetup = diagnostics.some((diagnostic) => diagnostic.code === "needs-configuration");
   const label = needsSetup
@@ -163,19 +206,41 @@ function NodeHeader({
 }): ReactNode {
   const caption = nodeCaption(data.node, data.mode);
   const compact = data.mode === "compact";
+  const minor = isMinorNode(data.node, data.mode);
   const { badge } = useRunMark(data.node.id);
+  /*
+   * A decision's title is the `if` expression, which at the beginner level is
+   * the least welcoming thing on the canvas. `nodeTitle` renders the shapes it
+   * can translate exactly and leaves the rest alone — and either way the raw
+   * expression stays one hover away, because a friendlier label must never cost
+   * the reader the literal truth.
+   */
+  const title = nodeTitle(data.node, data.mode);
   return (
-    <header className={cn("flex items-center gap-2.5 px-3", compact ? "py-2.5" : "pb-2 pt-3")}>
+    <header
+      className={cn(
+        "flex items-center px-3",
+        minor ? "gap-1.5 px-2 py-1.5" : compact ? "gap-2.5 py-2.5" : "gap-2.5 pb-2 pt-3",
+      )}
+    >
       <span className="cf-node__chip">
-        <NodeGlyph node={data.node} className="size-3.5" />
+        <NodeGlyph node={data.node} className={minor ? "size-3" : "size-3.5"} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="truncate text-[13px] font-semibold leading-tight tracking-[-0.005em] text-ink" title={data.node.label}>
-          {data.node.label}
+        <span
+          className={cn(
+            "truncate leading-tight tracking-[-0.005em]",
+            minor ? "text-[11px] font-medium text-ink-dim" : "text-[13px] font-semibold text-ink",
+          )}
+          title={title === data.node.label ? data.node.label : `${data.node.label}\n(shown as: ${title})`}
+        >
+          {title}
         </span>
         {/* The status word rides with the caption rather than the title: a long
-            step name should run out of room before a badge does. */}
-        {caption === null && data.diagnostics.length === 0 && badge === null ? null : (
+            step name should run out of room before a badge does. On a chip
+            there is no second line to ride on, so the marks move up beside the
+            title instead (below). */}
+        {minor || (caption === null && !isWorthMarking(data.diagnostics) && badge === null) ? null : (
           <span className="flex min-w-0 items-center gap-1.5">
             {caption === null ? null : (
               <span
@@ -192,6 +257,12 @@ function NodeHeader({
           </span>
         )}
       </span>
+      {minor ? (
+        <>
+          <StatusDot diagnostics={data.diagnostics} />
+          {badge}
+        </>
+      ) : null}
       {before}
       {selected ? <DeleteButton node={data.node} /> : null}
     </header>
@@ -211,14 +282,26 @@ function NodeBody({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
     );
   }
 
-  const rows = nodeSummaryRows(data.node);
+  const rows = nodeSummaryRows(data.node, data.links);
   if (rows.length === 0) return null;
   return (
     <dl className="m-0 flex flex-col gap-0.5 px-3 pb-2.5">
       {rows.map((row) => (
-        <div className="flex items-baseline gap-2 text-[11.5px] leading-5" key={row.key}>
+        /*
+         * A `takes` row is the written form of a data edge the canvas is not
+         * drawing — "rows ← Read Text File". It reads a step quieter and a
+         * shade smaller than the step's own settings, because it is a fact
+         * about somewhere else.
+         */
+        <div
+          className={cn(
+            "flex items-baseline gap-2",
+            row.kind === "takes" ? "cf-node__takes text-[10.5px] leading-[17px]" : "text-[11.5px] leading-5",
+          )}
+          key={row.id ?? row.key}
+        >
           <dt className="shrink-0 text-ink-faint">{row.key}</dt>
-          <dd className="m-0 min-w-0 flex-1 truncate text-ink-dim">
+          <dd className="m-0 min-w-0 flex-1 truncate text-ink-dim" title={row.kind === "takes" ? row.value : undefined}>
             <Value text={row.value} />
           </dd>
         </div>
@@ -342,7 +425,14 @@ export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>):
   return (
     <div
       className={
-        ["cf-node", `cf-node--${type}`, `cf-node--${data.mode}`, selected === true ? "is-selected" : "", attention ? "is-attention" : ""]
+        [
+          "cf-node",
+          `cf-node--${type}`,
+          `cf-node--${data.mode}`,
+          isMinorNode(data.node, data.mode) ? "is-minor" : "",
+          selected === true ? "is-selected" : "",
+          attention ? "is-attention" : "",
+        ]
           .filter(Boolean)
           .join(" ") + changed + runClass
       }

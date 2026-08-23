@@ -249,12 +249,18 @@ describe("dirty shapes found in the real captures", () => {
     );
   });
 
-  it("a tool with no outputSchema returns Promise<void>, not Promise<unknown>", () => {
+  it("a tool with no outputSchema returns Promise<unknown> — `void` was a lie a live run exposed", () => {
+    // An MCP server that declares no output schema still answers with one. Typing
+    // that `void` made code either drop the value or print a wrong number for it
+    // (seen live: "Total cycles: 0" after three real polls). `unknown` states the
+    // truth — something comes back, and the caller has to establish what.
     const tool = toolNamed("playwright", "browser_close");
     expect(tool.outputSchema).toBeUndefined();
     const registry = createRegistry();
     registry.registerTool(mcpToolToDefinition(tool, { namespace: "pw" }));
-    expect(generateToolsDts(registry)).toContain("browserClose(input: Record<string, unknown>): Promise<void>;");
+    expect(generateToolsDts(registry)).toContain(
+      "browserClose(input: Record<string, unknown>): Promise<unknown>;",
+    );
   });
 
   it("an object schema with no properties widens to Record<string, unknown>", () => {
@@ -394,7 +400,7 @@ describe("dirty shapes the captures do not cover", () => {
 
   it("handles a tool with no inputSchema at all", () => {
     const dts = dtsFor([{ name: "ping" }]);
-    expect(dts).toContain("ping(input: Record<string, unknown>): Promise<void>;");
+    expect(dts).toContain("ping(input: Record<string, unknown>): Promise<unknown>;");
     expect(diagnose(dts)).toEqual([]);
   });
 

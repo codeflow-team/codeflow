@@ -14,6 +14,7 @@ import type { EdgeKind, WorkflowGraph } from "@codeflow/core";
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
 import { buildIndex, isSlotEdge, type GraphIndex } from "../graph/index.js";
 import type { DisclosureMode } from "../flow/summary.js";
+import { buildDataLinks, type NodeDataLinks } from "../flow/data-links.js";
 import { CONTAINER_MIN_SIZE, CONTAINER_PADDING, measureNode, type Measurer } from "./measure.js";
 
 export type LayoutDirection = "DOWN" | "RIGHT";
@@ -28,6 +29,12 @@ export interface ElkGraphOptions {
   edgeKinds?: readonly EdgeKind[];
   measure?: Measurer;
   index?: GraphIndex;
+  /**
+   * Per-node data provenance, because it is *shown on the card* now (the
+   * `Takes` rows) and therefore has to be part of the size ELK lays out. Built
+   * from the graph when omitted.
+   */
+  dataLinks?: Map<string, NodeDataLinks>;
 }
 
 export interface ElkGraphResult {
@@ -167,6 +174,9 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
   const measure = options.measure ?? measureNode;
   const kinds = options.edgeKinds ?? (["control"] as const);
   const index = options.index ?? buildIndex(graph);
+  const dataLinks = options.dataLinks ?? buildDataLinks(graph, index);
+  const sizeOf = (node: Parameters<Measurer>[0]): { width: number; height: number } =>
+    measure(node, options.mode, dataLinks.get(node.id) ?? null);
 
   const elkById = new Map<string, ElkNode>();
 
@@ -180,9 +190,9 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
               id: node.id,
               children: own,
               edges: [],
-              layoutOptions: containerOptions(direction, measure(node, options.mode), depth),
+              layoutOptions: containerOptions(direction, sizeOf(node), depth),
             }
-          : { id: node.id, ...measure(node, options.mode) };
+          : { id: node.id, ...sizeOf(node) };
       elkById.set(node.id, elk);
       return elk;
     });

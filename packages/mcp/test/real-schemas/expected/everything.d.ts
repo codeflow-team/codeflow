@@ -6,30 +6,30 @@
 export interface Tools {
   everything: {
     /** Echoes back the input string */
-    echo(input: { message: string }): Promise<void>;
+    echo(input: { message: string }): Promise<unknown>;
     /** Demonstrates how annotations can be used to provide metadata about content. */
-    getAnnotatedMessage(input: { messageType: "error" | "success" | "debug"; includeImage?: boolean }): Promise<void>;
+    getAnnotatedMessage(input: { messageType: "error" | "success" | "debug"; includeImage?: boolean }): Promise<unknown>;
     /** Returns all environment variables, helpful for debugging MCP server configuration */
-    getEnv(input: Record<string, unknown>): Promise<void>;
+    getEnv(input: Record<string, unknown>): Promise<unknown>;
     /** Returns up to ten resource links that reference different types of resources */
-    getResourceLinks(input: { count?: number }): Promise<void>;
+    getResourceLinks(input: { count?: number }): Promise<unknown>;
     /** Returns a resource reference that can be used by MCP clients */
-    getResourceReference(input: { resourceType?: "Text" | "Blob"; resourceId?: number }): Promise<void>;
+    getResourceReference(input: { resourceType?: "Text" | "Blob"; resourceId?: number }): Promise<unknown>;
     /** Returns structured content along with an output schema for client data validation */
     getStructuredContent(input: { location: "New York" | "Chicago" | "Los Angeles" }): Promise<{ temperature: number; conditions: string; humidity: number }>;
     /** Returns the sum of two numbers */
-    getSum(input: { a: number; b: number }): Promise<void>;
+    getSum(input: { a: number; b: number }): Promise<unknown>;
     /** Returns a tiny MCP logo image. */
-    getTinyImage(input: Record<string, unknown>): Promise<void>;
+    getTinyImage(input: Record<string, unknown>): Promise<unknown>;
     /** Compresses a single file using gzip compression. Depending upon the selected output type, returns either the compressed data as a gzipped resource or a resource link, allowing it to be downloaded in a subsequent request during the current session. */
-    gzipFileAsResource(input: { name?: string; data?: string; outputType?: "resourceLink" | "resource" }): Promise<void>;
+    gzipFileAsResource(input: { name?: string; data?: string; outputType?: "resourceLink" | "resource" }): Promise<unknown>;
     /** Simulates a deep research operation that gathers, analyzes, and synthesizes information. Demonstrates MCP task-based operations with progress through multiple stages. If 'ambiguous' is true and client supports elicitation, sends an elicitation request for clarification. */
-    simulateResearchQuery(input: { topic: string; ambiguous?: boolean }): Promise<void>;
+    simulateResearchQuery(input: { topic: string; ambiguous?: boolean }): Promise<unknown>;
     /** Toggles simulated, random-leveled logging on or off. */
-    toggleSimulatedLogging(input: Record<string, unknown>): Promise<void>;
+    toggleSimulatedLogging(input: Record<string, unknown>): Promise<unknown>;
     /** Toggles simulated resource subscription updates on or off. */
-    toggleSubscriberUpdates(input: Record<string, unknown>): Promise<void>;
+    toggleSubscriberUpdates(input: Record<string, unknown>): Promise<unknown>;
     /** Demonstrates a long running operation with progress updates. */
-    triggerLongRunningOperation(input: { duration?: number; steps?: number }): Promise<void>;
+    triggerLongRunningOperation(input: { duration?: number; steps?: number }): Promise<unknown>;
   };
 }

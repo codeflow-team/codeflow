@@ -17,10 +17,12 @@ import {
   NodeGlyph,
   cn,
   nodeKindLabel,
+  nodeTitle,
   nodeVisual,
   orderedNodes,
   useCodeFlow,
   worstSeverity,
+  type DisclosureMode,
 } from "@codeflow/react";
 import type { WorkflowNode } from "@codeflow/core";
 import { ListTree, Search, X } from "lucide-react";
@@ -31,7 +33,7 @@ export interface OutlinePanelProps {
 }
 
 export function OutlinePanel(props: OutlinePanelProps): ReactNode {
-  const { graph, index, selectedNodeId, selectNode, nodeDiagnostics } = useCodeFlow();
+  const { graph, index, selectedNodeId, selectNode, nodeDiagnostics, mode } = useCodeFlow();
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -59,6 +61,10 @@ export function OutlinePanel(props: OutlinePanelProps): ReactNode {
     : rows.filter(
         (row) =>
           row.node.label.toLowerCase().includes(needle) ||
+          // The list reads a decision the way the canvas draws it, so the filter
+          // has to find it by that wording too — otherwise typing what is on
+          // screen returns nothing.
+          nodeTitle(row.node, mode).toLowerCase().includes(needle) ||
           nodeKindLabel(row.node).toLowerCase().includes(needle),
       );
 
@@ -108,6 +114,7 @@ export function OutlinePanel(props: OutlinePanelProps): ReactNode {
               slot={row.slot}
               branch={row.branch}
               selected={row.node.id === selectedNodeId}
+              mode={mode}
               severity={worstSeverity(nodeDiagnostics.get(row.node.id) ?? [])}
               onSelect={() => { selectNode(row.node.id); }}
             />
@@ -124,6 +131,7 @@ function OutlineRow(props: {
   slot: string | null;
   branch: string | null;
   selected: boolean;
+  mode: DisclosureMode;
   severity: "error" | "warning" | "info" | null;
   onSelect: () => void;
 }): ReactNode {
@@ -146,19 +154,29 @@ function OutlineRow(props: {
         <NodeGlyph node={props.node} />
       </span>
       <span className="min-w-0 flex-1">
-        <span className={cn("block truncate text-[12px] leading-tight", props.selected ? "font-medium text-ink" : "text-ink")}>
-          {props.node.label}
+        {/* The same wording the canvas uses, so the list and the diagram never
+            name the same step two different ways; the literal expression stays
+            in the tooltip. */}
+        <span
+          title={props.node.label}
+          className={cn("block truncate text-[12px] leading-tight", props.selected ? "font-medium text-ink" : "text-ink")}
+        >
+          {nodeTitle(props.node, props.mode)}
         </span>
         <span className="block truncate text-[10.5px] leading-tight text-ink-faint">
           {nodeKindLabel(props.node)}
           {tag === null ? "" : ` · ${tag}`}
         </span>
       </span>
-      {props.severity === null ? null : (
+      {/* `info` deliberately gets no dot: every `code` step carries the same
+          note ("kept verbatim"), and twenty-one identical dots down one list
+          stop being a signal and start being a texture — including on the row
+          that has a real warning. Notes live in the diagnostics panel. */}
+      {props.severity === null || props.severity === "info" ? null : (
         <span
           className={cn(
             "size-1.5 shrink-0 rounded-full",
-            props.severity === "error" ? "bg-danger" : props.severity === "warning" ? "bg-warn" : "bg-info",
+            props.severity === "error" ? "bg-danger" : "bg-warn",
           )}
           title={`has a ${props.severity}`}
         />

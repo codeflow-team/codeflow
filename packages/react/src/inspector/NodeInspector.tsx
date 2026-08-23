@@ -33,6 +33,7 @@ import {
 import type { WorkflowNode } from "@codeflow/core";
 import { useCodeFlow } from "../context/hooks.js";
 import { nodeCaption } from "../flow/summary.js";
+import type { DataLink, NodeDataLinks } from "../flow/data-links.js";
 import { NodeGlyph } from "../flow/glyphs.js";
 import { nodeVisual } from "../flow/visual.js";
 import { diagnosticHeadline, errorHeadline, splitSpecRefs } from "../copy.js";
@@ -93,6 +94,66 @@ function controlId(nodeId: string, name: string): string {
   return `cf-${nodeId}-${name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
+/**
+ * Every value this step takes and every value it hands on — the complete list.
+ *
+ * The canvas draws the data layer only for the selected step, and the node card
+ * summarises it in three lines with a "+4 more". This section is where "more"
+ * lives, and it is what makes the whole arrangement honest: no data edge is ever
+ * unreachable, it is one selection away from being written out in full, with the
+ * other step's *name* and a click that takes you there.
+ */
+function DataSection({
+  links,
+  onGo,
+}: {
+  links: NodeDataLinks | null;
+  onGo: (nodeId: string) => void;
+}): ReactNode {
+  if (links === null || (links.incoming.length === 0 && links.outgoing.length === 0)) return null;
+
+  const list = (title: string, items: readonly DataLink[], arrow: string): ReactNode =>
+    items.length === 0 ? null : (
+      <div className="flex flex-col gap-1">
+        <p className="m-0 text-[11px] font-medium text-ink-faint">{title}</p>
+        <ul className="m-0 flex list-none flex-col gap-1 p-0">
+          {items.map((link) => (
+            <li key={link.edgeId}>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full cursor-pointer items-baseline gap-1.5 rounded-md border-0 bg-transparent px-1.5 py-1 text-left",
+                  "text-[11.5px] text-ink-dim outline-none transition-colors hover:bg-surface-2 hover:text-ink",
+                  "focus-visible:ring-2 focus-visible:ring-ring/70",
+                )}
+                onClick={() => { onGo(link.nodeId); }}
+              >
+                {link.value.length === 0 ? null : (
+                  <code className="shrink-0 rounded bg-accent-soft px-1 font-mono text-[10.5px] text-accent">
+                    {link.value}
+                  </code>
+                )}
+                <span className="shrink-0 text-ink-faint">{arrow}</span>
+                <span className="min-w-0 flex-1 truncate">{link.nodeLabel}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+
+  return (
+    <Section
+      title="Data"
+      description="Values this step receives and passes on. Pick one to jump to that step."
+      testId="inspector-data"
+    >
+      {list("Takes", links.incoming, "←")}
+      {list("Gives to", links.outgoing, "→")}
+    </Section>
+  );
+}
+
 /** A titled block in the panel body. */
 function Section({
   title,
@@ -138,6 +199,8 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
     changedNodeIds,
     requestReanalyze,
     canReanalyze,
+    dataLinks,
+    selectNode,
   } = useCodeFlow();
 
   const nodeId = props.nodeId === undefined ? selectedNodeId : props.nodeId;
@@ -528,6 +591,8 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
         {/* -------------------------------------------------------------- */}
         {/* what this step is running (developer level)                      */}
         {/* -------------------------------------------------------------- */}
+        <DataSection links={dataLinks.get(node.id) ?? null} onGo={selectNode} />
+
         {model.code !== null ? (
           <Section title="Code">
             <pre className="cf-scroll m-0 overflow-x-auto rounded-lg border border-line bg-surface-2 p-3 font-mono text-[11.5px] leading-[1.6] text-ink">

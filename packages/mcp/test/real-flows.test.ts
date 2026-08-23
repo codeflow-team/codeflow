@@ -221,8 +221,9 @@ describe("patching a field nested two levels inside a real schema", () => {
 
 describe("a real tool with no outputSchema", () => {
   it("is a sequential step with no data edge leaving it", async () => {
-    // playwright/browser_close publishes no outputSchema — the signature returns
-    // Promise<void>, so nothing downstream can consume it.
+    // playwright/browser_close publishes no outputSchema, so the graph gives the
+    // node no output port and nothing downstream binds to it. (The signature says
+    // Promise<unknown>: a value may well come back, we were simply not told what.)
     const session = createCodeFlow({ registry: realRegistry(["playwright"]) });
     const graph = await session.analyze(
       flowSource(`  await tools.playwright.browserNavigate({ url: input.root });

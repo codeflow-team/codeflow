@@ -71,18 +71,83 @@ describe("toReactFlow — nodes", () => {
 describe("toReactFlow — edges", () => {
   it("keeps every graph edge, labelled and typed by kind", () => {
     const graph = canonicalGraph();
-    const { edges } = toReactFlow(graph, { mode: "expanded" });
+    const { edges } = toReactFlow(graph, { mode: "expanded", dataEdges: "all" });
     expect(edges).toHaveLength(graph.edges.length);
 
     const trueEdge = edges.find((e) => e.id === "n_condition->n_slack:control:true");
     expect(trueEdge?.label).toBe("true");
     expect(trueEdge?.className).toContain("cf-rf-edge--true");
     expect(trueEdge?.animated).toBe(false);
+    expect(trueEdge?.hidden).toBeFalsy();
 
+    /*
+     * The value a data edge carries is kept on the edge; it is *printed* only
+     * while the edge is focused. Off-focus there can be 172 of these on one
+     * canvas, and 172 value names written across the diagram is a second
+     * thicket on top of the one the hidden edges just cleared.
+     */
     const dataEdge = edges.find((e) => e.id === "n_getFiles->n_condition:data:files");
-    expect(dataEdge?.label).toBe("files");
-    expect(dataEdge?.animated).toBe(true);
+    expect(dataEdge?.data?.value).toBe("files");
+    expect(dataEdge?.label).toBeUndefined();
+    expect(dataEdge?.animated).toBe(false);
     expect(dataEdge?.data?.kind).toBe("data");
+  });
+
+  /*
+   * The decluttering rule itself — data edges are hidden until they are asked
+   * for. This is the single change that turns 220 lines into 89 on the flows
+   * this product exists for.
+   */
+  describe("the data layer", () => {
+    const dataIds = (edges: { id: string; hidden?: boolean }[]): string[] =>
+      edges.filter((e) => e.id.includes(":data:") && e.hidden !== true).map((e) => e.id);
+
+    it("draws no data edge at all in the `none` view", () => {
+      const { edges } = toReactFlow(canonicalGraph(), { mode: "compact", dataEdges: "none" });
+      expect(dataIds(edges)).toHaveLength(0);
+      // Hidden, never dropped: the edge is still in the graph the canvas holds.
+      expect(edges.filter((e) => e.id.includes(":data:")).length).toBeGreaterThan(0);
+    });
+
+    it("draws only the selected step's data edges in the `selected` view", () => {
+      const { edges } = toReactFlow(canonicalGraph(), {
+        mode: "expanded",
+        dataEdges: "selected",
+        selectedNodeId: "n_condition",
+      });
+      const shown = dataIds(edges);
+      expect(shown).toContain("n_getFiles->n_condition:data:files");
+      expect(shown.every((id) => id.includes("n_condition"))).toBe(true);
+      for (const edge of edges) {
+        if (!edge.id.includes(":data:")) continue;
+        expect(edge.className?.includes("cf-rf-edge--data-focus")).toBe(edge.hidden !== true);
+      }
+    });
+
+    it("draws every data edge in the `all` view, and marks the selected one", () => {
+      const graph = canonicalGraph();
+      const { edges } = toReactFlow(graph, {
+        mode: "expanded",
+        dataEdges: "all",
+        selectedNodeId: "n_condition",
+      });
+      const all = graph.edges.filter((e) => e.kind === "data").map((e) => e.id);
+      expect(dataIds(edges).sort()).toEqual([...all].sort());
+      const focused = edges.filter((e) => e.className?.includes("cf-rf-edge--data-focus"));
+      expect(focused.length).toBeGreaterThan(0);
+      expect(focused.every((e) => e.source === "n_condition" || e.target === "n_condition")).toBe(true);
+    });
+
+    it("hands every hidden edge to the node it arrives at, in words", () => {
+      const graph = canonicalGraph();
+      const { nodes } = toReactFlow(graph, { mode: "expanded", dataEdges: "none" });
+      const condition = nodes.find((n) => n.id === "n_condition");
+      // The line is gone from the canvas; the fact it carried is on the card,
+      // naming the *step* rather than its id.
+      expect(condition?.data.links.incoming.map((link) => link.value)).toContain("files");
+      expect(condition?.data.links.incoming.map((link) => link.nodeLabel)).not.toContain("n_getFiles");
+      expect(condition?.data.links.incoming.some((link) => link.nodeId === "n_getFiles")).toBe(true);
+    });
   });
 
   it("attaches container→child control edges to the matching slot handle", () => {

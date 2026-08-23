@@ -230,19 +230,69 @@
   }
   .cf-node[data-node-type="output"]::before { display: none; }
 
-  /* 07 §5 — `code` and `unknown` must be unmistakably "code only". */
+  /*
+   * 07 §5 — `code` and `unknown` must be unmistakably "code only".
+   *
+   * They still are: a dashed border, their own hue and the caption "Custom
+   * code" say it three times over. What has gone is the *loudness*. These flows
+   * carry twenty-one `code` steps each, and a hard 7px diagonal hatch on a fifth
+   * of the diagram made the machinery the busiest thing on screen — the
+   * opposite of what it deserves, since a fold or a reshape is not a business
+   * step. It is a recessed surface now: no hatch, a hairline dashed border, and
+   * the fill pushed one step back from the cards that carry the actual work.
+   */
   .cf-node[data-node-type="code"] {
     --node: var(--cf-code);
-    border: 1px dashed color-mix(in srgb, var(--node) 55%, var(--cf-border));
-    background:
-      repeating-linear-gradient(
-        135deg,
-        transparent,
-        transparent 7px,
-        color-mix(in srgb, var(--node) 7%, transparent) 7px,
-        color-mix(in srgb, var(--node) 7%, transparent) 14px
-      ),
-      var(--cf-surface);
+    border: 1px dashed color-mix(in srgb, var(--node) 26%, var(--cf-border));
+    background: color-mix(in srgb, var(--cf-surface-2) 70%, var(--cf-surface));
+    box-shadow: none;
+  }
+  .cf-node[data-node-type="code"]::before { display: none; }
+
+  /*
+   * The chip form — a `code` step at the beginner level.
+   *
+   * Same shape, a third of the weight: no accent strip, no hatch, a smaller
+   * glyph in a plain well, and a title in the dim ink the captions use. It is
+   * still a real node — selectable, deletable, and it lights up in a run — it
+   * simply stops competing with "Send Slack message" for the eye.
+   */
+  .cf-node.is-minor {
+    background: var(--cf-surface-2);
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--node) 22%, var(--cf-border));
+    box-shadow: none;
+  }
+  .cf-node.is-minor::before { display: none; }
+  .cf-node.is-minor .cf-node__chip {
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: color-mix(in srgb, var(--node) 78%, var(--cf-text-faint));
+  }
+  .cf-node.is-minor .cf-run-badge {
+    height: 14px;
+    padding-inline: 0.25rem;
+    font-size: 8.5px;
+  }
+  .cf-node.is-minor.is-selected {
+    background: var(--cf-surface);
+    border-style: solid;
+  }
+
+  /*
+   * "Takes  rows ← Read Text File" — a data edge the canvas is not drawing.
+   *
+   * It is deliberately the quietest text on the card: the loudest thing must
+   * stay the step's own name, and this is a fact about a *different* step.
+   */
+  .cf-node__takes dt,
+  .cf-node__takes dd {
+    color: var(--cf-text-faint);
+  }
+  .cf-node__takes dd {
+    font-variant-numeric: tabular-nums;
   }
   .cf-node[data-node-type="unknown"] {
     --node: var(--cf-unknown);
@@ -279,10 +329,26 @@
     stroke: var(--cf-border-strong);
     stroke-width: 1.75;
   }
+  /*
+   * The data layer, drawn as annotation on the control spine.
+   *
+   * Two states, and the gap between them is the whole point. Off-focus (the
+   * "Show data links" view) it is barely there — a hairline dotted at 22%
+   * opacity, no marching animation — because a hundred and seventy of these
+   * lines must read as texture behind the flow, never as the flow. Focused (the
+   * selected step's own values) it comes forward in the accent colour, thicker
+   * than a control edge, and moves: at that moment there are four of them and
+   * they are what the user asked to see.
+   */
   .cf-rf-edge--data .react-flow__edge-path {
-    stroke: color-mix(in srgb, var(--cf-accent) 70%, transparent);
-    stroke-width: 1.25;
-    stroke-dasharray: 3 4;
+    stroke: color-mix(in srgb, var(--cf-accent) 26%, transparent);
+    stroke-width: 1;
+    stroke-dasharray: 1.5 5;
+  }
+  .cf-rf-edge--data-focus .react-flow__edge-path {
+    stroke: var(--cf-accent);
+    stroke-width: 2;
+    stroke-dasharray: 5 3;
   }
   .cf-rf-edge--true .react-flow__edge-path { stroke: var(--cf-trigger); }
   .cf-rf-edge--false .react-flow__edge-path { stroke: var(--cf-text-faint); }

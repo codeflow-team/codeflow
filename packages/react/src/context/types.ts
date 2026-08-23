@@ -21,6 +21,7 @@ import type {
 } from "@codeflow/core";
 import type { GraphIndex } from "../graph/index.js";
 import type { DisclosureMode } from "../flow/summary.js";
+import type { DataEdgeMode, NodeDataLinks } from "../flow/data-links.js";
 
 /** Why an edit was refused — `code` is the patch engine's, not a UI invention. */
 export interface PatchFailure {
@@ -105,6 +106,28 @@ export interface CodeFlowContextValue {
 
   mode: DisclosureMode;
   setMode: (mode: DisclosureMode) => void;
+
+  /* --- the data layer ---------------------------------------------------- */
+
+  /**
+   * "Show data links" — the power-user override that draws every data edge.
+   *
+   * Off by default, and deliberately so. Control flow is what a flow diagram is
+   * *for*; where each value travels is detail that only matters while one step
+   * is being examined. On the large examples the data layer outnumbers the
+   * control layer 3:2 and two thirds of it crosses container frames, which is
+   * how a readable diagram turns into a thicket of dashed lines.
+   */
+  showDataLinks: boolean;
+  setShowDataLinks: (show: boolean) => void;
+  /**
+   * What the canvas actually draws, resolved from `mode` + `showDataLinks`:
+   * `none` at the beginner level, `selected` once settings are on show, `all`
+   * whenever the toggle is on.
+   */
+  dataEdgeMode: DataEdgeMode;
+  /** Every step's data provenance, in words — see `flow/data-links.ts`. */
+  dataLinks: Map<string, NodeDataLinks>;
 
   /** Source range the code panel should reveal/highlight; canvas → code panel. */
   focusedRange: SourceMapping | null;

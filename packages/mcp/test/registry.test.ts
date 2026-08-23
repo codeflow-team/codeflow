@@ -77,9 +77,9 @@ describe("MCP → registry → codegen", () => {
     expect(dts).toContain(
       "getNewPrs(input: { repo: string; since?: string }): Promise<{ number: number; title: string; author?: string }[]>;",
     );
-    // No output schema declared → Promise<void>, exactly like a local tool.
+    // No output schema declared → Promise<unknown>, exactly like a local tool.
     expect(dts).toContain(
-      "sendMessage(input: { channel: string; message: string }): Promise<void>;",
+      "sendMessage(input: { channel: string; message: string }): Promise<unknown>;",
     );
     // The description is the JSDoc the AI reads (10 §1).
     expect(dts).toContain("/** Get new pull requests for a repository */");

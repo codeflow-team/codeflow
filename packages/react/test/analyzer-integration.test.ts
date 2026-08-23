@@ -78,11 +78,31 @@ describe("canonical flow (07 §6) through the UI adapters", () => {
 
   it("labels the branch and the data edges the way the spec draws them", async () => {
     const graph = await session().analyze(SOURCE);
-    const { edges } = toReactFlow(graph, { mode: "expanded" });
+    // `all` is the view that draws the whole data layer; the branch labels are
+    // there in every view because they are the only place the diagram says
+    // which way a decision goes.
+    const { edges } = toReactFlow(graph, { mode: "expanded", dataEdges: "all" });
     const labels = edges.map((e) => e.label).filter((l) => l !== undefined);
     expect(labels).toContain("true");
     expect(labels).toContain("body");
-    expect(labels).toContain("prs");
-    expect(labels).toContain("input.repository");
+
+    /*
+     * A data edge's value name is carried on the edge whether or not it is
+     * *printed* on the canvas: printing 131 of them was the clutter this view
+     * was changed to fix, so the name rides in `data.value` and is promoted to
+     * a visible label only while the edge is focused. Nothing is lost — the
+     * node card and the inspector both name it in words.
+     */
+    const values = edges.map((e) => e.data?.value).filter((v) => v !== undefined);
+    expect(values).toContain("prs");
+    expect(values).toContain("input.repository");
+
+    const dataEdge = edges.find((e) => e.data?.value === "prs");
+    const focused = toReactFlow(graph, {
+      mode: "expanded",
+      dataEdges: "all",
+      selectedNodeId: dataEdge!.source,
+    }).edges.find((e) => e.id === dataEdge!.id);
+    expect(focused?.label).toBe("prs");
   });
 });

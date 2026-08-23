@@ -67,6 +67,18 @@ export interface NodeInspectorProps {
   theme?: "light" | "dark";
   /** Renders a close affordance — set when the panel is shown as an overlay. */
   onClose?: () => void;
+  /**
+   * Host-owned content for the selected node, rendered above this panel's own
+   * sections.
+   *
+   * Some of what a step *is* lives outside the library. The clearest case is the
+   * trigger: 01 §1 makes the flow's first parameter type the trigger, but the
+   * payload a run actually starts from belongs to whoever runs it, and the
+   * library does not run anything (00 §5). Rather than teach the inspector about
+   * runners, it lends the slot: return `null` for nodes you have nothing to add
+   * to, and the panel is exactly as it was.
+   */
+  renderExtra?: (node: WorkflowNode) => ReactNode;
 }
 
 interface DraftState {
@@ -419,6 +431,11 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
         {/* what the last run said about this step                          */}
         {/* -------------------------------------------------------------- */}
         <RunSection nodeId={node.id} />
+
+        {/* -------------------------------------------------------------- */}
+        {/* whatever the host knows about this step that the library does not */}
+        {/* -------------------------------------------------------------- */}
+        {props.renderExtra?.(node)}
 
         {/* -------------------------------------------------------------- */}
         {/* what the flow says about this step                              */}

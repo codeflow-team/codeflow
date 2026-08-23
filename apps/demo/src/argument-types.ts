@@ -146,6 +146,39 @@ function wanted(label: string): string {
 }
 
 /**
+ * The same vocabulary, for anything else in this app that has to tell someone
+ * their value is the wrong kind.
+ *
+ * The trigger-input panel makes exactly this complaint about exactly this
+ * mistake — a piece of text where the type says number — and two different
+ * phrasings for one error would read as two different errors. `wanted` takes a
+ * schema/type name; `describeValue` takes a value that already exists, which is
+ * the one thing this module never had (it judges source text, not runtime
+ * values).
+ */
+export function describeExpectedType(name: string): string {
+  return wanted(name);
+}
+
+export function describeValue(value: unknown): string {
+  if (value === null) return "null";
+  if (value === undefined) return "nothing";
+  if (Array.isArray(value)) return "a list";
+  switch (typeof value) {
+    case "string":
+      return "a piece of text";
+    case "number":
+      return Number.isFinite(value) ? "a number" : "not a number";
+    case "boolean":
+      return "true/false";
+    case "object":
+      return "an object";
+    default:
+      return `a ${typeof value}`;
+  }
+}
+
+/**
  * Every literal argument in `graph` whose kind contradicts its schema.
  *
  * Pure, synchronous and cheap — it reads `node.data.arguments`, which the

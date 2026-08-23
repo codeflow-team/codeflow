@@ -28,6 +28,7 @@
 import { join } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { describeTriggerInput } from "./input-shape.ts";
 import { RUNNABLE_SERVERS } from "./mcp-servers.ts";
 import {
   DEFAULT_TIMEOUT_MS,
@@ -79,6 +80,43 @@ export function runPlugin(options: RunPluginOptions): {
               "Demo runner: a worker thread on the dev server, killable and credential-free. " +
               "Not a sandbox — a real deployment must isolate execution (09 §1).",
           }),
+        );
+      });
+
+      /*
+       * What the trigger takes, and what a run would start from.
+       *
+       * The synthesis rules and the type reader both need the TypeScript
+       * parser and both belong to `input.ts`'s story, so the browser asks
+       * rather than keeping a second copy of either. Registered before
+       * `/api/run` because connect matches by prefix.
+       */
+      server.middlewares.use("/api/run/input", (req, res) => {
+        res.setHeader("Content-Type", "application/json");
+        if (req.method !== "POST") {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: "POST only" }));
+          return;
+        }
+        void readBody(req).then(
+          (raw) => {
+            try {
+              const body = JSON.parse(raw) as { source?: unknown };
+              if (typeof body.source !== "string") {
+                res.statusCode = 400;
+                res.end(JSON.stringify({ error: "`source` is required." }));
+                return;
+              }
+              res.end(JSON.stringify(describeTriggerInput(body.source)));
+            } catch (cause) {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }));
+            }
+          },
+          (cause: unknown) => {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: cause instanceof Error ? cause.message : String(cause) }));
+          },
         );
       });
 

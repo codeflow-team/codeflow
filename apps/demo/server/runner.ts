@@ -35,8 +35,9 @@ import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 import { instrument, type ProbeRange, type SkippedProbe } from "./instrument.ts";
-import { synthesizeInput } from "./input.ts";
-import { planFor, stubReason, type McpServerPlan } from "./mcp-servers.ts";
+import { resolveWorkspaceToken, synthesizeInput } from "./input.ts";
+import { planFor, stubReason, userPlan, type McpServerPlan, type UserServerSpec } from "./mcp-servers.ts";
+import { stdioAllowed, stdioDisabledReason } from "./mcp-discover.ts";
 import type { ToolBinding, WorkerJob } from "./worker.ts";
 
 export const DEFAULT_TIMEOUT_MS = 120_000;
@@ -55,6 +56,13 @@ export interface RunRequest {
   timeoutMs?: number;
   /** Leave the scratch directory behind so its files can be shown. */
   keepScratch?: boolean;
+  /**
+   * Servers the *user* configured in the MCP manager, keyed by nothing — the
+   * namespace is on each spec. Consulted only for a namespace the built-in
+   * allowlist does not claim, so adding a server can never redirect `fs` or
+   * `memory` somewhere else.
+   */
+  servers?: UserServerSpec[];
 }
 
 export interface BindingReport {
@@ -268,12 +276,26 @@ export function startRun(request: RunRequest, workerEntry: string, emit: (frame:
     const built = writeModule(scratch, request.source, ranges, functions);
 
     const namespaces = [...new Set(tools.map((tool) => tool.name.split(".")[0]).filter((ns) => ns.length > 0))];
+    const userServers = new Map((request.servers ?? []).map((spec) => [spec.namespace, spec]));
     const servers: Record<string, McpServerPlan> = {};
     const bindings: BindingReport[] = namespaces.map((namespace) => {
+      // The allowlist wins. A namespace it claims is a namespace whose safety
+      // this file vouches for, and a user-added server must not be able to take
+      // `fs` over and be started with the same "harmless on a laptop" badge.
       const plan = planFor(namespace);
-      if (plan === undefined) return { namespace, mode: "stub", reason: stubReason(namespace) };
-      servers[namespace] = plan;
-      return { namespace, mode: "mcp", server: plan.server, safety: plan.safety };
+      if (plan !== undefined) {
+        servers[namespace] = plan;
+        return { namespace, mode: "mcp", server: plan.server, safety: plan.safety };
+      }
+
+      const spec = userServers.get(namespace);
+      if (spec === undefined) return { namespace, mode: "stub", reason: stubReason(namespace) };
+      if (spec.transport === "stdio" && !stdioAllowed()) {
+        return { namespace, mode: "stub", reason: stdioDisabledReason() };
+      }
+      const user = userPlan(spec);
+      servers[namespace] = user;
+      return { namespace, mode: "mcp", server: user.server, safety: user.safety };
     });
 
     emit({
@@ -290,7 +312,14 @@ export function startRun(request: RunRequest, workerEntry: string, emit: (frame:
       note: "Demo runner — a worker thread on the dev server, not a production sandbox (09 §1).",
     });
 
-    const input = request.input ?? synthesizeInput(request.source, { scratch: workspace });
+    // A caller-supplied input was written before this run existed, so it can
+    // only name the scratch directory by the token (see `WORKSPACE_TOKEN`).
+    // Expanding it here is what makes an input the browser remembered from
+    // yesterday point at today's folder instead of a deleted one.
+    const input =
+      request.input === undefined
+        ? synthesizeInput(request.source, { scratch: workspace })
+        : resolveWorkspaceToken(request.input, workspace);
     ensureInputFiles(input, workspace);
 
     const job: WorkerJob = {

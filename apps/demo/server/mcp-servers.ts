@@ -40,16 +40,77 @@ export interface McpServerPlan {
   namespace: string;
   /** Human-facing server name, shown on the badge. */
   server: string;
-  command: string;
+  /**
+   * How to reach it. `stdio` (the default, and what every built-in uses) spawns
+   * `command`; `http` / `sse` connect to `url`. The remote forms only ever come
+   * from a server the *user* added in the MCP manager — see `userPlan()`.
+   */
+  transport?: "stdio" | "http" | "sse";
+  command?: string;
   /** `{{scratch}}` is replaced with the run's scratch directory. */
-  args: string[];
+  args?: string[];
   env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
   /** Prefix every tool of this server repeats, stripped when naming methods. */
   strip: string | null;
   /** Exceptions to the slugging, keyed by MCP tool name. */
   rename?: Record<string, string>;
+  /**
+   * `tools.<ns>.<method>` → the MCP tool name, when it is already known.
+   *
+   * The built-ins reverse their own slugging with `strip`/`rename`, which works
+   * because the registries the example flows were written against were
+   * *generated* with those same rules. A server the user added has no such
+   * history: the only authority on which MCP tool `tools.fs.readFile` means is
+   * the discovery that produced the name, so it is sent along verbatim.
+   */
+  methods?: Record<string, string>;
+  /** True for anything that came from the browser rather than this file. */
+  userAdded?: boolean;
   /** Why a reader should believe this is safe to start. */
   safety: string;
+}
+
+/** One server as the browser describes it in a run request. */
+export interface UserServerSpec {
+  namespace: string;
+  server: string;
+  transport: "stdio" | "http" | "sse";
+  command?: string;
+  args?: string[];
+  url?: string;
+  headers?: Record<string, string>;
+  methods?: Record<string, string>;
+}
+
+/**
+ * Turn a user-configured server into a run plan.
+ *
+ * Deliberately *not* merged into `RUNNABLE_SERVERS`: the allowlist above is a
+ * statement about what is safe to start unattended, and a command someone typed
+ * into a web page is not that. It runs — this is a dev server on a developer's
+ * machine and refusing would make the feature pointless — but it is marked
+ * `userAdded`, the run plan says so on the badge, and the whole path is gated
+ * off in a public build (`server/mcp-discover.ts`, `stdioAllowed`).
+ */
+export function userPlan(spec: UserServerSpec): McpServerPlan {
+  return {
+    namespace: spec.namespace,
+    server: spec.server,
+    transport: spec.transport,
+    ...(spec.command === undefined ? {} : { command: spec.command }),
+    ...(spec.args === undefined ? {} : { args: spec.args }),
+    ...(spec.url === undefined ? {} : { url: spec.url }),
+    ...(spec.headers === undefined ? {} : { headers: spec.headers }),
+    ...(spec.methods === undefined ? {} : { methods: spec.methods }),
+    strip: null,
+    userAdded: true,
+    safety:
+      spec.transport === "stdio"
+        ? "You added this one. It runs as a child process of the dev server, with your permissions — the demo runner is not a sandbox (09 §1)."
+        : "You added this one. The worker talks to it over the network; nothing is started on this machine.",
+  };
 }
 
 export const RUNNABLE_SERVERS: McpServerPlan[] = [

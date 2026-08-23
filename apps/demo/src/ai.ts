@@ -1,11 +1,26 @@
 /**
- * Talking to the model, from the browser, without a key in the browser.
+ * Talking to the model, from the browser.
  *
- * Every call goes to `/api/ai`, a dev-server middleware (see `vite.config.ts`)
- * that holds `OPENROUTER_API_KEY` in the Node process and adds the model and the
- * token budget. This module owns nothing but the message shape, the fetch, and
- * the two extractors that turn a chat answer back into something typed.
+ * There are two ways the key can be held, and the panel must never be vague
+ * about which one is in play:
+ *
+ *  - **`proxy`** — the local `pnpm dev` server. Calls go to `/api/ai`, a
+ *    middleware (see `vite.config.ts`) that holds `OPENROUTER_API_KEY` in the
+ *    Node process and adds the model and the token budget. Nothing about the
+ *    key reaches the bundle.
+ *  - **`byok`** — the public, static build. There is no server to hold a key,
+ *    so the *visitor* supplies their own: it is kept in `localStorage` on their
+ *    machine and sent from their browser straight to `openrouter.ai`. It is
+ *    never sent to the origin serving this page, because that origin is a CDN
+ *    that could not use it anyway. The alternative — one shared key in a
+ *    serverless function — is a key anyone can drain, so it is not offered.
+ *
+ * Beyond the seam, both modes produce the same `ModelAnswer`, and this module
+ * owns nothing else but the message shape and the two extractors that turn a
+ * chat answer back into something typed.
  */
+
+import { IS_PUBLIC_BUILD } from "./deployment.js";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -19,24 +34,86 @@ export interface ModelAnswer {
   ms: number;
 }
 
+/** Which of the two key-holding arrangements this page is running under. */
+export type AiMode = "proxy" | "byok";
+
 export interface AiStatus {
   configured: boolean;
   model: string;
+  /** `proxy` when a dev server holds the key, `byok` when the visitor does. */
+  mode?: AiMode;
   /** The proxy forwards tokens as they are written (see `vite.config.ts`). */
   streaming?: boolean;
   /** Wall-clock ceiling the proxy enforces, in ms. */
   timeoutMs?: number;
 }
 
+/* -------------------------------------------------------------------------- */
+/* bring-your-own-key                                                          */
+/* -------------------------------------------------------------------------- */
+
+const KEY_STORAGE = "codeflow.demo.openrouter-key";
+
+/** Default for BYOK. Free on OpenRouter, and the model the evals were run on. */
+export const BYOK_DEFAULT_MODEL = "stealth/ox-alpha";
+
+const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
+/** Same budget the dev proxy uses — too small a cap returns `content: null`. */
+const BYOK_MAX_TOKENS = 32000;
+
+/** The visitor's own OpenRouter key, or null. Never leaves this browser except to OpenRouter. */
+export function getUserKey(): string | null {
+  try {
+    const stored = localStorage.getItem(KEY_STORAGE);
+    return stored !== null && stored.length > 0 ? stored : null;
+  } catch {
+    // Private mode / storage disabled. BYOK is simply unavailable, not broken.
+    return null;
+  }
+}
+
+export function setUserKey(key: string): void {
+  try {
+    localStorage.setItem(KEY_STORAGE, key.trim());
+  } catch {
+    /* nothing sensible to do; the caller re-reads the status and sees it did not take */
+  }
+}
+
+export function clearUserKey(): void {
+  try {
+    localStorage.removeItem(KEY_STORAGE);
+  } catch {
+    /* see setUserKey */
+  }
+}
+
+/** Status for the BYOK arrangement, read from local storage only. */
+export function byokStatus(): AiStatus {
+  return {
+    configured: getUserKey() !== null,
+    model: BYOK_DEFAULT_MODEL,
+    mode: "byok",
+    streaming: true,
+  };
+}
+
 export async function fetchAiStatus(): Promise<AiStatus> {
+  // The public build has no `/api/ai` at all; asking for it would only produce a
+  // 404 and a console error on every load.
+  if (IS_PUBLIC_BUILD) return byokStatus();
+
   try {
     const response = await fetch("/api/ai/status");
-    if (!response.ok) return { configured: false, model: "" };
-    return (await response.json()) as AiStatus;
+    if (!response.ok) return byokStatus();
+    const status = (await response.json()) as AiStatus;
+    // A dev server that is running but has no key in `.env` is still better
+    // served by BYOK than by a dead panel.
+    return status.configured ? { ...status, mode: "proxy" } : byokStatus();
   } catch {
-    // Built for production (no dev middleware) or the server is gone — either
-    // way the panel says "not configured" rather than throwing.
-    return { configured: false, model: "" };
+    // Built for production (no dev middleware) or the server is gone — fall
+    // back to the visitor's own key rather than reporting a broken feature.
+    return byokStatus();
   }
 }
 
@@ -59,6 +136,13 @@ export interface CallModelOptions {
    * of the wait that is longest.
    */
   onThinking?: (characters: number) => void;
+  /**
+   * Which key-holding arrangement to use. Defaults to the one this build has:
+   * `byok` in the public static build, `proxy` under `pnpm dev`.
+   */
+  mode?: AiMode;
+  /** Model id for `byok`; ignored in `proxy` mode, where the server decides. */
+  model?: string;
 }
 
 /**
@@ -68,11 +152,17 @@ export interface CallModelOptions {
  * `{delta}`, `{done}` — or `{error}` at any point. A non-streaming JSON body is
  * still accepted, because a production build has no dev middleware behind this
  * URL and the failure should read as "not configured", not as a parse error.
+ *
+ * In `byok` mode there is no proxy: this talks to OpenRouter directly with the
+ * visitor's own key and normalizes their SSE into the same `ModelAnswer`.
  */
 export async function callModel(
   messages: ChatMessage[],
   options: CallModelOptions = {},
 ): Promise<ModelAnswer> {
+  const mode = options.mode ?? (IS_PUBLIC_BUILD ? "byok" : "proxy");
+  if (mode === "byok") return await callModelDirect(messages, options);
+
   const response = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -143,6 +233,124 @@ export async function callModel(
   }
 
   return { content, finishReason, model, ms };
+}
+
+/* -------------------------------------------------------------------------- */
+/* byok: browser -> OpenRouter, no origin in between                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The same completion, but the request leaves the visitor's browser directly.
+ *
+ * OpenRouter allows browser origins, so no proxy is needed once the visitor is
+ * the one holding the key. The frames are OpenAI-shaped rather than the dev
+ * proxy's normalized ones, so the deltas are read out of
+ * `choices[0].delta.content` (and `.reasoning`, which is what a reasoning model
+ * emits during the long silence before it writes any answer).
+ *
+ * The 429 retry the dev proxy does is deliberately *not* repeated here: this is
+ * the visitor's own quota on their own key, and silently spending three times
+ * as much of it is not a favour. One clear failure is better.
+ */
+async function callModelDirect(
+  messages: ChatMessage[],
+  options: CallModelOptions,
+): Promise<ModelAnswer> {
+  const key = getUserKey();
+  if (key === null) {
+    throw new Error(
+      "No OpenRouter key. Paste one into the key box above — it stays in this browser and is sent only to openrouter.ai.",
+    );
+  }
+  const model = options.model ?? BYOK_DEFAULT_MODEL;
+  const started = Date.now();
+
+  const response = await fetch(OPENROUTER_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": window.location.origin,
+      "X-Title": "CodeFlow demo",
+    },
+    body: JSON.stringify({ model, messages, max_tokens: BYOK_MAX_TOKENS, stream: true }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(
+        `OpenRouter rejected the key (HTTP ${String(response.status)}). Check it at openrouter.ai/keys, then paste it again.`,
+      );
+    }
+    throw new Error(`OpenRouter ${String(response.status)}: ${text.slice(0, 300)}`);
+  }
+  if (response.body === null) {
+    throw new Error("OpenRouter answered with an empty body.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+  let finishReason: string | null = null;
+  let reasoning = 0;
+  let reported = 0;
+
+  for (;;) {
+    const step = await reader.read();
+    if (step.done) break;
+    buffer += decoder.decode(step.value, { stream: true });
+
+    let cut = buffer.indexOf("\n\n");
+    while (cut !== -1) {
+      const frame = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      cut = buffer.indexOf("\n\n");
+
+      for (const line of frame.split("\n")) {
+        // `: OPENROUTER PROCESSING` keep-alive comments are not data frames.
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data === "[DONE]" || data.length === 0) continue;
+
+        let parsed: {
+          choices?: {
+            delta?: { content?: string | null; reasoning?: string | null };
+            finish_reason?: string | null;
+          }[];
+          error?: { message?: string };
+        };
+        try {
+          parsed = JSON.parse(data) as typeof parsed;
+        } catch {
+          continue;
+        }
+        if (parsed.error !== undefined) throw new Error(parsed.error.message ?? "upstream error");
+
+        const choice = parsed.choices?.[0];
+        if (choice?.finish_reason != null) finishReason = choice.finish_reason;
+        reasoning += (choice?.delta?.reasoning ?? "").length;
+        const delta = choice?.delta?.content ?? "";
+        if (delta.length > 0) {
+          content += delta;
+          options.onDelta?.(delta, content);
+        } else if (reasoning - reported >= 400) {
+          reported = reasoning;
+          options.onThinking?.(reasoning);
+        }
+      }
+    }
+  }
+
+  if (content.trim().length === 0) {
+    throw new Error(
+      `The model returned nothing (finish_reason=${String(finishReason ?? "?")}). This is what a reasoning model does when the token budget runs out.`,
+    );
+  }
+
+  return { content, finishReason, model, ms: Date.now() - started };
 }
 
 async function readWholeBody(response: Response): Promise<ModelAnswer> {

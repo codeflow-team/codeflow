@@ -22,6 +22,7 @@
 import { summarizeRun, type NodeRunState, type RunEvent, type WorkflowGraph } from "@codeflow/core";
 import { nodeRanges } from "@codeflow/core";
 import type { ExampleRegistry } from "./examples-source.js";
+import type { RunServerSpec } from "./mcp/model.js";
 
 export interface RunBinding {
   namespace: string;
@@ -132,24 +133,51 @@ export async function fetchRunStatus(): Promise<RunStatusInfo> {
  * registry object crosses the wire, which keeps the runtime honest about being
  * a runtime — it binds an interface (05 §2), it does not know CodeFlow.
  */
+export interface RunRequestOptions {
+  input?: unknown;
+  /**
+   * Servers the user configured in the MCP manager.
+   *
+   * They carry their own `methods` map (`<method>` → the MCP tool name), which
+   * is how a tool the runner has never heard of becomes callable: the built-in
+   * allowlist reverses its own slugging from rules baked into
+   * `server/mcp-servers.ts`, and a server added five seconds ago has no such
+   * rules — only the discovery that named it.
+   */
+  servers?: RunServerSpec[];
+}
+
 export function runRequestFor(
   graph: WorkflowGraph,
   source: string,
   registry: ExampleRegistry,
-  input?: unknown,
+  options: RunRequestOptions = {},
 ): {
   source: string;
   ranges: { nodeId: string; start: number; end: number; type: string; label: string }[];
-  tools: { name: string; outputSchema?: unknown }[];
+  tools: { name: string; outputSchema?: unknown; toolName?: string }[];
   functions: { name: string; code?: string }[];
+  servers?: RunServerSpec[];
   input?: unknown;
 } {
+  const byNamespace = new Map((options.servers ?? []).map((spec) => [spec.namespace, spec]));
+
   return {
     source,
     ranges: nodeRanges(graph),
-    tools: registry.tools.map((tool) => ({ name: tool.name, outputSchema: tool.outputSchema })),
+    tools: registry.tools.map((tool) => {
+      const dot = tool.name.indexOf(".");
+      const toolName =
+        dot === -1 ? undefined : byNamespace.get(tool.name.slice(0, dot))?.methods[tool.name.slice(dot + 1)];
+      return {
+        name: tool.name,
+        outputSchema: tool.outputSchema,
+        ...(toolName === undefined ? {} : { toolName }),
+      };
+    }),
     functions: registry.functions.map((fn) => ({ name: fn.name, code: fn.code })),
-    ...(input === undefined ? {} : { input }),
+    ...(options.servers === undefined || options.servers.length === 0 ? {} : { servers: options.servers }),
+    ...(options.input === undefined ? {} : { input: options.input }),
   };
 }
 

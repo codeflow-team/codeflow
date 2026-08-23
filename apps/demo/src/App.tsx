@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createCodeFlow, type PatchResult, type WorkflowGraph } from "@codeflow/core";
+import { createCodeFlow, type PatchResult, type WorkflowGraph, type WorkflowNode } from "@codeflow/core";
 import {
   Badge,
   Button,
@@ -32,6 +32,7 @@ import {
   DiagnosticsPanel,
   DisclosureToggle,
   Hint,
+  Modal,
   NodeInspector,
   NodePalette,
   Notice,
@@ -58,13 +59,17 @@ import {
   Play,
   Plus,
   RefreshCw,
+  ServerCog,
   Sparkles,
   Square,
   TriangleAlert,
   Workflow,
 } from "lucide-react";
-import { registryInstanceFor } from "./registry.js";
-import { EXAMPLES, registryFor, type FlowExample } from "./examples-source.js";
+import { EXAMPLES, type FlowExample } from "./examples-source.js";
+import { McpManager } from "./McpManager.js";
+import { runSpecs } from "./mcp/model.js";
+import { tokenFor } from "./mcp/storage.js";
+import { activeRegistry, useMcpServers } from "./mcp/use-mcp-servers.js";
 import { RunPanel } from "./RunPanel.js";
 import {
   EMPTY_RUN,
@@ -80,9 +85,17 @@ import { OutlinePanel } from "./OutlinePanel.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { rememberStats, statsFromGraph } from "./example-stats.js";
 import { fetchAiStatus, type AiStatus } from "./ai.js";
+import {
+  IS_PUBLIC_BUILD,
+  REPO_URL,
+  RUN_UNAVAILABLE_FIX,
+  RUN_UNAVAILABLE_REASON,
+} from "./deployment.js";
 import { withArgumentTypes } from "./argument-types.js";
 import { loadFlow, saveFlow } from "./persist.js";
 import { useMediaQuery } from "./use-media-query.js";
+import { useTriggerInput } from "./trigger-input.js";
+import { TriggerInputDialog, TriggerInputForm } from "./TriggerInput.js";
 
 const FIRST = EXAMPLES[0] as FlowExample;
 
@@ -125,6 +138,9 @@ export function App() {
   const [runnerAvailable, setRunnerAvailable] = useState(false);
   const [run, setRun] = useState<RunSnapshot>(EMPTY_RUN);
   const [runOpen, setRunOpen] = useState(false);
+  const [runUnavailableOpen, setRunUnavailableOpen] = useState(false);
+  /** The "start the flow from *this*" panel, between Run and the run itself. */
+  const [triggerOpen, setTriggerOpen] = useState(false);
   const runHandle = useRef<RunHandle | null>(null);
   const [theme, setTheme] = useTheme("light");
 
@@ -133,12 +149,28 @@ export function App() {
   const huge = useMediaQuery("(min-width: 1560px)");
 
   /**
-   * One session per example: a session's identity continuity is scoped to the
-   * flow it is editing (03 §5.0), and two examples are two files — resolving
-   * one against the other would be nonsense. The registry comes from the
-   * example, so switching also switches which tools exist.
+   * Where the tools come from.
+   *
+   * By default, the example's own registry. As soon as the visitor configures
+   * an MCP server of their own (`McpManager.tsx`), the composed registry takes
+   * over and *is* the registry — for the palette, for `session.analyze`, for the
+   * AI's `tools.d.ts` and for the Run bindings. That is the whole architectural
+   * claim made visible: core knows no tool, everything arrives through the
+   * registry at runtime (00 §6.6b, 05 §3).
    */
-  const registry = useMemo(() => registryInstanceFor(example), [example]);
+  const mcp = useMcpServers();
+  const [mcpOpen, setMcpOpen] = useState(false);
+  const active = useMemo(
+    () => activeRegistry(example, { composed: mcp.composed, active: mcp.active }),
+    [example, mcp.composed, mcp.active],
+  );
+
+  /**
+   * One session per registry+example: a session's identity continuity is scoped
+   * to the flow it is editing (03 §5.0), and two examples are two files —
+   * resolving one against the other would be nonsense.
+   */
+  const registry = active.lookup;
   const session = useMemo(() => createCodeFlow({ registry }), [registry]);
 
   /**
@@ -158,6 +190,12 @@ export function App() {
 
   useEffect(() => {
     void fetchAiStatus().then(setAi);
+    // The public build is a static bundle: there is no `/api/run` to ask, and
+    // asking anyway only buys a 404 in everyone's console.
+    if (IS_PUBLIC_BUILD) {
+      setRunnerAvailable(false);
+      return;
+    }
     void fetchRunStatus().then((status) => { setRunnerAvailable(status.available); });
   }, []);
 
@@ -175,18 +213,78 @@ export function App() {
     runHandle.current = null;
   }, []);
 
-  const beginRun = useCallback(() => {
+  /*
+   * The trigger's payload — one state, two surfaces.
+   *
+   * The runner has always taken an `input`; the browser never sent one, so every
+   * run in this demo started from values a machine guessed and nobody could see.
+   * This is the state behind both places that now show them: the panel Run
+   * opens, and the trigger node's inspector. 01 §1 says the first parameter type
+   * *is* the trigger, so they are one thing seen twice, never two.
+   */
+  const triggerInput = useTriggerInput({
+    exampleId: example.id,
+    registryId: active.source.id,
+    source: graph?.source.content ?? source,
+    enabled: !IS_PUBLIC_BUILD && runnerAvailable,
+  });
+
+  const launchRun = useCallback(() => {
     if (graph === null) return;
+    setTriggerOpen(false);
     runHandle.current?.stop();
     setRun({ ...EMPTY_RUN, status: "starting" });
     setRunOpen(true);
     // The graph the ranges come from must be the graph on screen, or a step
     // would light up next to code it does not own.
     runHandle.current = startRun(
-      runRequestFor(graph, graph.source.content, registryFor(example)),
+      runRequestFor(graph, graph.source.content, active.source, {
+        // `undefined` means "you decide" — the endpoint synthesizes its own
+        // default, which is what happens when the shape could not be read at
+        // all. Anything else is the user's, verbatim.
+        input: triggerInput.payload(),
+        // The visitor's own servers, with the method→tool-name map discovery
+        // produced. Without it the runner would have nothing to bind a tool it
+        // has never heard of to, and every call would stub.
+        servers: runSpecs(mcp.servers, tokenFor),
+      }),
       setRun,
     );
-  }, [graph, example]);
+  }, [graph, active.source, triggerInput, mcp.servers]);
+
+  /**
+   * Run opens the panel first.
+   *
+   * "Just press Run" still works — the form is prefilled with the synthesized
+   * default — but the values stop being invisible on the way past.
+   */
+  const beginRun = useCallback(() => {
+    if (graph === null) return;
+    if (triggerInput.status === "ready" && triggerInput.spec?.kind !== "none") {
+      setTriggerOpen(true);
+      return;
+    }
+    launchRun();
+  }, [graph, triggerInput.status, triggerInput.spec, launchRun]);
+
+  /**
+   * The trigger node, in the inspector, is the input.
+   *
+   * Same controller as the pre-run panel — edit it here and the panel Run opens
+   * is already showing what you typed, because there is only ever one of them.
+   */
+  const renderTriggerExtra = useCallback(
+    (node: WorkflowNode): React.ReactNode =>
+      node.type !== "trigger" ? null : (
+        <section className="border-b border-line px-4 pb-4 pt-1" data-testid="inspector-trigger-input">
+          <h3 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-faint">
+            Starts the flow with
+          </h3>
+          <TriggerInputForm input={triggerInput} compact />
+        </section>
+      ),
+    [triggerInput],
+  );
 
   // A run describes one version of one file. Switching example, or re-analyzing
   // into a different graph, retires it rather than leaving stale marks behind.
@@ -336,6 +434,34 @@ export function App() {
     void analyze(text, restored ? undefined : example.id);
   }, [example, analyze]);
 
+  /*
+   * The registry moved under the open flow — 06 §5.
+   *
+   * A graph is a function of (source, registry), so changing which tools exist
+   * makes the graph on screen stale no matter what the text says; core's own
+   * check is `graph.registryHash !== session.registryHash()`, and the provider
+   * already refuses to patch while that holds. Nothing new is invented here:
+   * the flow is re-analyzed on the ordinary path, which is what turns a call to
+   * a tool that no longer exists into an `unknown` node with a diagnostic
+   * (04 §1.2) instead of a lie, and a banner says why the diagram just changed.
+   */
+  const registryHash = registry.registryHash();
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
+  const lastRegistryHash = useRef(registryHash);
+  const [registryNote, setRegistryNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (lastRegistryHash.current === registryHash) return;
+    lastRegistryHash.current = registryHash;
+    // The example switching already reloads everything; only a registry change
+    // *under the same flow* needs saying.
+    if (loadedRef.current !== example.id) return;
+    setRegistryNote(
+      `The registry changed — this flow was redrawn against ${String(registry.listTools().length)} tools in ${String(registry.listToolNamespaces().length)} namespace${registry.listToolNamespaces().length === 1 ? "" : "s"}. Any call to a tool that is no longer there is now an unknown step.`,
+    );
+    void analyze(sourceRef.current);
+  }, [registryHash, registry, example.id, analyze]);
+
   // Keep the tab's own copy current. Debounced: this fires on every keystroke in
   // Monaco, and serializing a 300-line file per character is not free.
   useEffect(() => {
@@ -458,7 +584,31 @@ export function App() {
                 {running ? "Stop" : "Run"}
               </Button>
             </Hint>
-          ) : null}
+          ) : (
+            /*
+             * Run without a runner behind it.
+             *
+             * This used to render nothing at all, which is the quiet kind of
+             * dishonesty 07 §5 rules out: a reader of the hosted demo would
+             * simply never learn the feature exists, and a reader who had seen
+             * it locally would think it broke. So the control stays, says it is
+             * unavailable, and says why when asked — the same rule the editor
+             * follows for an operation the patch engine cannot do.
+             */
+            <Hint label={`${RUN_UNAVAILABLE_REASON} Click for how to run it locally.`}>
+              <Button
+                variant="ghost"
+                size="md"
+                data-testid="run-unavailable"
+                aria-label="Why Run is unavailable here"
+                onClick={() => { setRunUnavailableOpen(true); }}
+              >
+                <Play />
+                Run
+                <span className="text-[10.5px] text-ink-faint">local only</span>
+              </Button>
+            </Hint>
+          )}
 
           {running ? (
             <span className="hidden items-center gap-1.5 text-[11.5px] text-ink-dim sm:flex" data-testid="run-inline-progress">
@@ -497,6 +647,24 @@ export function App() {
               </Button>
             </Hint>
             <DisclosureToggle iconOnly={!roomy} />
+            <Hint
+              label={
+                active.fromMcp
+                  ? `Your MCP servers are the registry — ${String(active.source.tools.length)} tools`
+                  : "Bring your own MCP servers — their tools become nodes"
+              }
+            >
+              <Button
+                variant={active.fromMcp ? "soft" : "ghost"}
+                size="icon"
+                data-testid="toggle-mcp"
+                aria-label="MCP servers"
+                aria-pressed={mcpOpen}
+                onClick={() => { setMcpOpen(true); }}
+              >
+                <ServerCog />
+              </Button>
+            </Hint>
             <Hint label={chatOpen ? "Hide the AI panel" : "Build or change this flow with AI"}>
               <Button
                 variant={chatOpen ? "soft" : "ghost"}
@@ -532,6 +700,20 @@ export function App() {
             </Notice>
           </div>
         ) : null}
+
+        {registryNote === null ? null : (
+          <div className="shrink-0 border-b border-line px-3 py-2">
+            <Notice
+              tone="info"
+              role="status"
+              title="The registry changed"
+              data-testid="registry-changed"
+              onDismiss={() => { setRegistryNote(null); }}
+            >
+              {registryNote}
+            </Notice>
+          </div>
+        )}
 
         {/* ---------------------------------------------------------------- */}
         {/* outline + canvas + inspector                                      */}
@@ -591,8 +773,12 @@ export function App() {
             <aside className="flex w-[24rem] shrink-0 flex-col border-l border-line bg-surface">
               <ChatPanel
                 example={example}
+                registry={active.source}
+                registryLookup={active.lookup}
                 configured={ai.configured}
                 model={ai.model}
+                aiMode={ai.mode ?? "proxy"}
+                onKeyChange={() => { void fetchAiStatus().then(setAi); }}
                 onApplySource={applyGeneratedSource}
                 onClose={() => { setChatOpen(false); }}
               />
@@ -608,7 +794,7 @@ export function App() {
                   onBrowse={() => { setGalleryOpen(true); }}
                 />
               ) : (
-                <NodeInspector theme={theme} />
+                <NodeInspector theme={theme} renderExtra={renderTriggerExtra} />
               )}
             </aside>
           ) : null}
@@ -667,7 +853,7 @@ export function App() {
           aria-label="Step settings"
           className="w-[min(24rem,100vw)]"
         >
-          <NodeInspector theme={theme} onClose={() => { setInspectorOpen(false); }} />
+          <NodeInspector theme={theme} renderExtra={renderTriggerExtra} onClose={() => { setInspectorOpen(false); }} />
         </Sheet>
       ) : null}
 
@@ -693,13 +879,75 @@ export function App() {
         >
           <ChatPanel
             example={example}
+            registry={active.source}
+            registryLookup={active.lookup}
             configured={ai.configured}
             model={ai.model}
+            aiMode={ai.mode ?? "proxy"}
+            onKeyChange={() => { void fetchAiStatus().then(setAi); }}
             onApplySource={applyGeneratedSource}
             onClose={() => { setChatOpen(false); }}
           />
         </Sheet>
       ) : null}
+
+      {/*
+        Bring your own tools. Everything else on this page reads whatever this
+        panel composes — the palette, the analyzer, the AI context and the Run
+        bindings — which is the demonstration, not a side feature.
+      */}
+      <McpManager
+        open={mcpOpen}
+        onOpenChange={setMcpOpen}
+        state={mcp}
+        lookup={active.lookup}
+        fromMcp={active.fromMcp}
+        fallbackLabel={active.source.label}
+      />
+
+      {/*
+        Why Run is not here. 07 §5: a feature the build cannot do says so, in
+        words, with what to do instead — never a button that silently does
+        nothing, and never a button that quietly disappears.
+      */}
+      {/* ------------------------------------------------------------------ */}
+      {/* what the run starts from — between Run and the run                  */}
+      {/* ------------------------------------------------------------------ */}
+      <TriggerInputDialog
+        open={triggerOpen}
+        onOpenChange={setTriggerOpen}
+        input={triggerInput}
+        onRun={launchRun}
+        flowName={example.title}
+      />
+
+      <Modal
+        open={runUnavailableOpen}
+        onOpenChange={setRunUnavailableOpen}
+        title="Run needs a local checkout"
+        description="Everything else on this page already ran in your browser."
+      >
+        <div className="cf-scroll flex min-h-0 flex-col gap-3 overflow-y-auto px-4 py-3.5 text-[12.5px] leading-relaxed text-ink-dim">
+          <Notice tone="info" title="Why">
+            {RUN_UNAVAILABLE_REASON}
+          </Notice>
+          <div>
+            <p className="m-0 font-medium text-ink">{RUN_UNAVAILABLE_FIX}</p>
+            <pre className="mt-1.5 overflow-x-auto rounded-lg border border-line bg-surface-2 p-2.5 font-mono text-[11.5px] text-ink">
+{`git clone ${REPO_URL}
+cd codeflow && pnpm install
+pnpm dev`}
+            </pre>
+          </div>
+          <p className="m-0 text-ink-faint">
+            What you are looking at is not a mock-up of the product with the interesting part
+            missing: analyze, the graph, the inspector, editing and the byte-for-byte diff are all{" "}
+            <code className="font-mono text-[11px]">@codeflow/core</code>, which is browser-safe by
+            design and is running here. Only executing a flow against real MCP servers needs a
+            machine.
+          </p>
+        </div>
+      </Modal>
     </CodeFlowProvider>
   );
 }

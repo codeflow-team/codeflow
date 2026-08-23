@@ -30,6 +30,9 @@ import { parentPort, workerData } from "node:worker_threads";
 import { slugifyMethod } from "@codeflow/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 import { preview, sampleFromSchema } from "./sample.ts";
 import type { McpServerPlan } from "./mcp-servers.ts";
@@ -38,6 +41,15 @@ export interface ToolBinding {
   /** `<namespace>.<method>` */
   name: string;
   outputSchema?: unknown;
+  /**
+   * The MCP tool name this method stands for, when the caller already knows it.
+   *
+   * For the built-in servers the name is reconstructed by re-running the same
+   * slugging the example registries were generated with. For a server the user
+   * added there is nothing to reconstruct from, so discovery's own answer is
+   * carried here and used verbatim.
+   */
+  toolName?: string;
 }
 
 export interface WorkerJob {
@@ -176,7 +188,7 @@ const probe = {
 
 interface Connection {
   client: Client;
-  transport: StdioClientTransport;
+  transport: Transport;
   /** method name in `tools.<ns>` → the MCP tool name to call. */
   methods: Map<string, string>;
 }
@@ -194,25 +206,63 @@ function methodNameFor(plan: McpServerPlan, toolName: string): string {
   return slugifyMethod(toolName);
 }
 
-async function connect(namespace: string, plan: McpServerPlan): Promise<Connection> {
-  const existing = connections.get(namespace);
-  if (existing !== undefined) return existing;
+/**
+ * Open the transport this plan describes.
+ *
+ * stdio is the built-in case and the one the allowlist is written for; the two
+ * remote forms exist because a user-added server can be a URL, and a URL is the
+ * only kind that can work on a machine that must not spawn anything.
+ */
+function transportFor(plan: McpServerPlan): Transport {
+  if (plan.transport === "http" || plan.transport === "sse") {
+    if (plan.url === undefined) throw new Error(`${plan.server} is a remote server with no URL.`);
+    const url = new URL(plan.url);
+    const headers = plan.headers ?? {};
+    const requestInit = Object.keys(headers).length === 0 ? undefined : { headers };
+    if (plan.transport === "sse") {
+      return new SSEClientTransport(
+        url,
+        requestInit === undefined
+          ? {}
+          : {
+              requestInit,
+              fetch: async (input: string | URL, init?: RequestInit) =>
+                await fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), ...headers } }),
+            },
+      );
+    }
+    return new StreamableHTTPClientTransport(url, requestInit === undefined ? {} : { requestInit });
+  }
 
-  const args = plan.args.map((arg) => arg.replaceAll("{{scratch}}", job.scratch));
+  if (plan.command === undefined) throw new Error(`${plan.server} is a stdio server with no command.`);
+  const args = (plan.args ?? []).map((arg) => arg.replaceAll("{{scratch}}", job.scratch));
   const env: Record<string, string> = { ...(process.env as Record<string, string>) };
   for (const [key, value] of Object.entries(plan.env ?? {})) {
     env[key] = value.replaceAll("{{scratch}}", job.scratch);
   }
+  return new StdioClientTransport({ command: plan.command, args, env, stderr: "ignore" });
+}
 
-  const transport = new StdioClientTransport({ command: plan.command, args, env, stderr: "ignore" });
+async function connect(namespace: string, plan: McpServerPlan): Promise<Connection> {
+  const existing = connections.get(namespace);
+  if (existing !== undefined) return existing;
+
+  const transport = transportFor(plan);
   const client = new Client({ name: "codeflow-demo-runner", version: "0.0.0" }, {});
   await client.connect(transport);
 
   const methods = new Map<string, string>();
+  // A method map that came with the plan is authoritative: it is what discovery
+  // saw, and it is what the registry the flow was analyzed against was built
+  // from. Listing again only fills in anything it did not cover.
+  for (const [method, toolName] of Object.entries(plan.methods ?? {})) methods.set(method, toolName);
   let cursor: string | undefined;
   for (let page = 0; page < 20; page++) {
     const listed = await client.listTools(cursor === undefined ? undefined : { cursor });
-    for (const tool of listed.tools ?? []) methods.set(methodNameFor(plan, tool.name), tool.name);
+    for (const tool of listed.tools ?? []) {
+      const method = methodNameFor(plan, tool.name);
+      if (!methods.has(method)) methods.set(method, tool.name);
+    }
     if (listed.nextCursor === undefined || listed.nextCursor === cursor) break;
     cursor = listed.nextCursor;
   }
@@ -269,7 +319,7 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
       if (plan !== undefined) {
         try {
           const connection = await connect(namespace, plan);
-          const toolName = connection.methods.get(method);
+          const toolName = binding.toolName ?? connection.methods.get(method);
           if (toolName === undefined) {
             throw new Error(
               `${plan.server} has no tool matching \`tools.${namespace}.${method}\` (it offers ${String(connection.methods.size)} tools).`,

@@ -24,6 +24,34 @@ export interface InputContext {
   scratch: string;
 }
 
+/**
+ * The stand-in for "the run's scratch directory", used when a default is
+ * synthesized *before* a run exists.
+ *
+ * The scratch directory is `mkdtemp`'d per run and deleted at the end of it, so
+ * a default shown in the browser — or remembered in `localStorage` from
+ * yesterday — cannot contain a real one: the path it names is already gone.
+ * Synthesizing against this token and expanding it in `startRun` keeps a
+ * remembered input pointing at *this* run's folder instead of a dead one, and
+ * gives the UI something it can name in words rather than an opaque
+ * `/var/folders/...`.
+ */
+export const WORKSPACE_TOKEN = "{{workspace}}";
+
+/** Every `{{workspace}}` in `input`, replaced with the run's real directory. */
+export function resolveWorkspaceToken(input: unknown, workspace: string): unknown {
+  if (typeof input === "string") return input.split(WORKSPACE_TOKEN).join(workspace);
+  if (Array.isArray(input)) return input.map((item) => resolveWorkspaceToken(item, workspace));
+  if (typeof input === "object" && input !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+      out[key] = resolveWorkspaceToken(value, workspace);
+    }
+    return out;
+  }
+  return input;
+}
+
 /** `sourceRoot` → `["source", "root"]`, so a suffix can be recognised. */
 function words(name: string): string[] {
   return name
@@ -75,6 +103,55 @@ function stringFor(name: string, context: InputContext): string {
   return `demo ${name}`;
 }
 
+/**
+ * Why `stringFor`/`valueForType` chose what they chose, in one sentence.
+ *
+ * A guess a visitor cannot see is a guess they cannot judge, and 07 §5 does not
+ * allow the UI to approximate without saying so. `sourceRoot` being
+ * `/var/folders/…` looks arbitrary right up until someone says *why*, so the
+ * reasons live here, next to the rules that produce them — one function, so a
+ * rule and its explanation cannot drift apart.
+ *
+ * `null` for anything that has no rule behind it: the fallback `demo <name>` is
+ * not a guess about the field, it is the absence of one, and dressing it up as
+ * reasoning would be the same lie in a different place.
+ */
+export function explainDefault(name: string, kind: "string" | "number" | "boolean"): string | null {
+  const parts = words(name);
+  const lower = name.toLowerCase();
+
+  if (kind === "number") {
+    return /count|limit|max|top|n$/i.test(name)
+      ? "a small count, so a demo run does a few of whatever this bounds rather than all of it"
+      : null;
+  }
+  if (kind === "boolean") {
+    return /prune|delete|remove|force|overwrite|dry/i.test(name)
+      ? "false, because the name sounds destructive and a run nobody asked for should be read-only"
+      : null;
+  }
+
+  if (parts.some((word) => DIRISH.has(word))) {
+    return "pointed at the run's scratch folder, because the filesystem MCP server is rooted there and refuses every path outside it";
+  }
+  if (parts.some((word) => OUTISH.has(word))) {
+    return "a fresh file inside the run's scratch folder, because the name reads as somewhere to write — and a path the flow writes must not be one it also reads";
+  }
+  if (parts.some((word) => FILEISH.has(word)) || parts.includes("path")) {
+    return "a file the scratch folder is seeded with, because the name reads as a file and a first tool call on a missing one fails before the flow does anything";
+  }
+  if (parts.some((word) => word === "delimiter" || word === "separator")) return "the most common delimiter";
+  if (lower.includes("repo")) return "a real public repository, so a GitHub-shaped argument reads like one";
+  if (lower.includes("channel")) return "a channel-shaped name";
+  if (lower.includes("url") || lower.includes("href")) return "a URL on the reserved `.invalid` domain, which cannot resolve to anyone's real host";
+  if (lower.includes("query") || lower.includes("search")) return "a search phrase with results in the seeded workspace";
+  if (lower.includes("package")) return "this workspace's own package name";
+  if (lower.includes("branch")) return "the usual default branch";
+  if (lower.includes("pattern") || lower.includes("glob")) return "a glob that matches the seeded files";
+  if (lower.includes("email")) return "an address on the reserved `.invalid` domain, which cannot reach anyone";
+  return null;
+}
+
 function valueForType(type: ts.TypeNode | undefined, name: string, context: InputContext, depth = 0): unknown {
   if (type === undefined || depth > 5) return `demo ${name}`;
 
@@ -121,7 +198,7 @@ function valueForType(type: ts.TypeNode | undefined, name: string, context: Inpu
 }
 
 /** The default-exported flow function, if the file has one. */
-function flowFunction(file: ts.SourceFile): ts.FunctionDeclaration | null {
+export function flowFunction(file: ts.SourceFile): ts.FunctionDeclaration | null {
   for (const statement of file.statements) {
     if (!ts.isFunctionDeclaration(statement)) continue;
     const modifiers = ts.getModifiers(statement) ?? [];

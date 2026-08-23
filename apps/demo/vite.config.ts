@@ -317,8 +317,20 @@ export default defineConfig(async ({ mode }) => {
     new URL("./server/run-plugin.ts", import.meta.url).href
   )) as typeof import("./server/run-plugin.js");
 
+  // Same reason, same shape: `/api/mcp/discover` owns the MCP SDK's transports,
+  // which is what lets a visitor point the demo at a server of their own.
+  const { mcpPlugin } = (await import(
+    new URL("./server/mcp-discover.ts", import.meta.url).href
+  )) as typeof import("./server/mcp-discover.js");
+
   return {
-    plugins: [react(), tailwindcss(), aiProxy(env), runPlugin({ appDir: HERE }) as Plugin],
+    plugins: [
+      react(),
+      tailwindcss(),
+      aiProxy(env),
+      runPlugin({ appDir: HERE }) as Plugin,
+      mcpPlugin() as Plugin,
+    ],
     server: { port: 5173, strictPort: true },
     build: {
       // Monaco is large; the demo is a dev harness, not a shipped bundle.

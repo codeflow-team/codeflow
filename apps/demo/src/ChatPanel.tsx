@@ -32,6 +32,7 @@ import {
   validateFlowSource,
   type ConformanceLevel,
   type Diagnostic,
+  type RegistryLookup,
   type TextPatch,
   type WorkflowGraph,
 } from "@codeflow/core";
@@ -39,6 +40,7 @@ import {
   Badge,
   Button,
   CodeDiff,
+  Input,
   Notice,
   Segmented,
   cn,
@@ -56,8 +58,19 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { callModel, diffLines, extractJson, splitAnswer, type ChatMessage } from "./ai.js";
-import { registryFor, type FlowExample } from "./examples-source.js";
+import {
+  callModel,
+  clearUserKey,
+  diffLines,
+  extractJson,
+  getUserKey,
+  setUserKey,
+  splitAnswer,
+  type AiMode,
+  type ChatMessage,
+} from "./ai.js";
+import { REPO_URL } from "./deployment.js";
+import { registryFor, type ExampleRegistry, type FlowExample } from "./examples-source.js";
 import { registryInstanceFor } from "./registry.js";
 import { argumentTypeProblems, type ArgumentTypeProblem } from "./argument-types.js";
 import { removalTone, rewriteScope, type RewriteScope } from "./rewrite-scope.js";
@@ -215,12 +228,130 @@ class FlowChanged extends Error {
 
 export interface ChatPanelProps {
   example: FlowExample;
+  /**
+   * The registry the model is given, when it is not the example's own.
+   *
+   * The demo lets a visitor bring their own MCP servers (`McpManager.tsx`), and
+   * the composed registry is what everything else already resolves against — so
+   * it has to be what goes into `tools.d.ts` here too, or the panel would offer
+   * a tool surface the analyzer does not recognise. Omitted, this falls back to
+   * `registryFor(example)` and nothing changes.
+   */
+  registry?: ExampleRegistry;
+  /** The same registry, built. Defaults to the example's. */
+  registryLookup?: RegistryLookup;
   configured: boolean;
   model: string;
+  /**
+   * Who holds the key: `proxy` (the local dev server does) or `byok` (the
+   * visitor does, in their own browser). See `ai.ts`. It changes what the panel
+   * offers when there is no key, and it changes where the request goes.
+   */
+  aiMode: AiMode;
+  /** Called after the visitor saves or clears their own key, so the host re-reads the status. */
+  onKeyChange?: () => void;
   /** Replaces the whole file — the host owns the source (00 §2.1). */
   onApplySource: (source: string) => void;
   onClose?: () => void;
   className?: string;
+}
+
+/**
+ * The key box for the hosted build — bring your own.
+ *
+ * There is no server here to hold a key, and a shared one baked into a
+ * serverless function is a key anyone can drain, so the honest arrangement is
+ * that the visitor supplies theirs. The copy says exactly where it goes,
+ * because "paste your API key" with no explanation is a thing a reader is right
+ * to refuse: it is stored in this browser's `localStorage`, and the request
+ * goes from this page straight to `openrouter.ai` — the origin serving this
+ * page never sees it and could not use it if it did.
+ *
+ * Everything else in the demo — analyze, graph, inspect, patch, diff — needs no
+ * key at all, which is why this is a small box in one panel and not a wall in
+ * front of the app.
+ */
+function ByokKeyBox(props: {
+  configured: boolean;
+  model: string;
+  onChanged?: () => void;
+}): ReactNode {
+  const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState(!props.configured);
+
+  if (props.configured && !editing) {
+    const key = getUserKey() ?? "";
+    return (
+      <Notice tone="ok" title="Using your OpenRouter key">
+        <p className="m-0">
+          <code className="font-mono text-[11px]">{key.slice(0, 8)}…{key.slice(-4)}</code> — stored
+          in this browser only, sent straight to openrouter.ai. Model:{" "}
+          <code className="font-mono text-[11px]">{props.model}</code>.
+        </p>
+        <div className="mt-2 flex gap-2">
+          <Button variant="ghost" size="sm" onClick={() => { setDraft(""); setEditing(true); }}>
+            Replace
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              clearUserKey();
+              setEditing(true);
+              props.onChanged?.();
+            }}
+          >
+            Forget it
+          </Button>
+        </div>
+      </Notice>
+    );
+  }
+
+  return (
+    <Notice tone="info" title="Ask AI needs a key — yours">
+      <p className="m-0">
+        This is the hosted demo: it is a static site with no server, so there is no key here to
+        borrow. Paste an <a className="underline" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">OpenRouter key</a>{" "}
+        and it is kept in this browser&apos;s local storage and sent only to{" "}
+        <code className="font-mono text-[11px]">openrouter.ai</code> — never to the site serving this
+        page. <code className="font-mono text-[11px]">{props.model}</code> is free there.
+      </p>
+      <p className="m-0 mt-1.5 text-ink-faint">
+        Everything else — the graph, the inspector, editing, the diff — works without any key.
+      </p>
+      <div className="mt-2 flex gap-2">
+        <Input
+          mono
+          type="password"
+          value={draft}
+          placeholder="sk-or-v1-…"
+          aria-label="Your OpenRouter API key"
+          data-testid="byok-input"
+          className="min-w-0 flex-1"
+          onChange={(event) => { setDraft(event.target.value); }}
+        />
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={draft.trim().length < 12}
+          data-testid="byok-save"
+          onClick={() => {
+            setUserKey(draft);
+            setDraft("");
+            setEditing(false);
+            props.onChanged?.();
+          }}
+        >
+          Use it
+        </Button>
+      </div>
+      <p className="m-0 mt-2 text-[11px] text-ink-faint">
+        Prefer not to? Run it locally instead — <code className="font-mono text-[11px]">git clone {REPO_URL}</code>,{" "}
+        <code className="font-mono text-[11px]">pnpm dev</code>, and the key stays in the dev server.
+      </p>
+    </Notice>
+  );
 }
 
 export function ChatPanel(props: ChatPanelProps): ReactNode {
@@ -242,8 +373,16 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
   const nextId = useRef(kept.nextId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const registry = useMemo(() => registryFor(props.example), [props.example]);
-  const registryLookup = useMemo(() => registryInstanceFor(props.example), [props.example]);
+  const propRegistry = props.registry;
+  const propLookup = props.registryLookup;
+  const registry = useMemo(
+    () => propRegistry ?? registryFor(props.example),
+    [propRegistry, props.example],
+  );
+  const registryLookup = useMemo(
+    () => propLookup ?? registryInstanceFor(props.example),
+    [propLookup, props.example],
+  );
 
   /** Which flow the in-flight request belongs to (BUG-4). */
   const inFlightFor = useRef<{ exampleId: string; title: string } | null>(null);
@@ -291,7 +430,11 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
   useEffect(() => {
     const previous = seen.current;
     seen.current = { exampleId, registryId };
-    if (previous === null || previous.exampleId === exampleId) return;
+    if (previous === null) return;
+    // Either half moving is enough: the registry can now change *without* the
+    // flow changing, because the visitor can add or drop an MCP server while
+    // the same file stays open (`McpManager.tsx`).
+    if (previous.exampleId === exampleId && previous.registryId === registryId) return;
 
     // A proposal is a diff against a file that is no longer open. Always drop it.
     setProposal(null);
@@ -309,7 +452,10 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
       push({
         kind: "note",
         tone: "info",
-        text: `Now editing “${exampleTitle}”, which runs on ${registry.label} (${String(registry.tools.length)} tools). The earlier conversation was written against a different tool set, so it was cleared.`,
+        text:
+          previous.exampleId === exampleId
+            ? `The registry changed — this flow now runs on ${registry.label} (${String(registry.tools.length)} tools). The earlier conversation was written against a different tool set, so it was cleared.`
+            : `Now editing “${exampleTitle}”, which runs on ${registry.label} (${String(registry.tools.length)} tools). The earlier conversation was written against a different tool set, so it was cleared.`,
       });
     }
   }, [exampleId, registryId, exampleTitle, registry, push]);
@@ -370,7 +516,13 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
               : "Rewriting the file…"
             : `Fixing what validation found (round ${String(round)})…`,
         );
-        const answer = await callModel(messages, { signal, onDelta, onThinking });
+        const answer = await callModel(messages, {
+          signal,
+          onDelta,
+          onThinking,
+          mode: props.aiMode,
+          model: props.model,
+        });
         stage("Checking it against the flow contract…");
         const { source: candidate, prose } = splitAnswer(answer.content);
         const result = validateFlowSource(candidate, registryLookup);
@@ -487,7 +639,7 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
           { role: "system", content: system },
           { role: "user", content: ask },
         ],
-        { signal, onDelta, onThinking },
+        { signal, onDelta, onThinking, mode: props.aiMode, model: props.model },
       );
 
       const parsed = extractJson(answer.content) as
@@ -659,9 +811,18 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
         <Sparkles className="size-3.5 text-accent" />
         <h2 className="m-0 text-[12px] font-semibold tracking-[-0.005em] text-ink">Ask AI</h2>
         {props.configured ? (
-          <Badge tone="neutral" title="Model used for this panel">{props.model}</Badge>
+          <Badge
+            tone="neutral"
+            title={
+              props.aiMode === "byok"
+                ? `${props.model} — called from this browser with your own OpenRouter key`
+                : "Model used for this panel"
+            }
+          >
+            {props.model}
+          </Badge>
         ) : (
-          <Badge tone="warn">not configured</Badge>
+          <Badge tone="warn">{props.aiMode === "byok" ? "needs your key" : "not configured"}</Badge>
         )}
         {turns.length === 0 ? null : (
           <Button
@@ -699,7 +860,15 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
         <span className="text-ink-dim">{props.example.title}</span> · {toolSurface}
       </p>
 
-      {!props.configured ? (
+      {props.aiMode === "byok" ? (
+        <div className="p-3">
+          <ByokKeyBox
+            configured={props.configured}
+            model={props.model}
+            onChanged={props.onKeyChange}
+          />
+        </div>
+      ) : !props.configured ? (
         <div className="p-3">
           <Notice tone="info" title="No API key">
             Put <code className="font-mono text-[11px]">OPENROUTER_API_KEY=…</code> in the repo-root{" "}

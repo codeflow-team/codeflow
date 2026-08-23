@@ -85,7 +85,7 @@ importers:
   packages/cli:
     dependencies:
       '@codeflow/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@types/node':
@@ -111,7 +111,7 @@ importers:
   packages/examples:
     dependencies:
       '@codeflow/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@codeflow/mcp':
@@ -127,7 +127,7 @@ importers:
   packages/mcp:
     dependencies:
       '@codeflow/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@modelcontextprotocol/sdk':
@@ -143,7 +143,7 @@ importers:
         specifier: 1.0.0-rc.0
         version: 1.0.0-rc.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@codeflow/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@monaco-editor/react':
         specifier: ^4.7.0

@@ -20,7 +20,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge, Button, Hint, NodeGlyph, cn, useCodeFlow } from "@codeflow/react";
 import type { WorkflowNode } from "@codeflow/core";
-import { CircleAlert, CircleCheck, FolderOpen, LoaderCircle, Play, Square, X } from "lucide-react";
+import { ChevronRight, CircleAlert, CircleCheck, FolderOpen, LoaderCircle, Play, Square, X } from "lucide-react";
 import type { RunSnapshot } from "./run.js";
 
 export interface RunPanelProps {
@@ -176,6 +176,26 @@ export function RunPanel(props: RunPanelProps): ReactNode {
             <FolderOpen className="size-3" />
             <code className="truncate font-mono text-[10.5px]">{run.plan.workspace}</code>
           </p>
+          {/* What it actually started from.
+              The runner has always reported this in an `input` frame and the
+              panel has always thrown it away, which is how a demo ended up
+              running on values nobody had seen. It is the record of the run:
+              the panel before it says what *will* be sent, this says what was —
+              `{{workspace}}` already expanded to the folder above. */}
+          {run.input === undefined ? null : (
+            <details className="group mt-1.5" data-testid="run-input">
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium text-ink-dim outline-none hover:text-ink">
+                <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
+                Started from this input
+              </summary>
+              <pre
+                className="m-0 mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md border border-line bg-surface-2 p-2 font-mono text-[10.5px] leading-4 text-ink-dim"
+                data-testid="run-input-json"
+              >
+                {JSON.stringify(run.input, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       )}
 

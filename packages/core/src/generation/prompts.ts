@@ -87,7 +87,16 @@ export const FLOW_STYLE_PROMPT = `1. **One step, one statement.** Every tool cal
 9. **Imports.** \`import type { Tools } from "../generated/tools";\` is type-only —
    never import a value from \`generated/\`. Value imports come from \`@flows/lib\`.
    Type-only imports may come from anywhere. Any other value import degrades the
-   statements that use it to opaque code nodes.`;
+   statements that use it to opaque code nodes.
+10. **A call in a plain statement is a hidden step too** — the mistake long flows make
+    most. Statements outside the table become code nodes; plain data there is fine
+    (\`failed += 1;\`, \`const found: Item[] = [];\`), a **call** is not:
+    \`failures.push({ path, reason })\`, \`const f = \\\`out/\\\${slugOf(name)}.png\\\`\`,
+    \`const stamp = new Date().toISOString()\`, \`passed = matches(text)\` all vanish into
+    code nodes. Declare a **named function in the same file** and give each its own
+    statement — \`recordFailure(failures, path, reason);\`, \`const f = shotPath(name);\`,
+    \`const ok = matches(text); passed = ok;\` — each is then a function node. Collecting,
+    deriving and testing a value are steps; make them look like it.`;
 
 /** The canonical example of the specs — 01 §1, graph defined in 07 §6. */
 export const CANONICAL_EXAMPLE = `\`\`\`ts
@@ -115,17 +124,27 @@ export default async function flow(
 
 /**
  * A second example covering the constructs the canonical one does not: a
- * bounded \`while\`, a narrow \`try\`/\`catch\`/\`finally\`, an early \`continue\`, and a
- * \`Promise.all\` over an array literal. Tool names here are illustrative — the
- * real ones always come from \`generated/tools.d.ts\`.
+ * bounded \`while\`, a narrow \`try\`/\`catch\`/\`finally\`, an early \`continue\`, a
+ * \`Promise.all\` over an array literal, and — the one rule 10 is about — an
+ * accumulator reached through a named function rather than a bare
+ * \`failures.push(…)\`. That last one is here because it is what feature-sized
+ * flows are made of: the large-scale eval measured 34 of 61 L2 failures as an
+ * inline \`push\` (\`packages/core/test/ai/results/large-scale-summary.md\`). Tool
+ * names here are illustrative — the real ones always come from
+ * \`generated/tools.d.ts\`.
  */
 export const RESILIENCE_EXAMPLE = `\`\`\`ts
 import type { Tools } from "../generated/tools";
+
+function recordFailure(failures: string[], key: string, error: unknown) {
+  failures.push(\`\${key}: \${String(error)}\`);
+}
 
 export default async function flow(
   input: { issueKey: string },
   tools: Tools
 ) {
+  const failures: string[] = [];
   let attempt = 0;
   let issue = null;
 
@@ -135,6 +154,7 @@ export default async function flow(
       const fetched = await tools.jira.getIssue({ key: input.issueKey });
       issue = fetched;
     } catch (error) {
+      recordFailure(failures, input.issueKey, error);
       await tools.slack.send({ channel: "#alerts", message: \`Fetch failed: \${String(error)}\` });
     }
   }
@@ -157,7 +177,7 @@ export default async function flow(
     await tools.slack.send({ channel: "#triage", message: comment.body });
   }
 
-  return { delivered: true, posted, mailed };
+  return { delivered: true, posted, mailed, failures };
 }
 \`\`\``;
 

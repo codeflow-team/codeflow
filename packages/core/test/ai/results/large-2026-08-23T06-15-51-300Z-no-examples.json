@@ -1,0 +1,2200 @@
+{
+  "kind": "large-scale",
+  "evalVersion": 1,
+  "model": "stealth/ox-alpha",
+  "maxTokens": 48000,
+  "maxRetries": 2,
+  "target": "L2",
+  "includeExamples": false,
+  "mergedFrom": [
+    "large-2026-08-23T06-08-42-725Z-run3c.json",
+    "large-2026-08-23T06-08-43-287Z-run3d.json",
+    "large-2026-08-23T06-09-48-414Z-run3a.json",
+    "large-2026-08-23T06-15-03-564Z-run3b.json"
+  ],
+  "ranAt": "2026-08-23T06:15:51.301Z",
+  "rates": {
+    "total": 7,
+    "l0": 7,
+    "l1": 7,
+    "l2": 7
+  },
+  "firstRoundRates": {
+    "total": 7,
+    "l0": 7,
+    "l1": 7,
+    "l2": 6
+  },
+  "diagnosticHistogram": {
+    "info/unsupported-construct": 73,
+    "warning/inline-logic-in-code-node": 1
+  },
+  "constructCoverage": {
+    "asked": 49,
+    "covered": 45,
+    "missingByConstruct": {
+      "else-if-chain": 2,
+      "nested-loop": 1,
+      "early-return": 1
+    }
+  },
+  "results": [
+    {
+      "intent": "data-migration",
+      "servers": [
+        "filesystem",
+        "memory"
+      ],
+      "toolCount": 23,
+      "systemPromptTokens": 3427,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "try",
+        "jump",
+        "function",
+        "early-return"
+      ],
+      "targetLines": 190,
+      "includeExamples": false,
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\ninterface FlowInput {\n  sourceDirectory: string;\n  destinationDirectory: string;\n  batchSize: number;\n  maxFailures: number;\n}\n\ninterface NoteEntry {\n  path: string;\n  text: string;\n}\n\ninterface FailureRecord {\n  path: string;\n  reason: string;\n}\n\nfunction baseNameOf(sourcePath: string): string {\n  const fileName = sourcePath.split(\"/\").pop() ?? sourcePath;\n  return fileName.replace(/\\.[^.]+$/, \"\");\n}\n\nfunction destinationPathFor(sourcePath: string, destinationDirectory: string): string {\n  return `${destinationDirectory}/${baseNameOf(sourcePath)}.md`;\n}\n\nfunction noteEntityName(sourcePath: string): string {\n  return baseNameOf(sourcePath);\n}\n\nfunction reportPathFor(destinationDirectory: string): string {\n  return `${destinationDirectory}/migration-report.md`;\n}\n\nfunction parseSearchResults(content: string): string[] {\n  return content\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0);\n}\n\nfunction chunk<T>(items: T[], size: number): T[][] {\n  const safeSize = Math.max(1, size);\n  const batches: T[][] = [];\n  for (let index = 0; index < items.length; index += safeSize) {\n    const batch = items.slice(index, index + safeSize);\n    batches.push(batch);\n  }\n  return batches;\n}\n\n// readMultipleFiles returns the whole batch as one string; each file is\n// expected as a \"<path>:\" header line followed by its content lines.\nfunction parseBatchContent(content: string): NoteEntry[] {\n  const entries: NoteEntry[] = [];\n  let currentPath = \"\";\n  let currentLines: string[] = [];\n  let inSection = false;\n\n  const flush = () => {\n    if (inSection) {\n      const text = currentLines.join(\"\\n\").trim();\n      entries.push({ path: currentPath, text });\n    }\n  };\n\n  for (const rawLine of content.split(\"\\n\")) {\n    const line = rawLine.trimEnd();\n    if (line.endsWith(\":\") && line.includes(\"/\")) {\n      flush();\n      currentPath = line.slice(0, -1).trim();\n      currentLines = [];\n      inSection = true;\n    } else if (inSection) {\n      currentLines.push(line);\n    }\n  }\n  flush();\n  return entries;\n}\n\nfunction findEntry(entries: NoteEntry[], path: string): NoteEntry | null {\n  const match = entries.find((entry) => entry.path === path);\n  return match ?? null;\n}\n\n// Legacy transformation: normalize line endings, strip legacy \"NOTE:\" markers\n// and trailing whitespace.\nfunction transformNote(raw: string): string {\n  return raw\n    .replace(/\\r\\n/g, \"\\n\")\n    .replace(/^NOTE:\\s*/i, \"\")\n    .replace(/[ \\t]+$/gm, \"\")\n    .trim();\n}\n\nfunction isEmptyNote(text: string): boolean {\n  return text.replace(/\\s/g, \"\").length === 0;\n}\n\nfunction recordFailure(failures: FailureRecord[], path: string, reason: string): FailureRecord {\n  const record = { path, reason };\n  failures.push(record);\n  return record;\n}\n\nfunction describeError(error: unknown): string {\n  if (error instanceof Error) {\n    return error.message;\n  }\n  return String(error);\n}\n\nfunction buildReport(\n  migrated: number,\n  skipped: number,\n  failed: number,\n  aborted: boolean,\n  failures: FailureRecord[]\n): string {\n  const lines: string[] = [\n    \"# Migration report\",\n    \"\",\n    `- Migrated: ${migrated}`,\n    `- Skipped (empty after transformation): ${skipped}`,\n    `- Failed: ${failed}`,\n    `- Aborted: ${aborted ? \"yes\" : \"no\"}`,\n    \"\",\n    \"## Failures\",\n    \"\",\n  ];\n  if (failures.length === 0) {\n    lines.push(\"None.\");\n  } else {\n    for (const failure of failures) {\n      lines.push(`- ${failure.path}: ${failure.reason}`);\n    }\n  }\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(input: FlowInput, tools: Tools) {\n  const failures: FailureRecord[] = [];\n  let migrated = 0;\n  let skipped = 0;\n  let failed = 0;\n  let aborted = false;\n\n  const reportPath = reportPathFor(input.destinationDirectory);\n\n  // 1. The destination directory must exist before anything is written.\n  await tools.filesystem.createDirectory({ path: input.destinationDirectory });\n\n  // 2. Find every note file under the source directory.\n  // Note files are markdown; adjust the pattern if legacy notes use another extension.\n  const searchResult = await tools.filesystem.searchFiles({\n    path: input.sourceDirectory,\n    pattern: \"**/*.md\",\n  });\n  const notePaths = parseSearchResults(searchResult.content);\n\n  // 3. Nothing to migrate: write an empty report and stop.\n  if (notePaths.length === 0) {\n    const emptyReport = buildReport(0, 0, 0, false, failures);\n    await tools.filesystem.writeFile({ path: reportPath, content: emptyReport });\n    return { migrated: 0, skipped: 0, failed: 0, aborted: false };\n  }\n\n  // 4. Process the notes in batches.\n  const batches = chunk(notePaths, input.batchSize);\n\n  for (const batch of batches) {\n    let batchEntries: NoteEntry[] = [];\n    let batchReadError = \"\";\n\n    // Read the whole batch in one go.\n    try {\n      const batchResult = await tools.filesystem.readMultipleFiles({ paths: batch });\n      const parsedBatch = parseBatchContent(batchResult.content);\n      batchEntries = parsedBatch;\n    } catch (error) {\n      const readMessage = describeError(error);\n      batchReadError = readMessage;\n    }\n\n    if (batchReadError !== \"\") {\n      // The batch read failed as a whole: every note in it is a failure.\n      for (const notePath of batch) {\n        recordFailure(failures, notePath, batchReadError);\n        failed += 1;\n      }\n    } else {\n      for (const notePath of batch) {\n        const entry = findEntry(batchEntries, notePath);\n        if (entry === null) {\n          recordFailure(failures, notePath, \"note missing from batch read result\");\n          failed += 1;\n          continue;\n        }\n\n        const transformed = transformNote(entry.text);\n        if (isEmptyNote(transformed)) {\n          // Empty after transformation: skipped, counts as neither success nor failure.\n          skipped += 1;\n          continue;\n        }\n\n        const targetPath = destinationPathFor(notePath, input.destinationDirectory);\n        const entityName = noteEntityName(notePath);\n\n        try {\n          await tools.filesystem.writeFile({ path: targetPath, content: transformed });\n          // 8. Record the migrated note in the knowledge graph.\n          await tools.memory.createEntities({\n            entities: [\n              {\n                name: entityName,\n                entityType: \"note\",\n                observations: [notePath],\n              },\n            ],\n          });\n          migrated += 1;\n        } catch (error) {\n          const writeMessage = describeError(error);\n          recordFailure(failures, notePath, writeMessage);\n          failed += 1;\n        }\n      }\n    }\n\n    // 7. Too many failures: abandon the migration immediately.\n    if (failed > input.maxFailures) {\n      aborted = true;\n      break;\n    }\n  }\n\n  // 9. Write the final report.\n  const report = buildReport(migrated, skipped, failed, aborted, failures);\n  await tools.filesystem.writeFile({ path: reportPath, content: report });\n\n  return { migrated, skipped, failed, aborted };\n}\n",
+          "lines": 246,
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 145,
+                  "column": 3,
+                  "offset": 3627
+                },
+                "end": {
+                  "line": 149,
+                  "column": 23,
+                  "offset": 3744
+                },
+                "semanticPath": "flow/stmt[0..4]",
+                "fingerprint": "be7f55d8c576ef54a3bf28fd2858f8c9587fcfd21db0f16a6bb7d37675b3a09e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 175,
+                  "column": 5,
+                  "offset": 4734
+                },
+                "end": {
+                  "line": 176,
+                  "column": 29,
+                  "offset": 4798
+                },
+                "semanticPath": "flow/for[0]/stmt[0..1]",
+                "fingerprint": "377ca72a9fb6616ed414b6f16558c4c47b084fcec99eba9381d2db1e890ea6fd"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 182,
+                  "column": 7,
+                  "offset": 5007
+                },
+                "end": {
+                  "line": 182,
+                  "column": 34,
+                  "offset": 5034
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[2]",
+                "fingerprint": "ae69efce4d0609193430eefce1ac5b2c2a5514e03eb8ee1f22647c36dbefdd92"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 185,
+                  "column": 7,
+                  "offset": 5111
+                },
+                "end": {
+                  "line": 185,
+                  "column": 36,
+                  "offset": 5140
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[1]",
+                "fingerprint": "c0d4cd03fb96662aeb3f8b3682c121bc8882943d503a2887a0de77c58de46d9e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 192,
+                  "column": 9,
+                  "offset": 5360
+                },
+                "end": {
+                  "line": 192,
+                  "column": 21,
+                  "offset": 5372
+                },
+                "semanticPath": "flow/for[0]/if[0]/for[0]/stmt[1]",
+                "fingerprint": "d9bceaec27dd426518b99e2fc257b41fe9346bf875d9f0d83cdc464a72cf693d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 199,
+                  "column": 11,
+                  "offset": 5613
+                },
+                "end": {
+                  "line": 199,
+                  "column": 23,
+                  "offset": 5625
+                },
+                "semanticPath": "flow/for[0]/if[0]/else/for[0]/if[0]/stmt[1]",
+                "fingerprint": "d9bceaec27dd426518b99e2fc257b41fe9346bf875d9f0d83cdc464a72cf693d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 206,
+                  "column": 11,
+                  "offset": 5851
+                },
+                "end": {
+                  "line": 206,
+                  "column": 24,
+                  "offset": 5864
+                },
+                "semanticPath": "flow/for[0]/if[0]/else/for[0]/if[1]/stmt[0]",
+                "fingerprint": "8741d99862b58990e1ea51367cece78599b26940d42eb8975d80bbf89a6d166f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 225,
+                  "column": 11,
+                  "offset": 6456
+                },
+                "end": {
+                  "line": 225,
+                  "column": 25,
+                  "offset": 6470
+                },
+                "semanticPath": "flow/for[0]/if[0]/else/for[0]/try[0]/stmt[2]",
+                "fingerprint": "0e4fb335c3d21597839f9718332c4906e09cf2ea8b41591a899226a68155cf00"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 229,
+                  "column": 11,
+                  "offset": 6619
+                },
+                "end": {
+                  "line": 229,
+                  "column": 23,
+                  "offset": 6631
+                },
+                "semanticPath": "flow/for[0]/if[0]/else/for[0]/try[0]/catch/stmt[2]",
+                "fingerprint": "d9bceaec27dd426518b99e2fc257b41fe9346bf875d9f0d83cdc464a72cf693d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 236,
+                  "column": 7,
+                  "offset": 6765
+                },
+                "end": {
+                  "line": 236,
+                  "column": 22,
+                  "offset": 6780
+                },
+                "semanticPath": "flow/for[0]/if[1]/stmt[0]",
+                "fingerprint": "2da25e39ea08b26644f85f679bdd34d72f6c3a6bdbac2f59e4661a4aa46a1882"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 10
+          },
+          "shape": {
+            "nodes": 52,
+            "edges": 132,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 10,
+              "function": 15,
+              "tool": 7,
+              "condition": 5,
+              "output": 2,
+              "merge": 4,
+              "loop": 3,
+              "try": 2,
+              "jump": 3
+            },
+            "codeNodes": 10,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8076923076923077,
+            "maxNesting": 4,
+            "toolCalls": 7
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "else-if-chain",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "try"
+          ],
+          "missing": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 3532,
+            "completionTokens": 10388,
+            "totalTokens": 13920
+          },
+          "ms": 213589
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.createDirectory",
+        "filesystem.readMultipleFiles",
+        "filesystem.searchFiles",
+        "filesystem.writeFile",
+        "memory.createEntities"
+      ],
+      "totalMs": 213664
+    },
+    {
+      "intent": "knowledge-base-sync",
+      "servers": [
+        "memory",
+        "context7",
+        "deepwiki",
+        "duckduckgo",
+        "filesystem"
+      ],
+      "toolCount": 27,
+      "systemPromptTokens": 4316,
+      "covers": [
+        "while-loop",
+        "loop",
+        "nested-loop",
+        "condition",
+        "try",
+        "jump",
+        "function"
+      ],
+      "targetLines": 170,
+      "includeExamples": false,
+      "firstLevel": "L1",
+      "finalLevel": "L2",
+      "retries": 1,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/**\n * Knowledge-base sync.\n *\n * Per topic: walk the existing knowledge-graph entries in pages (bounded),\n * collect + dedupe node names, then reconcile each node against upstream\n * documentation found on the web: refresh stale observations, delete nodes\n * that vanished upstream, and never let one bad source abort the run.\n * Finishes by writing \"sync-log.md\" and returning per-topic + grand totals.\n */\n\n// TODO(pagination): memory.searchNodes in the registry has no offset/page\n// parameters, so paging is emulated: every iteration re-queries the topic and\n// takes the window for the current page index. Pages overlap in practice — the\n// dedupe helper absorbs that. Swap in real server-side paging when the\n// registry gains a paginated search.\n\ninterface GraphEntity {\n  name: string;\n  entityType: string;\n  observations: string[];\n}\n\ninterface TopicReport {\n  topic: string;\n  updated: number;\n  deleted: number;\n  skipped: number;\n  failed: number;\n}\n\nexport default async function flow(\n  input: { topics: string[]; pageSize: number; maxPagesPerTopic: number },\n  tools: Tools\n) {\n  const report: TopicReport[] = [];\n\n  for (const topic of input.topics) {\n    const totals: TopicReport = { topic, updated: 0, deleted: 0, skipped: 0, failed: 0 };\n\n    // ---- Walk the existing graph entries, page by page (bounded) --------\n    const collectedNames: string[] = [];\n    const heldEntities: GraphEntity[] = [];\n    let page = 0;\n    let reachedLastPage = false;\n\n    while (page < input.maxPagesPerTopic && !reachedLastPage) {\n      const matchPage = await tools.memory.searchNodes({ query: topic });\n\n      const entitiesOnPage = pageOf(matchPage.entities, page, input.pageSize);\n      const namesOnPage = namesOf(entitiesOnPage);\n      recordNames(collectedNames, namesOnPage);\n      recordEntities(heldEntities, entitiesOnPage);\n\n      const shortPage = isShortPage(namesOnPage, input.pageSize);\n      reachedLastPage = shortPage;\n      page += 1;\n    }\n\n    // ---- Dedupe before use, and respect the per-topic touch budget ------\n    const uniqueNames = dedupeNames(collectedNames);\n    const touchBudget = input.maxPagesPerTopic * input.pageSize;\n    const budget = capToBudget(uniqueNames, touchBudget);\n\n    // ---- Reconcile each node against upstream ---------------------------\n    for (const nodeName of budget) {\n      const webHits = await tools.duckduckgo.duckduckgoWebSearch({\n        query: `${nodeName} ${topic}`,\n        count: 5,\n      });\n\n      const upstreamUrl = firstHitUrl(webHits);\n      const hasUpstream = hasUsableHit(webHits) && upstreamUrl.length > 0;\n      if (!hasUpstream) {\n        totals.skipped += 1;\n        continue;\n      }\n\n      let upstreamDoc: unknown = undefined;\n      try {\n        const fetched = await tools.deepwiki.deepwikiFetch({ url: upstreamUrl });\n        upstreamDoc = fetched;\n      } catch {\n        totals.failed += 1;\n        continue;\n      }\n\n      const held = findHeldEntity(heldEntities, nodeName);\n      const upstreamStamp = latestIsoStamp(upstreamDoc);\n      const upstreamMs = timestampMs(upstreamStamp);\n      const heldMs = latestHeldTimestamp(held);\n\n      const missingUpstream = isMissingUpstream(upstreamDoc);\n      if (missingUpstream) {\n        const removal = await tools.memory.deleteEntities({ entityNames: [nodeName] });\n        if (removal.success) {\n          totals.deleted += 1;\n        } else {\n          totals.skipped += 1;\n        }\n        continue;\n      }\n\n      const upstreamIsNewer = isNewer(upstreamMs, heldMs);\n      if (!upstreamIsNewer) {\n        totals.skipped += 1;\n        continue;\n      }\n\n      const docText = documentText(upstreamDoc);\n      const body = observationBody(upstreamUrl, upstreamStamp, docText);\n      const stamped = await tools.memory.addObservations({\n        observations: [{ entityName: nodeName, contents: [body] }],\n      });\n      const applied = stamped.results.length > 0;\n      if (applied) {\n        totals.updated += 1;\n      } else {\n        totals.skipped += 1;\n      }\n    }\n\n    recordTopicReport(report, { ...totals });\n  }\n\n  // ---- Sync log ---------------------------------------------------------\n  const logText = renderLog(report);\n  await tools.filesystem.writeFile({ path: \"sync-log.md\", content: logText });\n\n  const grandTotals = sumTotals(report);\n  return { perTopic: report, totals: grandTotals };\n}\n\n// ---------------------------------------------------------------------------\n// Paging + collection helpers\n// ---------------------------------------------------------------------------\n\nfunction pageOf(entities: GraphEntity[], page: number, pageSize: number): GraphEntity[] {\n  const start = page * pageSize;\n  return entities.slice(start, start + pageSize);\n}\n\nfunction namesOf(entities: GraphEntity[]): string[] {\n  return entities.map((entity) => entity.name);\n}\n\nfunction recordNames(target: string[], names: string[]): void {\n  for (const name of names) target.push(name);\n}\n\nfunction recordEntities(target: GraphEntity[], entities: GraphEntity[]): void {\n  for (const entity of entities) {\n    const alreadyHeld = target.some((held) => held.name === entity.name);\n    if (!alreadyHeld) target.push(entity);\n  }\n}\n\nfunction isShortPage(names: string[], pageSize: number): boolean {\n  return names.length < pageSize;\n}\n\nfunction dedupeNames(names: string[]): string[] {\n  const unique: string[] = [];\n  for (const name of names) {\n    if (!unique.includes(name)) unique.push(name);\n  }\n  return unique;\n}\n\nfunction capToBudget(names: string[], budget: number): string[] {\n  return names.slice(0, Math.max(0, budget));\n}\n\nfunction findHeldEntity(entities: GraphEntity[], name: string): GraphEntity | undefined {\n  return entities.find((entity) => entity.name === name);\n}\n\n// ---------------------------------------------------------------------------\n// Upstream-result helpers (tolerant of loosely shaped payloads)\n// ---------------------------------------------------------------------------\n\nfunction asRecord(value: unknown): Record<string, unknown> | undefined {\n  return typeof value === \"object\" && value !== null\n    ? (value as Record<string, unknown>)\n    : undefined;\n}\n\nfunction hasUsableHit(result: unknown): boolean {\n  if (typeof result === \"string\") return result.trim().length > 0;\n  const record = asRecord(result);\n  if (!record) return false;\n  if (Array.isArray(record.results)) return record.results.length > 0;\n  if (typeof record.content === \"string\") return record.content.trim().length > 0;\n  return false;\n}\n\nfunction firstHitUrl(result: unknown): string {\n  const record = asRecord(result);\n  if (!record) return typeof result === \"string\" ? firstUrlInText(result) : \"\";\n  if (Array.isArray(record.results)) {\n    for (const item of record.results) {\n      const itemRecord = asRecord(item);\n      const candidate = itemRecord\n        ? (itemRecord.url ?? itemRecord.href ?? itemRecord.link)\n        : undefined;\n      if (typeof candidate === \"string\" && candidate.length > 0) return candidate;\n    }\n  }\n  if (typeof record.content === \"string\") return firstUrlInText(record.content);\n  return \"\";\n}\n\nfunction firstUrlInText(text: string): string {\n  const match = /https?:\\/\\/[^\\s\"'<>)]+/.exec(text);\n  return match ? match[0] : \"\";\n}\n\nfunction documentText(doc: unknown): string {\n  if (typeof doc === \"string\") return doc;\n  const record = asRecord(doc);\n  if (!record) return \"\";\n  for (const key of [\"content\", \"markdown\", \"text\"]) {\n    const value = record[key];\n    if (typeof value === \"string\") return value;\n  }\n  return \"\";\n}\n\nfunction isMissingUpstream(doc: unknown): boolean {\n  return documentText(doc).trim().length === 0;\n}\n\n// ---------------------------------------------------------------------------\n// Freshness helpers — ISO stamps embedded in documents / observations\n// ---------------------------------------------------------------------------\n\nconst ISO_PATTERN =\n  /\\d{4}-\\d{2}-\\d{2}(?:[T ]\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?)?/g;\n\nfunction safeJson(value: unknown): string {\n  try {\n    return JSON.stringify(value) ?? \"\";\n  } catch {\n    return \"\";\n  }\n}\n\nfunction latestIsoStamp(value: unknown): string {\n  const text = typeof value === \"string\" ? value : safeJson(value);\n  const stamps = text.match(ISO_PATTERN) ?? [];\n  let best = \"\";\n  let bestMs = Number.NEGATIVE_INFINITY;\n  for (const stamp of stamps) {\n    const ms = Date.parse(stamp);\n    if (!Number.isNaN(ms) && ms > bestMs) {\n      bestMs = ms;\n      best = stamp;\n    }\n  }\n  return best;\n}\n\nfunction timestampMs(iso: string): number {\n  if (iso.length === 0) return 0;\n  const ms = Date.parse(iso);\n  return Number.isNaN(ms) ? 0 : ms;\n}\n\nfunction latestHeldTimestamp(entity: GraphEntity | undefined): number {\n  if (!entity) return 0;\n  let best = 0;\n  for (const observation of entity.observations) {\n    const ms = timestampMs(latestIsoStamp(observation));\n    if (ms > best) best = ms;\n  }\n  return best;\n}\n\nfunction isNewer(upstreamMs: number, heldMs: number): boolean {\n  return upstreamMs > heldMs;\n}\n\nfunction observationBody(sourceUrl: string, fetchedAt: string, text: string): string {\n  const stamp = fetchedAt.length > 0 ? fetchedAt : \"unknown\";\n  return [\n    \"upstream-sync\",\n    `source: ${sourceUrl}`,\n    `fetched_at: ${stamp}`,\n    \"\",\n    text,\n  ].join(\"\\n\");\n}\n\n// ---------------------------------------------------------------------------\n// Reporting helpers\n// ---------------------------------------------------------------------------\n\nfunction recordTopicReport(report: TopicReport[], entry: TopicReport): void {\n  report.push(entry);\n}\n\nfunction sumTotals(report: TopicReport[]): TopicReport {\n  const grand: TopicReport = { topic: \"ALL\", updated: 0, deleted: 0, skipped: 0, failed: 0 };\n  for (const entry of report) {\n    grand.updated += entry.updated;\n    grand.deleted += entry.deleted;\n    grand.skipped += entry.skipped;\n    grand.failed += entry.failed;\n  }\n  return grand;\n}\n\nfunction renderLog(report: TopicReport[]): string {\n  const lines: string[] = [\"# Knowledge base sync log\", \"\"];\n  for (const entry of report) {\n    lines.push(`## ${entry.topic}`);\n    lines.push(`- updated: ${entry.updated}`);\n    lines.push(`- deleted: ${entry.deleted}`);\n    lines.push(`- skipped: ${entry.skipped}`);\n    lines.push(`- failed: ${entry.failed}`);\n    lines.push(\"\");\n  }\n  const grand = sumTotals(report);\n  lines.push(\"## Totals\");\n  lines.push(`- updated: ${grand.updated}`);\n  lines.push(`- deleted: ${grand.deleted}`);\n  lines.push(`- skipped: ${grand.skipped}`);\n  lines.push(`- failed: ${grand.failed}`);\n  return lines.join(\"\\n\");\n}\n",
+          "lines": 331,
+          "level": "L1",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 37,
+                  "column": 3,
+                  "offset": 1147
+                },
+                "end": {
+                  "line": 37,
+                  "column": 36,
+                  "offset": 1180
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "9c3eec4e71fe12e1ea1bcc72afd679633275c4fd8f31bb0b79db38477b520b86"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 40,
+                  "column": 5,
+                  "offset": 1224
+                },
+                "end": {
+                  "line": 46,
+                  "column": 33,
+                  "offset": 1523
+                },
+                "semanticPath": "flow/for[0]/stmt[0..4]",
+                "fingerprint": "47e1dd47ed5f714ab7b24e528802b8edb960ba39e4704a6d5bdefd84d9cfd9d2"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 57,
+                  "column": 7,
+                  "offset": 1967
+                },
+                "end": {
+                  "line": 58,
+                  "column": 17,
+                  "offset": 2012
+                },
+                "semanticPath": "flow/for[0]/while[0]/stmt[6..7]",
+                "fingerprint": "1788f0b808644411794123fb6a693323a01d2897636690d8bdb96bff738e9cee"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 63,
+                  "column": 5,
+                  "offset": 2154
+                },
+                "end": {
+                  "line": 63,
+                  "column": 65,
+                  "offset": 2214
+                },
+                "semanticPath": "flow/for[0]/stmt[7]",
+                "fingerprint": "2a0851206af76e7b4d774abc3f04cc4700db7f3c314fccd070e35e2166d49ec8"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 74,
+                  "column": 7,
+                  "offset": 2577
+                },
+                "end": {
+                  "line": 74,
+                  "column": 75,
+                  "offset": 2645
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[2]",
+                "fingerprint": "bb615013f119aafcc6804a7cb851b6f14c4bbb0318eb884916c129f9e5c31228"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 76,
+                  "column": 9,
+                  "offset": 2680
+                },
+                "end": {
+                  "line": 76,
+                  "column": 29,
+                  "offset": 2700
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[0]/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 80,
+                  "column": 7,
+                  "offset": 2734
+                },
+                "end": {
+                  "line": 80,
+                  "column": 44,
+                  "offset": 2771
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[4]",
+                "fingerprint": "2943a8fe7fbc44d05258069a9d8d77471a4a320afbe38bdf37aee3787fe280c3"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 83,
+                  "column": 9,
+                  "offset": 2874
+                },
+                "end": {
+                  "line": 83,
+                  "column": 31,
+                  "offset": 2896
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/stmt[1]",
+                "fingerprint": "f718b0eeae8a21a84944922f2bf05ee02909e0caa6cf2e84af4bea546790f1cb"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 85,
+                  "column": 9,
+                  "offset": 2921
+                },
+                "end": {
+                  "line": 85,
+                  "column": 28,
+                  "offset": 2940
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "b4ff4167c8ec14a3505a9efe1197a267a085b79528ebec40b57f9c6404dbe64b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 98,
+                  "column": 11,
+                  "offset": 3406
+                },
+                "end": {
+                  "line": 98,
+                  "column": 31,
+                  "offset": 3426
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[1]/if[0]/stmt[0]",
+                "fingerprint": "867bfae709ce7e2130ab7391e10ae92b15f9cb9ef0f30a402cde417276ae788d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 100,
+                  "column": 11,
+                  "offset": 3454
+                },
+                "end": {
+                  "line": 100,
+                  "column": 31,
+                  "offset": 3474
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[1]/if[0]/else/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 107,
+                  "column": 9,
+                  "offset": 3609
+                },
+                "end": {
+                  "line": 107,
+                  "column": 29,
+                  "offset": 3629
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[2]/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 116,
+                  "column": 7,
+                  "offset": 3922
+                },
+                "end": {
+                  "line": 116,
+                  "column": 50,
+                  "offset": 3965
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[17]",
+                "fingerprint": "4f2b6d4c4b560c76612c4ce855a3a28f576d5f5ac66c93f00ead15c204f1fc05"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 118,
+                  "column": 9,
+                  "offset": 3995
+                },
+                "end": {
+                  "line": 118,
+                  "column": 29,
+                  "offset": 4015
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[3]/stmt[0]",
+                "fingerprint": "494079b296818f61a9b43c98bd2ab409b87a8d1157d591ba58d8bbd2a31f2e28"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 120,
+                  "column": 9,
+                  "offset": 4039
+                },
+                "end": {
+                  "line": 120,
+                  "column": 29,
+                  "offset": 4059
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[3]/else/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            },
+            {
+              "severity": "warning",
+              "code": "inline-logic-in-code-node",
+              "message": "`hasUsableHit(webHits)` runs inside a custom code node, so the step is invisible on the graph. Give the call its own `const x = await …` statement if it is a tool, or move the logic into a named function and call that (01 §3 rules 4–5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 74,
+                  "column": 7,
+                  "offset": 2577
+                },
+                "end": {
+                  "line": 74,
+                  "column": 75,
+                  "offset": 2645
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[2]",
+                "fingerprint": "bb615013f119aafcc6804a7cb851b6f14c4bbb0318eb884916c129f9e5c31228"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 15,
+            "warning/inline-logic-in-code-node": 1
+          },
+          "shape": {
+            "nodes": 59,
+            "edges": 127,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 15,
+              "loop": 3,
+              "tool": 6,
+              "function": 19,
+              "condition": 5,
+              "jump": 4,
+              "merge": 4,
+              "try": 1,
+              "output": 1
+            },
+            "codeNodes": 15,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7457627118644068,
+            "maxNesting": 4,
+            "toolCalls": 6
+          },
+          "covered": [
+            "condition",
+            "else-if-chain",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "try",
+            "while-loop"
+          ],
+          "missing": [],
+          "feedback": "The flow you wrote reached L1 (target: L2). CodeFlow reported:\n\n- [warning] inline-logic-in-code-node (line 74, column 7): `hasUsableHit(webHits)` runs inside a custom code node, so the step is invisible on the graph. Give the call its own `const x = await …` statement if it is a tool, or move the logic into a named function and call that (01 §3 rules 4–5).\n\nFix every point above and answer with the complete corrected flow file — the whole\nfile, no fences, no commentary. Do not change anything the diagnostics did not ask\nyou to change.",
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 4314,
+            "completionTokens": 14222,
+            "totalTokens": 18536
+          },
+          "ms": 379156
+        },
+        {
+          "round": 1,
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/**\n * Knowledge-base sync.\n *\n * Per topic: walk the existing knowledge-graph entries in pages (bounded),\n * collect + dedupe node names, then reconcile each node against upstream\n * documentation found on the web: refresh stale observations, delete nodes\n * that vanished upstream, and never let one bad source abort the run.\n * Finishes by writing \"sync-log.md\" and returning per-topic + grand totals.\n */\n\n// TODO(pagination): memory.searchNodes in the registry has no offset/page\n// parameters, so paging is emulated: every iteration re-queries the topic and\n// takes the window for the current page index. Pages overlap in practice — the\n// dedupe helper absorbs that. Swap in real server-side paging when the\n// registry gains a paginated search.\n\ninterface GraphEntity {\n  name: string;\n  entityType: string;\n  observations: string[];\n}\n\ninterface TopicReport {\n  topic: string;\n  updated: number;\n  deleted: number;\n  skipped: number;\n  failed: number;\n}\n\nexport default async function flow(\n  input: { topics: string[]; pageSize: number; maxPagesPerTopic: number },\n  tools: Tools\n) {\n  const report: TopicReport[] = [];\n\n  for (const topic of input.topics) {\n    const totals: TopicReport = { topic, updated: 0, deleted: 0, skipped: 0, failed: 0 };\n\n    // ---- Walk the existing graph entries, page by page (bounded) --------\n    const collectedNames: string[] = [];\n    const heldEntities: GraphEntity[] = [];\n    let page = 0;\n    let reachedLastPage = false;\n\n    while (page < input.maxPagesPerTopic && !reachedLastPage) {\n      const matchPage = await tools.memory.searchNodes({ query: topic });\n\n      const entitiesOnPage = pageOf(matchPage.entities, page, input.pageSize);\n      const namesOnPage = namesOf(entitiesOnPage);\n      recordNames(collectedNames, namesOnPage);\n      recordEntities(heldEntities, entitiesOnPage);\n\n      const shortPage = isShortPage(namesOnPage, input.pageSize);\n      reachedLastPage = shortPage;\n      page += 1;\n    }\n\n    // ---- Dedupe before use, and respect the per-topic touch budget ------\n    const uniqueNames = dedupeNames(collectedNames);\n    const touchBudget = input.maxPagesPerTopic * input.pageSize;\n    const budget = capToBudget(uniqueNames, touchBudget);\n\n    // ---- Reconcile each node against upstream ---------------------------\n    for (const nodeName of budget) {\n      const webHits = await tools.duckduckgo.duckduckgoWebSearch({\n        query: `${nodeName} ${topic}`,\n        count: 5,\n      });\n\n      const upstreamUrl = firstHitUrl(webHits);\n      const hasUpstream = hasUsableUpstream(webHits);\n      if (!hasUpstream) {\n        totals.skipped += 1;\n        continue;\n      }\n\n      let upstreamDoc: unknown = undefined;\n      try {\n        const fetched = await tools.deepwiki.deepwikiFetch({ url: upstreamUrl });\n        upstreamDoc = fetched;\n      } catch {\n        totals.failed += 1;\n        continue;\n      }\n\n      const held = findHeldEntity(heldEntities, nodeName);\n      const upstreamStamp = latestIsoStamp(upstreamDoc);\n      const upstreamMs = timestampMs(upstreamStamp);\n      const heldMs = latestHeldTimestamp(held);\n\n      const missingUpstream = isMissingUpstream(upstreamDoc);\n      if (missingUpstream) {\n        const removal = await tools.memory.deleteEntities({ entityNames: [nodeName] });\n        if (removal.success) {\n          totals.deleted += 1;\n        } else {\n          totals.skipped += 1;\n        }\n        continue;\n      }\n\n      const upstreamIsNewer = isNewer(upstreamMs, heldMs);\n      if (!upstreamIsNewer) {\n        totals.skipped += 1;\n        continue;\n      }\n\n      const docText = documentText(upstreamDoc);\n      const body = observationBody(upstreamUrl, upstreamStamp, docText);\n      const stamped = await tools.memory.addObservations({\n        observations: [{ entityName: nodeName, contents: [body] }],\n      });\n      const applied = stamped.results.length > 0;\n      if (applied) {\n        totals.updated += 1;\n      } else {\n        totals.skipped += 1;\n      }\n    }\n\n    recordTopicReport(report, { ...totals });\n  }\n\n  // ---- Sync log ---------------------------------------------------------\n  const logText = renderLog(report);\n  await tools.filesystem.writeFile({ path: \"sync-log.md\", content: logText });\n\n  const grandTotals = sumTotals(report);\n  return { perTopic: report, totals: grandTotals };\n}\n\n// ---------------------------------------------------------------------------\n// Paging + collection helpers\n// ---------------------------------------------------------------------------\n\nfunction pageOf(entities: GraphEntity[], page: number, pageSize: number): GraphEntity[] {\n  const start = page * pageSize;\n  return entities.slice(start, start + pageSize);\n}\n\nfunction namesOf(entities: GraphEntity[]): string[] {\n  return entities.map((entity) => entity.name);\n}\n\nfunction recordNames(target: string[], names: string[]): void {\n  for (const name of names) target.push(name);\n}\n\nfunction recordEntities(target: GraphEntity[], entities: GraphEntity[]): void {\n  for (const entity of entities) {\n    const alreadyHeld = target.some((held) => held.name === entity.name);\n    if (!alreadyHeld) target.push(entity);\n  }\n}\n\nfunction isShortPage(names: string[], pageSize: number): boolean {\n  return names.length < pageSize;\n}\n\nfunction dedupeNames(names: string[]): string[] {\n  const unique: string[] = [];\n  for (const name of names) {\n    if (!unique.includes(name)) unique.push(name);\n  }\n  return unique;\n}\n\nfunction capToBudget(names: string[], budget: number): string[] {\n  return names.slice(0, Math.max(0, budget));\n}\n\nfunction findHeldEntity(entities: GraphEntity[], name: string): GraphEntity | undefined {\n  return entities.find((entity) => entity.name === name);\n}\n\n// ---------------------------------------------------------------------------\n// Upstream-result helpers (tolerant of loosely shaped payloads)\n// ---------------------------------------------------------------------------\n\nfunction asRecord(value: unknown): Record<string, unknown> | undefined {\n  return typeof value === \"object\" && value !== null\n    ? (value as Record<string, unknown>)\n    : undefined;\n}\n\nfunction hasUsableUpstream(result: unknown): boolean {\n  const url = firstHitUrl(result);\n  const usable = hasUsableHit(result);\n  return usable && url.length > 0;\n}\n\nfunction hasUsableHit(result: unknown): boolean {\n  if (typeof result === \"string\") return result.trim().length > 0;\n  const record = asRecord(result);\n  if (!record) return false;\n  if (Array.isArray(record.results)) return record.results.length > 0;\n  if (typeof record.content === \"string\") return record.content.trim().length > 0;\n  return false;\n}\n\nfunction firstHitUrl(result: unknown): string {\n  const record = asRecord(result);\n  if (!record) return typeof result === \"string\" ? firstUrlInText(result) : \"\";\n  if (Array.isArray(record.results)) {\n    for (const item of record.results) {\n      const itemRecord = asRecord(item);\n      const candidate = itemRecord\n        ? (itemRecord.url ?? itemRecord.href ?? itemRecord.link)\n        : undefined;\n      if (typeof candidate === \"string\" && candidate.length > 0) return candidate;\n    }\n  }\n  if (typeof record.content === \"string\") return firstUrlInText(record.content);\n  return \"\";\n}\n\nfunction firstUrlInText(text: string): string {\n  const match = /https?:\\/\\/[^\\s\"'<>)]+/.exec(text);\n  return match ? match[0] : \"\";\n}\n\nfunction documentText(doc: unknown): string {\n  if (typeof doc === \"string\") return doc;\n  const record = asRecord(doc);\n  if (!record) return \"\";\n  for (const key of [\"content\", \"markdown\", \"text\"]) {\n    const value = record[key];\n    if (typeof value === \"string\") return value;\n  }\n  return \"\";\n}\n\nfunction isMissingUpstream(doc: unknown): boolean {\n  return documentText(doc).trim().length === 0;\n}\n\n// ---------------------------------------------------------------------------\n// Freshness helpers — ISO stamps embedded in documents / observations\n// ---------------------------------------------------------------------------\n\nconst ISO_PATTERN =\n  /\\d{4}-\\d{2}-\\d{2}(?:[T ]\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})?)?/g;\n\nfunction safeJson(value: unknown): string {\n  try {\n    return JSON.stringify(value) ?? \"\";\n  } catch {\n    return \"\";\n  }\n}\n\nfunction latestIsoStamp(value: unknown): string {\n  const text = typeof value === \"string\" ? value : safeJson(value);\n  const stamps = text.match(ISO_PATTERN) ?? [];\n  let best = \"\";\n  let bestMs = Number.NEGATIVE_INFINITY;\n  for (const stamp of stamps) {\n    const ms = Date.parse(stamp);\n    if (!Number.isNaN(ms) && ms > bestMs) {\n      bestMs = ms;\n      best = stamp;\n    }\n  }\n  return best;\n}\n\nfunction timestampMs(iso: string): number {\n  if (iso.length === 0) return 0;\n  const ms = Date.parse(iso);\n  return Number.isNaN(ms) ? 0 : ms;\n}\n\nfunction latestHeldTimestamp(entity: GraphEntity | undefined): number {\n  if (!entity) return 0;\n  let best = 0;\n  for (const observation of entity.observations) {\n    const ms = timestampMs(latestIsoStamp(observation));\n    if (ms > best) best = ms;\n  }\n  return best;\n}\n\nfunction isNewer(upstreamMs: number, heldMs: number): boolean {\n  return upstreamMs > heldMs;\n}\n\nfunction observationBody(sourceUrl: string, fetchedAt: string, text: string): string {\n  const stamp = fetchedAt.length > 0 ? fetchedAt : \"unknown\";\n  return [\n    \"upstream-sync\",\n    `source: ${sourceUrl}`,\n    `fetched_at: ${stamp}`,\n    \"\",\n    text,\n  ].join(\"\\n\");\n}\n\n// ---------------------------------------------------------------------------\n// Reporting helpers\n// ---------------------------------------------------------------------------\n\nfunction recordTopicReport(report: TopicReport[], entry: TopicReport): void {\n  report.push(entry);\n}\n\nfunction sumTotals(report: TopicReport[]): TopicReport {\n  const grand: TopicReport = { topic: \"ALL\", updated: 0, deleted: 0, skipped: 0, failed: 0 };\n  for (const entry of report) {\n    grand.updated += entry.updated;\n    grand.deleted += entry.deleted;\n    grand.skipped += entry.skipped;\n    grand.failed += entry.failed;\n  }\n  return grand;\n}\n\nfunction renderLog(report: TopicReport[]): string {\n  const lines: string[] = [\"# Knowledge base sync log\", \"\"];\n  for (const entry of report) {\n    lines.push(`## ${entry.topic}`);\n    lines.push(`- updated: ${entry.updated}`);\n    lines.push(`- deleted: ${entry.deleted}`);\n    lines.push(`- skipped: ${entry.skipped}`);\n    lines.push(`- failed: ${entry.failed}`);\n    lines.push(\"\");\n  }\n  const grand = sumTotals(report);\n  lines.push(\"## Totals\");\n  lines.push(`- updated: ${grand.updated}`);\n  lines.push(`- deleted: ${grand.deleted}`);\n  lines.push(`- skipped: ${grand.skipped}`);\n  lines.push(`- failed: ${grand.failed}`);\n  return lines.join(\"\\n\");\n}\n",
+          "lines": 337,
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 37,
+                  "column": 3,
+                  "offset": 1147
+                },
+                "end": {
+                  "line": 37,
+                  "column": 36,
+                  "offset": 1180
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "9c3eec4e71fe12e1ea1bcc72afd679633275c4fd8f31bb0b79db38477b520b86"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 40,
+                  "column": 5,
+                  "offset": 1224
+                },
+                "end": {
+                  "line": 46,
+                  "column": 33,
+                  "offset": 1523
+                },
+                "semanticPath": "flow/for[0]/stmt[0..4]",
+                "fingerprint": "47e1dd47ed5f714ab7b24e528802b8edb960ba39e4704a6d5bdefd84d9cfd9d2"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 57,
+                  "column": 7,
+                  "offset": 1967
+                },
+                "end": {
+                  "line": 58,
+                  "column": 17,
+                  "offset": 2012
+                },
+                "semanticPath": "flow/for[0]/while[0]/stmt[6..7]",
+                "fingerprint": "1788f0b808644411794123fb6a693323a01d2897636690d8bdb96bff738e9cee"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 63,
+                  "column": 5,
+                  "offset": 2154
+                },
+                "end": {
+                  "line": 63,
+                  "column": 65,
+                  "offset": 2214
+                },
+                "semanticPath": "flow/for[0]/stmt[7]",
+                "fingerprint": "2a0851206af76e7b4d774abc3f04cc4700db7f3c314fccd070e35e2166d49ec8"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 76,
+                  "column": 9,
+                  "offset": 2659
+                },
+                "end": {
+                  "line": 76,
+                  "column": 29,
+                  "offset": 2679
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[0]/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 80,
+                  "column": 7,
+                  "offset": 2713
+                },
+                "end": {
+                  "line": 80,
+                  "column": 44,
+                  "offset": 2750
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[4]",
+                "fingerprint": "2943a8fe7fbc44d05258069a9d8d77471a4a320afbe38bdf37aee3787fe280c3"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 83,
+                  "column": 9,
+                  "offset": 2853
+                },
+                "end": {
+                  "line": 83,
+                  "column": 31,
+                  "offset": 2875
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/stmt[1]",
+                "fingerprint": "f718b0eeae8a21a84944922f2bf05ee02909e0caa6cf2e84af4bea546790f1cb"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 85,
+                  "column": 9,
+                  "offset": 2900
+                },
+                "end": {
+                  "line": 85,
+                  "column": 28,
+                  "offset": 2919
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "b4ff4167c8ec14a3505a9efe1197a267a085b79528ebec40b57f9c6404dbe64b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 98,
+                  "column": 11,
+                  "offset": 3385
+                },
+                "end": {
+                  "line": 98,
+                  "column": 31,
+                  "offset": 3405
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[1]/if[0]/stmt[0]",
+                "fingerprint": "867bfae709ce7e2130ab7391e10ae92b15f9cb9ef0f30a402cde417276ae788d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 100,
+                  "column": 11,
+                  "offset": 3433
+                },
+                "end": {
+                  "line": 100,
+                  "column": 31,
+                  "offset": 3453
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[1]/if[0]/else/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 107,
+                  "column": 9,
+                  "offset": 3588
+                },
+                "end": {
+                  "line": 107,
+                  "column": 29,
+                  "offset": 3608
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[2]/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 116,
+                  "column": 7,
+                  "offset": 3901
+                },
+                "end": {
+                  "line": 116,
+                  "column": 50,
+                  "offset": 3944
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[17]",
+                "fingerprint": "4f2b6d4c4b560c76612c4ce855a3a28f576d5f5ac66c93f00ead15c204f1fc05"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 118,
+                  "column": 9,
+                  "offset": 3974
+                },
+                "end": {
+                  "line": 118,
+                  "column": 29,
+                  "offset": 3994
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[3]/stmt[0]",
+                "fingerprint": "494079b296818f61a9b43c98bd2ab409b87a8d1157d591ba58d8bbd2a31f2e28"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 120,
+                  "column": 9,
+                  "offset": 4018
+                },
+                "end": {
+                  "line": 120,
+                  "column": 29,
+                  "offset": 4038
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[3]/else/stmt[0]",
+                "fingerprint": "f2d9d4c98099c3af80b004d3409df07495878dcf688a22c26924f62dde30fc0d"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 14
+          },
+          "shape": {
+            "nodes": 59,
+            "edges": 126,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 14,
+              "loop": 3,
+              "tool": 6,
+              "function": 20,
+              "condition": 5,
+              "jump": 4,
+              "merge": 4,
+              "try": 1,
+              "output": 1
+            },
+            "codeNodes": 14,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7627118644067796,
+            "maxNesting": 4,
+            "toolCalls": 6
+          },
+          "covered": [
+            "condition",
+            "else-if-chain",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "try",
+            "while-loop"
+          ],
+          "missing": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 6912,
+            "completionTokens": 3855,
+            "totalTokens": 10767
+          },
+          "ms": 73355
+        }
+      ],
+      "toolsUsed": [
+        "deepwiki.deepwikiFetch",
+        "duckduckgo.duckduckgoWebSearch",
+        "filesystem.writeFile",
+        "memory.addObservations",
+        "memory.deleteEntities",
+        "memory.searchNodes"
+      ],
+      "totalMs": 452646
+    },
+    {
+      "intent": "dependency-audit",
+      "servers": [
+        "filesystem",
+        "context7",
+        "deepwiki",
+        "sequential-thinking"
+      ],
+      "toolCount": 18,
+      "systemPromptTokens": 4547,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "else-if-chain",
+        "try",
+        "parallel",
+        "jump"
+      ],
+      "targetLines": 160,
+      "includeExamples": false,
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\n// ---------------------------------------------------------------------------\n// Weekly dependency audit\n//\n// Trigger payload:\n//   repositories:       directories of the repositories to audit\n//   riskyDependencies:  dependency names considered risky\n//\n// Walks every repository, finds its manifest files, checks them for the\n// risky dependencies, resolves documentation for each hit (docs lookup and\n// wiki lookup run in parallel), grades every finding, reasons over the\n// results in three sequential thoughts, and writes audit/report.md\n// (plus audit/failures.md when anything failed to read).\n// ---------------------------------------------------------------------------\n\ntype Grade = \"critical\" | \"warning\" | \"info\";\n\ninterface GradeCounts {\n  critical: number;\n  warning: number;\n  info: number;\n}\n\ninterface DependencyFinding {\n  repository: string;\n  manifest: string;\n  dependency: string;\n  grade: Grade;\n}\n\ninterface ReadFailure {\n  repository: string;\n  item: string;\n}\n\ninterface TreeNode {\n  name: string;\n  type: string;\n  children?: TreeNode[];\n}\n\n/** More than this many findings exceeds a week of human review (req. 5). */\nconst FINDING_LIMIT = 20;\n\nconst AUDIT_DIR = \"audit\";\n\nconst TREE_EXCLUSIONS = [\n  \"node_modules/**\",\n  \".git/**\",\n  \"dist/**\",\n  \"build/**\",\n  \"vendor/**\",\n  \"target/**\",\n  \".venv/**\",\n  \"__pycache__/**\",\n];\n\nconst MANIFEST_FILE_NAMES = new Set<string>([\n  \"package.json\",\n  \"requirements.txt\",\n  \"pyproject.toml\",\n  \"go.mod\",\n  \"Cargo.toml\",\n  \"pom.xml\",\n]);\n\n/** Section headers that hold non-production (non-direct) dependencies. */\nconst NON_DIRECT_SECTION = /(test|dev|bench|doc|build|optional|example|workspace|target)/i;\n\n// -- small utilities ----------------------------------------------------------\n\nfunction escapeRegExp(value: string): string {\n  return value.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$&\");\n}\n\nfunction fileNameOf(path: string): string {\n  const segments = path.split(\"/\");\n  return segments[segments.length - 1] ?? path;\n}\n\n// -- manifest discovery --------------------------------------------------------\n\n/** Pick the manifest files out of a repository directory-tree snapshot. */\nfunction collectManifestPaths(rootDirectory: string, treeJson: string): string[] {\n  let tree: TreeNode;\n  try {\n    tree = JSON.parse(treeJson) as TreeNode;\n  } catch {\n    // Unparseable tree snapshot: treat as \"no manifests found\".\n    return [];\n  }\n  const base = rootDirectory.endsWith(\"/\") ? rootDirectory.slice(0, -1) : rootDirectory;\n  const found: string[] = [];\n  const visit = (node: TreeNode, parentPath: string): void => {\n    const path = parentPath === \"\" ? node.name : `${parentPath}/${node.name}`;\n    if (node.type === \"file\") {\n      if (MANIFEST_FILE_NAMES.has(node.name)) {\n        found.push(`${base}/${path}`);\n      }\n      return;\n    }\n    for (const child of node.children ?? []) {\n      visit(child, path);\n    }\n  };\n  if (tree !== null && typeof tree === \"object\") {\n    visit(tree, \"\");\n  }\n  return found;\n}\n\n// -- mention check + grading (req. 3 and req. 4) -------------------------------\n\nfunction manifestMentions(manifestText: string, dependency: string): boolean {\n  return manifestText.toLowerCase().includes(dependency.toLowerCase());\n}\n\n/** True when the manifest pins the dependency to a version below 1.0.0. */\nfunction pinsVersionBelowOne(manifestText: string, dependency: string): boolean {\n  const name = escapeRegExp(dependency);\n  // JSON/TOML style: \"dep\": \"~0.9.0\"  /  dep = \"^0.4\"\n  const keyValue = new RegExp(\n    `[\"']${name}[\"']\\\\s*[:=]\\\\s*[\"'][~^><=*\\\\s]*v?0(\\\\.\\\\d+)?`,\n    \"i\",\n  );\n  // Python style: dep==0.3.1  /  dep[extra]==0.3.1\n  const pythonPin = new RegExp(\n    `^\\\\s*${name}(?:\\\\[[^\\\\]]*\\\\])?\\\\s*==\\\\s*v?0\\\\.`,\n    \"im\",\n  );\n  // Bare pin with a leading-zero version, e.g. \"dep 0.2.3\".\n  const barePin = new RegExp(`\\\\b${name}\\\\s+v?0\\\\.\\\\d+`, \"i\");\n  return keyValue.test(manifestText) || pythonPin.test(manifestText) || barePin.test(manifestText);\n}\n\nfunction packageJsonObject(manifestText: string): Record<string, unknown> | null {\n  try {\n    const parsed: unknown = JSON.parse(manifestText);\n    if (parsed !== null && typeof parsed === \"object\" && !Array.isArray(parsed)) {\n      return parsed as Record<string, unknown>;\n    }\n    return null;\n  } catch {\n    return null;\n  }\n}\n\nfunction requirementsTxtHasDirect(text: string, escapedName: string): boolean {\n  for (const line of text.split(/\\r?\\n/)) {\n    const trimmed = line.trim();\n    if (trimmed.length === 0 || trimmed.startsWith(\"#\") || trimmed.startsWith(\"-\")) {\n      continue;\n    }\n    if (new RegExp(`^${escapedName}(?:\\\\[[^\\\\]]*\\\\])?(?:[~<>=!].*)?$`, \"i\").test(trimmed)) {\n      return true;\n    }\n  }\n  return false;\n}\n\nfunction goModHasDirect(text: string, escapedName: string): boolean {\n  for (const line of text.split(/\\r?\\n/)) {\n    const trimmed = line.trim();\n    if (trimmed.startsWith(\"//\") || trimmed.includes(\"// indirect\")) {\n      continue;\n    }\n    if (new RegExp(`^${escapedName}(?:\\\\s+v\\\\S+)?$`).test(trimmed)) {\n      return true;\n    }\n  }\n  return false;\n}\n\nfunction tomlHasDirect(text: string, escapedName: string): boolean {\n  let seenHeader = false;\n  let inDirectSection = false;\n  for (const line of text.split(/\\r?\\n/)) {\n    const trimmed = line.trim();\n    const header = /^\\[\\[?\\s*([^\\]\"']+?)\\s*\\]?\\]$/.exec(trimmed);\n    if (header) {\n      seenHeader = true;\n      inDirectSection = !NON_DIRECT_SECTION.test(header[1]);\n      continue;\n    }\n    if (seenHeader && inDirectSection && new RegExp(`^${escapedName}\\\\b`).test(trimmed)) {\n      return true;\n    }\n  }\n  return false;\n}\n\n/** True when the dependency appears among the manifest's direct dependencies. */\nfunction isDirectDependency(manifestPath: string, manifestText: string, dependency: string): boolean {\n  const file = fileNameOf(manifestPath);\n  const escaped = escapeRegExp(dependency);\n\n  if (file === \"package.json\") {\n    const parsed = packageJsonObject(manifestText);\n    if (parsed === null) {\n      return false;\n    }\n    const sections = [\"dependencies\", \"devDependencies\", \"peerDependencies\", \"optionalDependencies\"];\n    for (const section of sections) {\n      const entries = parsed[section];\n      if (\n        entries !== null &&\n        typeof entries === \"object\" &&\n        !Array.isArray(entries) &&\n        Object.prototype.hasOwnProperty.call(entries, dependency)\n      ) {\n        return true;\n      }\n    }\n    return false;\n  }\n  if (file === \"requirements.txt\") {\n    return requirementsTxtHasDirect(manifestText, escaped);\n  }\n  if (file === \"go.mod\") {\n    return goModHasDirect(manifestText, escaped);\n  }\n  if (file === \"pyproject.toml\" || file === \"Cargo.toml\") {\n    return tomlHasDirect(manifestText, escaped);\n  }\n  // Unrecognised manifest formats stay conservative (req. 4: \"info\" otherwise).\n  return false;\n}\n\nfunction gradeFinding(manifestPath: string, manifestText: string, dependency: string): Grade {\n  if (pinsVersionBelowOne(manifestText, dependency)) {\n    return \"critical\";\n  }\n  if (isDirectDependency(manifestPath, manifestText, dependency)) {\n    return \"warning\";\n  }\n  return \"info\";\n}\n\n// -- recording ------------------------------------------------------------------\n\nfunction addFinding(\n  list: DependencyFinding[],\n  repository: string,\n  manifest: string,\n  dependency: string,\n  grade: Grade,\n): void {\n  list.push({ repository, manifest, dependency, grade });\n}\n\nfunction recordReadFailure(list: ReadFailure[], repository: string, item: string): void {\n  list.push({ repository, item });\n}\n\n// -- documentation lookups (req. 3) ---------------------------------------------\n\nfunction docsQueryFor(dependency: string): string {\n  return `Security advisories, breaking changes, and maintenance status of ${dependency}`;\n}\n\n// NOTE: the registry requires resolving a Context7 library id before querying,\n// but the resolver's choice is not returned as data, so these builders fall\n// back to conventional identifiers derived from the dependency name.\nfunction assumedContext7Id(dependency: string): string {\n  return `/npm/${dependency}`;\n}\n\nfunction assumedDeepWikiUrl(dependency: string): string {\n  return `https://deepwiki.com/${dependency}`;\n}\n\n// -- reporting -------------------------------------------------------------------\n\nfunction countByGrade(findings: DependencyFinding[]): GradeCounts {\n  const counts: GradeCounts = { critical: 0, warning: 0, info: 0 };\n  for (const finding of findings) {\n    counts[finding.grade] += 1;\n  }\n  return counts;\n}\n\nfunction summarizeFindings(findings: DependencyFinding[]): string {\n  if (findings.length === 0) {\n    return \"no risky-dependency findings\";\n  }\n  const counts = countByGrade(findings);\n  return `${findings.length} findings (critical: ${counts.critical}, warning: ${counts.warning}, info: ${counts.info})`;\n}\n\nfunction summarizeFailures(failures: ReadFailure[]): string {\n  return failures.length === 0 ? \"nothing failed to read\" : `${failures.length} item(s) failed to read`;\n}\n\nfunction buildRecommendation(counts: GradeCounts, findings: DependencyFinding[]): string {\n  if (findings.length === 0) {\n    return \"No risky dependencies were found; no action is required this week.\";\n  }\n  const actions: string[] = [];\n  if (counts.critical > 0) {\n    actions.push(`treat the ${counts.critical} dependency(ies) pinned below version 1 as the week's priority upgrade`);\n  }\n  if (counts.warning > 0) {\n    actions.push(`schedule updates for the ${counts.warning} risky dependencies used directly`);\n  }\n  if (counts.info > 0) {\n    actions.push(`review the ${counts.info} remaining mentions during routine maintenance`);\n  }\n  return `${actions.join(\"; \")}.`;\n}\n\nfunction renderReport(\n  findings: DependencyFinding[],\n  failures: ReadFailure[],\n  recommendation: string,\n  truncationNotice: string,\n): string {\n  const lines: string[] = [\"# Weekly dependency audit\", \"\"];\n  for (const grade of [\"critical\", \"warning\", \"info\"] as Grade[]) {\n    const bucket = findings.filter((candidate) => candidate.grade === grade);\n    lines.push(`## ${grade} (${bucket.length})`, \"\");\n    if (bucket.length === 0) {\n      lines.push(\"_none_\", \"\");\n      continue;\n    }\n    for (const finding of bucket) {\n      lines.push(`- \\`${finding.dependency}\\` in \\`${finding.manifest}\\` — repository: ${finding.repository}`);\n    }\n    lines.push(\"\");\n  }\n  if (truncationNotice !== \"\") {\n    lines.push(`> ${truncationNotice}`, \"\");\n  }\n  if (failures.length > 0) {\n    lines.push(`> ${failures.length} item(s) could not be read — see ${AUDIT_DIR}/failures.md.`, \"\");\n  }\n  lines.push(\"## Recommendation\", \"\", recommendation, \"\");\n  return lines.join(\"\\n\");\n}\n\nfunction renderFailureReport(failures: ReadFailure[]): string {\n  const lines: string[] = [\"# Audit read failures\", \"\"];\n  for (const failure of failures) {\n    lines.push(`- ${failure.item} in repository \\`${failure.repository}\\``);\n  }\n  lines.push(\"\");\n  return lines.join(\"\\n\");\n}\n\n// -- the flow ---------------------------------------------------------------------\n\nexport default async function flow(\n  input: { repositories: string[]; riskyDependencies: string[] },\n  tools: Tools,\n) {\n  const findings: DependencyFinding[] = [];\n  const readFailures: ReadFailure[] = [];\n  let repositoriesAudited = 0;\n\n  for (const repository of input.repositories) {\n    if (findings.length > FINDING_LIMIT) {\n      break; // req. 5: more than twenty findings — stop auditing further repositories\n    }\n\n    // Snapshot the repository tree once; manifests are picked out of it below.\n    let treeJson: string;\n    try {\n      const snapshot = await tools.filesystem.directoryTree({\n        path: repository,\n        excludePatterns: TREE_EXCLUSIONS,\n      });\n      treeJson = snapshot.content;\n    } catch {\n      recordReadFailure(readFailures, repository, `${repository} (directory tree)`);\n      continue;\n    }\n\n    const manifestPaths = collectManifestPaths(repository, treeJson);\n    if (manifestPaths.length === 0) {\n      continue; // req. 1: no manifest — skip this repository\n    }\n\n    for (const manifestPath of manifestPaths) {\n      if (findings.length > FINDING_LIMIT) {\n        break; // req. 5\n      }\n\n      // req. 2: read the manifest; on failure record and move on.\n      let manifestText: string;\n      try {\n        const file = await tools.filesystem.readTextFile({ path: manifestPath });\n        manifestText = file.content;\n      } catch {\n        recordReadFailure(readFailures, repository, manifestPath);\n        continue;\n      }\n\n      for (const dependency of input.riskyDependencies) {\n        const mentioned = manifestMentions(manifestText, dependency);\n        if (!mentioned) {\n          continue;\n        }\n\n        const grade = gradeFinding(manifestPath, manifestText, dependency);\n        addFinding(findings, repository, manifestPath, dependency, grade);\n\n        if (findings.length > FINDING_LIMIT) {\n          break; // req. 5: stop inspecting this manifest, then further repositories\n        }\n\n        const docsQuery = docsQueryFor(dependency);\n\n        // req. 3: resolve the documentation id first…\n        const resolved = await tools.context7.resolveLibraryId({\n          query: docsQuery,\n          libraryName: dependency,\n        });\n\n        // …then fetch the documentation and the wiki page concurrently (req. 3).\n        const docsId = assumedContext7Id(dependency);\n        const wikiUrl = assumedDeepWikiUrl(dependency);\n        const [documentation, wikiPage] = await Promise.all([\n          tools.context7.queryDocs({ libraryId: docsId, query: docsQuery }),\n          tools.deepwiki.deepwikiFetch({ url: wikiUrl }),\n        ]);\n      }\n    }\n\n    repositoriesAudited += 1;\n  }\n\n  const counts = countByGrade(findings);\n  const findingSummary = summarizeFindings(findings);\n  const failureSummary = summarizeFailures(readFailures);\n  let truncationNotice = \"\";\n  if (findings.length > FINDING_LIMIT) {\n    truncationNotice = `Finding limit of ${FINDING_LIMIT} reached; remaining repositories were not inspected.`;\n  }\n  const caveat = readFailures.length > 0 ? ` Also account for: ${failureSummary}.` : \"\";\n  const truncationSuffix = truncationNotice === \"\" ? \"\" : ` ${truncationNotice}`;\n\n  // req. 6: reason over the findings in three sequential thoughts.\n  const inventory = await tools.sequentialThinking.sequentialthinking({\n    thought: `Weekly dependency audit inventory: audited ${repositoriesAudited} repositories and collected ${findingSummary}, with ${failureSummary}. Identify which repositories and manifests concentrate the findings.`,\n    thoughtNumber: 1,\n    totalThoughts: 3,\n    nextThoughtNeeded: true,\n  });\n  const weighting = await tools.sequentialThinking.sequentialthinking({\n    thought: `Risk weighting over ${findingSummary}: critical entries pin a risky dependency below version 1 (likely unmaintained or pre-release), warnings mark direct use, info entries are indirect or unpinned mentions and can wait.`,\n    thoughtNumber: 2,\n    totalThoughts: 3,\n    nextThoughtNeeded: true,\n  });\n  const conclusion = await tools.sequentialThinking.sequentialthinking({\n    thought: `Conclude the weekly recommendation from the collected findings: ${findingSummary}.${caveat}${truncationSuffix}`,\n    thoughtNumber: 3,\n    totalThoughts: 3,\n    nextThoughtNeeded: false,\n  });\n\n  const recommendation = buildRecommendation(counts, findings);\n\n  // req. 7: write the report (and the failure report when anything failed).\n  await tools.filesystem.createDirectory({ path: AUDIT_DIR });\n\n  const reportMarkdown = renderReport(findings, readFailures, recommendation, truncationNotice);\n  await tools.filesystem.writeFile({ path: `${AUDIT_DIR}/report.md`, content: reportMarkdown });\n\n  if (readFailures.length > 0) {\n    const failureMarkdown = renderFailureReport(readFailures);\n    await tools.filesystem.writeFile({ path: `${AUDIT_DIR}/failures.md`, content: failureMarkdown });\n  }\n\n  // req. 8: counts per grade and the number of repositories audited.\n  return {\n    repositoriesAudited,\n    findingsByGrade: counts,\n    totalFindings: findings.length,\n    readFailures: readFailures.length,\n    truncated: truncationNotice !== \"\",\n  };\n}\n",
+          "lines": 483,
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 356,
+                  "column": 3,
+                  "offset": 11200
+                },
+                "end": {
+                  "line": 358,
+                  "column": 31,
+                  "offset": 11314
+                },
+                "semanticPath": "flow/stmt[0..2]",
+                "fingerprint": "6e41411fe46a106533ea93273c6c9714268345531d7ec74abb3584b49d34bd18"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 366,
+                  "column": 5,
+                  "offset": 11586
+                },
+                "end": {
+                  "line": 366,
+                  "column": 26,
+                  "offset": 11607
+                },
+                "semanticPath": "flow/for[0]/stmt[1]",
+                "fingerprint": "ecf69aa679427fee970b1fc0db5b280b24e5b9fea84e17823e0d75f56d012f78"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 372,
+                  "column": 7,
+                  "offset": 11764
+                },
+                "end": {
+                  "line": 372,
+                  "column": 35,
+                  "offset": 11792
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[1]",
+                "fingerprint": "06f1843ec997e091f8c99cf1af71c84ea47e8057ebf43da7b670a0c75d862cb5"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 389,
+                  "column": 7,
+                  "offset": 12292
+                },
+                "end": {
+                  "line": 389,
+                  "column": 32,
+                  "offset": 12317
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[1]",
+                "fingerprint": "7fc3b96885c5075a2d28dfa77d6d880cb31dbaf79fab9ae2bc364127bfc64f10"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 392,
+                  "column": 9,
+                  "offset": 12420
+                },
+                "end": {
+                  "line": 392,
+                  "column": 37,
+                  "offset": 12448
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/stmt[1]",
+                "fingerprint": "6b25367582b6640087c5cf3a405a45c7ac96fcc35fef9acb91b792378b522521"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 429,
+                  "column": 5,
+                  "offset": 13708
+                },
+                "end": {
+                  "line": 429,
+                  "column": 30,
+                  "offset": 13733
+                },
+                "semanticPath": "flow/for[0]/stmt[6]",
+                "fingerprint": "63f2c6e6516bb8c204778e6b1eb045f3eb8bc02d1dc866afef89a9050cd08674"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 435,
+                  "column": 3,
+                  "offset": 13894
+                },
+                "end": {
+                  "line": 435,
+                  "column": 29,
+                  "offset": 13920
+                },
+                "semanticPath": "flow/stmt[7]",
+                "fingerprint": "7375397d350d1e5dbb20dcfd7a268e3feb0c83bb8f24202efd63fa62fc8d7513"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 437,
+                  "column": 5,
+                  "offset": 13966
+                },
+                "end": {
+                  "line": 437,
+                  "column": 112,
+                  "offset": 14073
+                },
+                "semanticPath": "flow/if[0]/stmt[0]",
+                "fingerprint": "dcaa75c16f09a2c1a4b43b7001bcfc2ed5129e5d42fd27782a6cb7c82d697268"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 439,
+                  "column": 3,
+                  "offset": 14080
+                },
+                "end": {
+                  "line": 440,
+                  "column": 82,
+                  "offset": 14248
+                },
+                "semanticPath": "flow/stmt[9..10]",
+                "fingerprint": "74275943a4725e28cb542d072640a17a5776f1c0ffc4ff12017fc331725d98f3"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 9
+          },
+          "shape": {
+            "nodes": 65,
+            "edges": 142,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 9,
+              "loop": 3,
+              "condition": 7,
+              "jump": 7,
+              "merge": 8,
+              "try": 2,
+              "tool": 11,
+              "function": 15,
+              "parallel": 1,
+              "output": 1
+            },
+            "codeNodes": 9,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8615384615384616,
+            "maxNesting": 4,
+            "toolCalls": 11
+          },
+          "covered": [
+            "condition",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [
+            "else-if-chain"
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 4472,
+            "completionTokens": 23111,
+            "totalTokens": 27583
+          },
+          "ms": 665859
+        }
+      ],
+      "toolsUsed": [
+        "context7.queryDocs",
+        "context7.resolveLibraryId",
+        "deepwiki.deepwikiFetch",
+        "filesystem.createDirectory",
+        "filesystem.directoryTree",
+        "filesystem.readTextFile",
+        "filesystem.writeFile",
+        "sequentialThinking.sequentialthinking"
+      ],
+      "totalMs": 665948
+    },
+    {
+      "intent": "repo-triage-bot",
+      "servers": [
+        "filesystem",
+        "memory"
+      ],
+      "toolCount": 23,
+      "systemPromptTokens": 3427,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "else-if-chain",
+        "try",
+        "jump",
+        "early-return"
+      ],
+      "targetLines": 180,
+      "includeExamples": false,
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\n// ---------------------------------------------------------------------------\n// Types & constants\n// ---------------------------------------------------------------------------\n\ninterface TriageInput {\n  /** Root directory of the repository to triage. */\n  rootDirectory: string;\n  /** Risky filename patterns (glob-style, relative to the root). */\n  riskyPatterns: string[];\n  /** Maximum number of files to inspect in one run. */\n  maxFiles: number;\n}\n\ntype Severity = \"high\" | \"medium\" | \"low\";\n\ninterface SeverityCounts {\n  high: number;\n  medium: number;\n  low: number;\n}\n\nconst LARGE_FILE_BYTES = 100 * 1024;\n\n// ---------------------------------------------------------------------------\n// Pure helpers — each becomes a readable function node in the graph\n// ---------------------------------------------------------------------------\n\nfunction parseAllowedDirectories(raw: string): string[] {\n  const trimmed = raw.trim();\n  if (trimmed.startsWith(\"[\")) {\n    try {\n      const parsed = JSON.parse(trimmed);\n      if (Array.isArray(parsed)) return parsed.map((entry) => String(entry));\n    } catch {\n      // fall through to line-based parsing\n    }\n  }\n  return trimmed\n    .split(/\\r?\\n/)\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0);\n}\n\nfunction isRootPermitted(allowedDirs: string[], root: string): boolean {\n  return allowedDirs.some((dir) => {\n    if (dir === root) return true;\n    // Subdirectories of an allowed directory are accessible too.\n    const base = dir.endsWith(\"/\") ? dir : `${dir}/`;\n    return root.startsWith(base);\n  });\n}\n\nfunction refusalReason(root: string): string {\n  return `refused: root directory \"${root}\" is not in the list of allowed directories`;\n}\n\nfunction hasMatches(searchOutput: string): boolean {\n  return searchOutput.trim().length > 0;\n}\n\nfunction extractFilePaths(searchOutput: string): string[] {\n  return searchOutput\n    .split(/\\r?\\n/)\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0);\n}\n\n/** Best-effort extraction of the byte size from getFileInfo's textual output. */\nfunction parseSizeBytes(fileInfo: string): number {\n  const match = fileInfo.match(/Size:\\s*([\\d,]+)/i);\n  if (!match) return 0;\n  return Number(match[1].replace(/,/g, \"\"));\n}\n\nfunction mentionsPassword(contents: string): boolean {\n  return contents.toLowerCase().includes(\"password\");\n}\n\nfunction mentionsTodoMarker(contents: string): boolean {\n  return contents.includes(\"TODO\") || contents.includes(\"FIXME\");\n}\n\nfunction classifySeverity(contents: string, sizeBytes: number): Severity {\n  if (sizeBytes > LARGE_FILE_BYTES || mentionsPassword(contents)) return \"high\";\n  if (mentionsTodoMarker(contents)) return \"medium\";\n  return \"low\";\n}\n\nfunction severityObservation(severity: Severity): string {\n  return `severity: ${severity}`;\n}\n\nfunction sizeObservation(sizeBytes: number): string {\n  return `size: ${sizeBytes} bytes`;\n}\n\nfunction recordFailure(errorLines: string[], filePath: string, error: unknown): void {\n  errorLines.push(\n    `${new Date().toISOString()} READ_FAILED ${filePath}: ${String(error)}`\n  );\n}\n\nfunction renderErrorLog(errorLines: string[]): string {\n  if (errorLines.length === 0) return \"\";\n  return errorLines.join(\"\\n\") + \"\\n\";\n}\n\nfunction trackHighPath(highPaths: string[], filePath: string): void {\n  highPaths.push(filePath);\n}\n\nfunction emptyCounts(): SeverityCounts {\n  return { high: 0, medium: 0, low: 0 };\n}\n\nfunction summarizePatterns(patterns: string[]): string {\n  return patterns.join(\", \");\n}\n\nfunction runEntityName(root: string): string {\n  const slug = root.replace(/[^a-zA-Z0-9._-]+/g, \"-\");\n  return `triage-run:${slug}:${new Date().toISOString()}`;\n}\n\nfunction errorLogPath(root: string): string {\n  return `${root}/triage-errors.log`;\n}\n\nfunction reportPath(root: string): string {\n  return `${root}/triage-report.md`;\n}\n\nfunction renderReport(parts: {\n  root: string;\n  filesSeen: number;\n  counts: SeverityCounts;\n  failedReads: number;\n  highPaths: string[];\n  sizedListing: string;\n  tree: string;\n}): string {\n  const highSection =\n    parts.highPaths.length === 0\n      ? \"(none)\"\n      : parts.highPaths.map((p) => `- ${p}`).join(\"\\n\");\n  return [\n    \"# Repository triage report\",\n    \"\",\n    `- Root: ${parts.root}`,\n    `- Files inspected: ${parts.filesSeen}`,\n    `- Failed reads: ${parts.failedReads}`,\n    \"\",\n    \"## Files by severity\",\n    `- high: ${parts.counts.high}`,\n    `- medium: ${parts.counts.medium}`,\n    `- low: ${parts.counts.low}`,\n    \"\",\n    \"## High-severity paths\",\n    highSection,\n    \"\",\n    \"## Repository snapshot\",\n    \"\",\n    \"### Directory listing (with sizes)\",\n    \"```\",\n    parts.sizedListing,\n    \"```\",\n    \"\",\n    \"### Directory tree\",\n    \"```\",\n    parts.tree,\n    \"```\",\n    \"\",\n  ].join(\"\\n\");\n}\n\n// ---------------------------------------------------------------------------\n// Flow\n// ---------------------------------------------------------------------------\n\nexport default async function flow(input: TriageInput, tools: Tools) {\n  // Step 1 — permission gate: refuse runs outside the allowed directories.\n  const allowedRaw = await tools.filesystem.listAllowedDirectories({});\n  const allowedDirs = parseAllowedDirectories(allowedRaw.content);\n  const permitted = isRootPermitted(allowedDirs, input.rootDirectory);\n  if (!permitted) {\n    const blankCounts = emptyCounts();\n    const reason = refusalReason(input.rootDirectory);\n    return {\n      refused: true,\n      reason,\n      filesSeen: 0,\n      countsBySeverity: blankCounts,\n      failedReads: 0,\n    };\n  }\n\n  // Step 2 — repository snapshot: sized listing and recursive tree, in parallel.\n  const [sizedListing, repoTree] = await Promise.all([\n    tools.filesystem.listDirectoryWithSizes({ path: input.rootDirectory }),\n    tools.filesystem.directoryTree({ path: input.rootDirectory, excludePatterns: [\".git\"] }),\n  ]);\n\n  // Entity representing this run; high-severity files will be linked to it.\n  const runName = runEntityName(input.rootDirectory);\n  const patternSummary = summarizePatterns(input.riskyPatterns);\n  await tools.memory.createEntities({\n    entities: [\n      {\n        name: runName,\n        entityType: \"triage-run\",\n        observations: [`patterns: ${patternSummary}`, `maxFiles: ${input.maxFiles}`],\n      },\n    ],\n  });\n\n  const logPath = errorLogPath(input.rootDirectory);\n  const reportFile = reportPath(input.rootDirectory);\n\n  const severityCounts = emptyCounts();\n  const highPaths: string[] = [];\n  const errorLines: string[] = [];\n  let filesSeen = 0;\n  let failedReads = 0;\n\n  // Steps 3–6 — scan pattern by pattern, respecting the per-run file budget.\n  for (const pattern of input.riskyPatterns) {\n    if (filesSeen >= input.maxFiles) break;\n\n    const searchResult = await tools.filesystem.searchFiles({\n      path: input.rootDirectory,\n      pattern,\n    });\n    const patternMatched = hasMatches(searchResult.content);\n    if (!patternMatched) continue;\n\n    const candidatePaths = extractFilePaths(searchResult.content);\n    for (const filePath of candidatePaths) {\n      if (filesSeen >= input.maxFiles) break;\n      filesSeen += 1;\n\n      let contents = \"\";\n      let sizeBytes = 0;\n      try {\n        const fileContents = await tools.filesystem.readTextFile({ path: filePath });\n        contents = fileContents.content;\n\n        const fileInfo = await tools.filesystem.getFileInfo({ path: filePath });\n        const parsedSize = parseSizeBytes(fileInfo.content);\n        sizeBytes = parsedSize;\n      } catch (readError) {\n        // Log the failure and move on to the next file instead of aborting.\n        failedReads += 1;\n        recordFailure(errorLines, filePath, readError);\n        const errorLogText = renderErrorLog(errorLines);\n        try {\n          await tools.filesystem.writeFile({ path: logPath, content: errorLogText });\n        } catch {\n          // Never let a logging problem abort the triage run.\n        }\n        continue;\n      }\n\n      // Classify and record the file in the knowledge graph.\n      const severity = classifySeverity(contents, sizeBytes);\n      severityCounts[severity] += 1;\n      if (severity === \"high\") trackHighPath(highPaths, filePath);\n\n      const severityNote = severityObservation(severity);\n      const sizeNote = sizeObservation(sizeBytes);\n      await tools.memory.createEntities({\n        entities: [\n          {\n            name: filePath,\n            entityType: \"triaged-file\",\n            observations: [severityNote, sizeNote],\n          },\n        ],\n      });\n\n      // Step 5 — link every high-severity file back to this run.\n      if (severity === \"high\") {\n        await tools.memory.createRelations({\n          relations: [{ from: runName, to: filePath, relationType: \"flags\" }],\n        });\n      }\n    }\n  }\n\n  // Step 7 — read the graph back and write the markdown report.\n  const graph = await tools.memory.readGraph({});\n  const reportText = renderReport({\n    root: input.rootDirectory,\n    filesSeen,\n    counts: severityCounts,\n    failedReads,\n    highPaths,\n    sizedListing: sizedListing.content,\n    tree: repoTree.content,\n  });\n  await tools.filesystem.writeFile({ path: reportFile, content: reportText });\n\n  // Step 8 — result of the run.\n  return {\n    refused: false,\n    filesSeen,\n    countsBySeverity: severityCounts,\n    failedReads,\n    entitiesInGraph: graph.entities.length,\n  };\n}\n",
+          "lines": 312,
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 222,
+                  "column": 3,
+                  "offset": 6495
+                },
+                "end": {
+                  "line": 225,
+                  "column": 23,
+                  "offset": 6605
+                },
+                "semanticPath": "flow/stmt[11..14]",
+                "fingerprint": "a55e6bfe2e56ed1ab6791a498a35229da67e631a0af503d39ef56d3f7cf5c5b4"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 241,
+                  "column": 7,
+                  "offset": 7156
+                },
+                "end": {
+                  "line": 244,
+                  "column": 25,
+                  "offset": 7222
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[1..3]",
+                "fingerprint": "d05c99deeabcd8e00cf97cbf7fae278926d6a554d20c0e13d122e954eb565e99"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 247,
+                  "column": 9,
+                  "offset": 7329
+                },
+                "end": {
+                  "line": 247,
+                  "column": 41,
+                  "offset": 7361
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/stmt[1]",
+                "fingerprint": "774c0b1dd398131f97b8829a7dbbe68379d8b035d86b28488ede818ffb565bd2"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 251,
+                  "column": 9,
+                  "offset": 7513
+                },
+                "end": {
+                  "line": 251,
+                  "column": 32,
+                  "offset": 7536
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/stmt[4]",
+                "fingerprint": "a3f4bb873d48d58ff21ef7c36a6e29588713c4cbda8f49866fdf9cc64335959e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 254,
+                  "column": 9,
+                  "offset": 7650
+                },
+                "end": {
+                  "line": 254,
+                  "column": 26,
+                  "offset": 7667
+                },
+                "semanticPath": "flow/for[0]/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "77fa306f16aff31015c5882c978a4a2ad77eb51194ac48abfe6cd2540f1b52aa"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 267,
+                  "column": 7,
+                  "offset": 8129
+                },
+                "end": {
+                  "line": 267,
+                  "column": 37,
+                  "offset": 8159
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[6]",
+                "fingerprint": "c3c97cc8a0806f715efb934e6489208318bcccc63b7d04fb32f28e48a5d82a19"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 6
+          },
+          "shape": {
+            "nodes": 61,
+            "edges": 138,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 12,
+              "function": 19,
+              "condition": 6,
+              "output": 2,
+              "merge": 6,
+              "parallel": 1,
+              "code": 6,
+              "loop": 2,
+              "jump": 4,
+              "try": 2
+            },
+            "codeNodes": 6,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.9016393442622951,
+            "maxNesting": 4,
+            "toolCalls": 12
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [
+            "else-if-chain"
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 3632,
+            "completionTokens": 9254,
+            "totalTokens": 12886
+          },
+          "ms": 264300
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.directoryTree",
+        "filesystem.getFileInfo",
+        "filesystem.listAllowedDirectories",
+        "filesystem.listDirectoryWithSizes",
+        "filesystem.readTextFile",
+        "filesystem.searchFiles",
+        "filesystem.writeFile",
+        "memory.createEntities",
+        "memory.createRelations",
+        "memory.readGraph"
+      ],
+      "totalMs": 264375
+    },
+    {
+      "intent": "research-pipeline",
+      "servers": [
+        "duckduckgo",
+        "context7",
+        "deepwiki",
+        "sequential-thinking",
+        "memory",
+        "filesystem"
+      ],
+      "toolCount": 28,
+      "systemPromptTokens": 5209,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "try",
+        "parallel",
+        "jump",
+        "function"
+      ],
+      "targetLines": 200,
+      "includeExamples": false,
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/**\n * A source gathered during research, tracked by its URL so that duplicates\n * can be removed before anything consumes the list.\n */\ntype ResearchSource = {\n  url: string;\n  title: string;\n  origin: \"web-search\" | \"repository-wiki\" | \"library-docs\";\n};\n\n/** Canonical DeepWiki URL for an \"owner/repo\" string. */\nfunction deepWikiUrl(repository: string): string {\n  return `https://deepwiki.com/${repository}`;\n}\n\n/** The web search itself is a citable starting point for the brief. */\nfunction searchSourceFor(question: string): ResearchSource {\n  return {\n    url: `https://duckduckgo.com/?q=${encodeURIComponent(question)}`,\n    title: `Web search: ${question}`,\n    origin: \"web-search\",\n  };\n}\n\nfunction wikiSourceFor(repository: string): ResearchSource {\n  return {\n    url: deepWikiUrl(repository),\n    title: `Repository wiki: ${repository}`,\n    origin: \"repository-wiki\",\n  };\n}\n\n/** Best-effort documentation id for a library name that resolved. */\nfunction docsIdFor(libraryName: string): string {\n  return libraryName.trim().toLowerCase().replace(/\\s+/g, \"-\");\n}\n\nfunction docsSourceFor(libraryName: string, libraryId: string): ResearchSource {\n  return {\n    url: `https://context7.com/${libraryId}`,\n    title: `Documentation: ${libraryName}`,\n    origin: \"library-docs\",\n  };\n}\n\nfunction addSource(into: ResearchSource[], source: ResearchSource): void {\n  into.push(source);\n}\n\nfunction recordDeadSource(into: string[], libraryName: string): void {\n  into.push(libraryName);\n}\n\n/** The one place where URL deduplication lives — never scattered. */\nfunction dedupeByUrl(sources: ResearchSource[]): ResearchSource[] {\n  const seenUrls = new Set<string>();\n  const unique: ResearchSource[] = [];\n  for (const source of sources) {\n    if (seenUrls.has(source.url)) {\n      continue;\n    }\n    seenUrls.add(source.url);\n    unique.push(source);\n  }\n  return unique;\n}\n\nfunction renderSourcesMarkDown(question: string, sources: ResearchSource[]): string {\n  const header = [\"# Research sources\", \"\", `Question: ${question}`, \"\"];\n  const items = sources.map(\n    (source) => `- [${source.title}](${source.url}) (${source.origin})`\n  );\n  return [...header, ...items].join(\"\\n\");\n}\n\nfunction renderDeadSourcesMarkDown(deadLibraries: string[]): string {\n  const header = [\n    \"# Dead sources\",\n    \"\",\n    \"Library documentation pulls that failed and were dropped from the brief:\",\n    \"\",\n  ];\n  const items = deadLibraries.map((libraryName) => `- ${libraryName}`);\n  return [...header, ...items].join(\"\\n\");\n}\n\nexport default async function flow(\n  input: {\n    /** The research question the brief will answer. */\n    question: string;\n    /** Library names the analysts want consulted, e.g. [\"react\", \"zod\"]. */\n    libraries: string[];\n    /** GitHub repository relevant to the question, as \"owner/repo\". */\n    repository: string;\n  },\n  tools: Tools\n) {\n  // 1. Put the research plan on record in three sequential thoughts.\n  const planScope = await tools.sequentialThinking.sequentialthinking({\n    thought: `Planning the research brief. Question: \"${input.question}\". Anchor repository: ${input.repository}. Candidate libraries requested: ${input.libraries.length}. Goal: gather web, wiki and per-library documentation sources, then consolidate them for the analysts.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 1,\n    totalThoughts: 3,\n  });\n\n  const planGathering = await tools.sequentialThinking.sequentialthinking({\n    thought: `Gathering strategy: run the web search for the question and the DeepWiki fetch of ${input.repository} concurrently, neither waiting on the other. Then walk the ${input.libraries.length} candidate libraries one at a time: resolve each to a documentation id and skip it entirely if it does not resolve; pull the documentation for the question and isolate any failing pull into a dead-source list so one bad source cannot end the run.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 2,\n    totalThoughts: 3,\n  });\n\n  const planConsolidation = await tools.sequentialThinking.sequentialthinking({\n    thought: `Consolidation strategy: deduplicate the collected sources by URL with a shared helper before anything else touches them. Store each surviving source in the knowledge graph as a \"source\" entity observed with the question, cited from the research-question entity. Write research/sources.md, write research/dead-sources.md only if something died, and report the kept / deduplicated-away / dead counts.`,\n    nextThoughtNeeded: false,\n    thoughtNumber: 3,\n    totalThoughts: 3,\n  });\n\n  // 2. Web search and repository wiki in parallel — neither waits for the other.\n  const repoWikiUrl = deepWikiUrl(input.repository);\n  const collected: ResearchSource[] = [];\n\n  const [webSearchRun, wikiPageFetched] = await Promise.all([\n    tools.duckduckgo.duckduckgoWebSearch({ query: input.question, count: 10 }),\n    tools.deepwiki.deepwikiFetch({ url: repoWikiUrl, mode: \"aggregate\" }),\n  ]);\n\n  const webHit = searchSourceFor(input.question);\n  addSource(collected, webHit);\n\n  const wikiHit = wikiSourceFor(input.repository);\n  addSource(collected, wikiHit);\n\n  // 3. Per-library documentation: resolve first, skip if unresolved, isolated pull.\n  const deadLibraries: string[] = [];\n\n  for (const libraryName of input.libraries) {\n    let libraryId = \"\";\n    try {\n      const resolution = await tools.context7.resolveLibraryId({\n        libraryName,\n        query: input.question,\n      });\n      const derivedId = docsIdFor(libraryName);\n      libraryId = derivedId;\n    } catch {\n      // Did not resolve: skip this library and move on to the next one.\n      continue;\n    }\n\n    try {\n      const libraryDocs = await tools.context7.queryDocs({\n        libraryId,\n        query: input.question,\n      });\n      const docHit = docsSourceFor(libraryName, libraryId);\n      addSource(collected, docHit);\n    } catch {\n      // A dead documentation source must not kill the run.\n      recordDeadSource(deadLibraries, libraryName);\n    }\n  }\n\n  // 4. Deduplicate by URL before anything consumes the sources.\n  const survivors = dedupeByUrl(collected);\n  const duplicatesRemoved = collected.length - survivors.length;\n\n  // 5. Knowledge graph: question entity, one source entity per survivor, citations.\n  const questionAnchor = await tools.memory.createEntities({\n    entities: [\n      {\n        name: input.question,\n        entityType: \"research-question\",\n        observations: [`Research question: ${input.question}`],\n      },\n    ],\n  });\n\n  for (const survivor of survivors) {\n    const storedSource = await tools.memory.createEntities({\n      entities: [\n        {\n          name: survivor.url,\n          entityType: \"source\",\n          observations: [input.question],\n        },\n      ],\n    });\n\n    const citation = await tools.memory.createRelations({\n      relations: [\n        {\n          from: input.question,\n          to: survivor.url,\n          relationType: \"cites\",\n        },\n      ],\n    });\n  }\n\n  // 6. Report files.\n  const researchDir = await tools.filesystem.createDirectory({ path: \"research\" });\n\n  const sourcesReport = renderSourcesMarkDown(input.question, survivors);\n  const savedSourcesFile = await tools.filesystem.writeFile({\n    path: \"research/sources.md\",\n    content: sourcesReport,\n  });\n\n  if (deadLibraries.length > 0) {\n    const deadReport = renderDeadSourcesMarkDown(deadLibraries);\n    const savedDeadFile = await tools.filesystem.writeFile({\n      path: \"research/dead-sources.md\",\n      content: deadReport,\n    });\n  }\n\n  // 7. Counts for whoever triggered the pipeline.\n  return {\n    sourcesKept: survivors.length,\n    duplicatesRemoved,\n    deadSources: deadLibraries.length,\n  };\n}\n",
+          "lines": 227,
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 124,
+                  "column": 3,
+                  "offset": 4737
+                },
+                "end": {
+                  "line": 124,
+                  "column": 42,
+                  "offset": 4776
+                },
+                "semanticPath": "flow/stmt[4]",
+                "fingerprint": "53c2dcc94863bfb43746c947e885d1e74a21c8eed5d56f10f50d26ff6196a54e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 138,
+                  "column": 3,
+                  "offset": 5257
+                },
+                "end": {
+                  "line": 138,
+                  "column": 38,
+                  "offset": 5292
+                },
+                "semanticPath": "flow/stmt[10]",
+                "fingerprint": "6423e8403041c1629153087b9db8aefbd43e3882fc43282df2ed7336fde9ce91"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 141,
+                  "column": 5,
+                  "offset": 5345
+                },
+                "end": {
+                  "line": 141,
+                  "column": 24,
+                  "offset": 5364
+                },
+                "semanticPath": "flow/for[0]/stmt[0]",
+                "fingerprint": "7d3c54051c16662b7762050e5747e446dbc8ef6a05df13142486c3c450c4e925"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 148,
+                  "column": 7,
+                  "offset": 5556
+                },
+                "end": {
+                  "line": 148,
+                  "column": 29,
+                  "offset": 5578
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[2]",
+                "fingerprint": "512eb2e87da2c1ca4ed8e9fd7c974867f6009e71138bbd1cabae58a865be1efb"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 169,
+                  "column": 3,
+                  "offset": 6162
+                },
+                "end": {
+                  "line": 169,
+                  "column": 65,
+                  "offset": 6224
+                },
+                "semanticPath": "flow/stmt[13]",
+                "fingerprint": "aa5aab3444d8884d42c2b3bf08c09746054d54a8717a79daee75226827e52129"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 5
+          },
+          "shape": {
+            "nodes": 41,
+            "edges": 86,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 13,
+              "function": 12,
+              "code": 5,
+              "parallel": 1,
+              "merge": 2,
+              "loop": 2,
+              "try": 2,
+              "jump": 1,
+              "condition": 1,
+              "output": 1
+            },
+            "codeNodes": 5,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8780487804878049,
+            "maxNesting": 2,
+            "toolCalls": 13
+          },
+          "covered": [
+            "condition",
+            "function",
+            "jump",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [
+            "nested-loop"
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 5111,
+            "completionTokens": 16326,
+            "totalTokens": 21437
+          },
+          "ms": 476326
+        }
+      ],
+      "toolsUsed": [
+        "context7.queryDocs",
+        "context7.resolveLibraryId",
+        "deepwiki.deepwikiFetch",
+        "duckduckgo.duckduckgoWebSearch",
+        "filesystem.createDirectory",
+        "filesystem.writeFile",
+        "memory.createEntities",
+        "memory.createRelations",
+        "sequentialThinking.sequentialthinking"
+      ],
+      "totalMs": 476357
+    },
+    {
+      "intent": "browser-qa-suite",
+      "servers": [
+        "playwright",
+        "filesystem"
+      ],
+      "toolCount": 38,
+      "systemPromptTokens": 4023,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "try",
+        "jump",
+        "early-return",
+        "function"
+      ],
+      "targetLines": 220,
+      "includeExamples": false,
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\ntype ScenarioStep = {\n  kind: string;\n  target: string;\n  text?: string;\n};\n\ntype Scenario = {\n  name: string;\n  path: string;\n  steps: ScenarioStep[];\n  expectedText: string;\n};\n\nexport default async function flow(\n  input: { baseUrl: string; scenarios: Scenario[] },\n  tools: Tools\n) {\n  let passedCount = 0;\n  let failedCount = 0;\n  const failedScenarios: string[] = [];\n  let cutShort = false;\n\n  // Evidence for every scenario (screenshots, console logs) lands here.\n  await tools.filesystem.createDirectory({ path: \"qa-artifacts\" });\n\n  // One desktop viewport for the whole suite, before any scenario runs.\n  await tools.playwright.browserResize({ width: 1280, height: 800 });\n\n  for (const scenario of input.scenarios) {\n    try {\n      const url = scenarioUrl(input.baseUrl, scenario.path);\n      await tools.playwright.browserNavigate({ url });\n\n      // Snapshot first so the scenario's step targets have refs to aim at.\n      await tools.playwright.browserSnapshot({});\n\n      for (const step of scenario.steps) {\n        if (step.kind === \"click\") {\n          await tools.playwright.browserClick({ target: step.target });\n        } else if (step.kind === \"type\") {\n          await tools.playwright.browserType({ target: step.target, text: step.text ?? \"\" });\n        } else if (step.kind === \"wait\") {\n          await tools.playwright.browserWaitFor({ text: step.target });\n        } else {\n          // Unknown step kind: skip it and move on to the next step.\n          continue;\n        }\n      }\n\n      // Evaluates a page-side assertion that throws when the expected text\n      // is missing — the throw fails the scenario and is caught below.\n      const assertExpectedText = expectedTextAssertion(scenario.expectedText);\n      await tools.playwright.browserEvaluate({ function: assertExpectedText });\n\n      passedCount += 1;\n    } catch {\n      // The scenario threw: record it as failed and carry on with the next one.\n      recordFailure(failedScenarios, scenario.name);\n      failedCount += 1;\n    } finally {\n      // Evidence capture runs at the end of every scenario, passed or failed.\n      const screenshotFile = screenshotPath(scenario.name);\n      const consoleLogFile = consoleLogPath(scenario.name);\n      try {\n        await tools.playwright.browserTakeScreenshot({ filename: screenshotFile, type: \"png\", scale: \"css\" });\n        await tools.playwright.browserConsoleMessages({ level: \"error\", all: true, filename: consoleLogFile });\n      } catch {\n        // Evidence capture is best-effort; it must never kill the suite.\n      }\n    }\n\n    // More than three failing scenarios: stop the suite early.\n    if (failedCount > 3) {\n      cutShort = true;\n      break;\n    }\n  }\n\n  try {\n    await tools.playwright.browserClose({});\n  } catch {\n    // Closing is best-effort; the report still has to be written.\n  }\n\n  const report = renderReport(input.baseUrl, passedCount, failedCount, failedScenarios, cutShort);\n  await tools.filesystem.writeFile({ path: \"qa-report.md\", content: report });\n\n  return { passed: passedCount, failed: failedCount, cutShort };\n}\n\nfunction scenarioUrl(baseUrl: string, path: string): string {\n  const base = baseUrl.endsWith(\"/\") ? baseUrl.slice(0, -1) : baseUrl;\n  const suffix = path.startsWith(\"/\") ? path : `/${path}`;\n  return `${base}${suffix}`;\n}\n\nfunction expectedTextAssertion(expectedText: string): string {\n  const needle = JSON.stringify(expectedText);\n  return `() => {\n  const text = document.body ? document.body.innerText : \"\";\n  if (!text.includes(${needle})) {\n    throw new Error(\"Expected text not found on page: \" + ${needle});\n  }\n}`;\n}\n\nfunction slugify(scenarioName: string): string {\n  return scenarioName\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, \"-\")\n    .replace(/^-+|-+$/g, \"\");\n}\n\nfunction screenshotPath(scenarioName: string): string {\n  return `qa-artifacts/${slugify(scenarioName)}.png`;\n}\n\nfunction consoleLogPath(scenarioName: string): string {\n  return `qa-artifacts/${slugify(scenarioName)}.console.log`;\n}\n\nfunction recordFailure(failedScenarios: string[], scenarioName: string): void {\n  failedScenarios.push(scenarioName);\n}\n\nfunction renderReport(\n  baseUrl: string,\n  passedCount: number,\n  failedCount: number,\n  failedScenarios: string[],\n  cutShort: boolean\n): string {\n  const lines: string[] = [\n    \"# Browser smoke-test report\",\n    \"\",\n    `- Base URL: ${baseUrl}`,\n    `- Scenarios passed: ${passedCount}`,\n    `- Scenarios failed: ${failedCount}`,\n    `- Suite cut short: ${cutShort ? \"yes\" : \"no\"}`,\n    \"\",\n  ];\n  if (failedScenarios.length > 0) {\n    lines.push(\"## Failing scenarios\", \"\");\n    for (const name of failedScenarios) {\n      lines.push(`- ${name}`);\n    }\n  } else {\n    lines.push(\"All scenarios passed.\");\n  }\n  return lines.join(\"\\n\");\n}\n",
+          "lines": 153,
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 20,
+                  "column": 3,
+                  "offset": 340
+                },
+                "end": {
+                  "line": 23,
+                  "column": 24,
+                  "offset": 447
+                },
+                "semanticPath": "flow/stmt[0..3]",
+                "fingerprint": "9c4a92d14a8ae14f2eda9ff3faad0e6f72e9470e48245237a145e13aeadfcc7e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 57,
+                  "column": 7,
+                  "offset": 1877
+                },
+                "end": {
+                  "line": 57,
+                  "column": 24,
+                  "offset": 1894
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[6]",
+                "fingerprint": "259c2dcbc50853954f8b104616c8d060ae92a0209db350a990edd59cda7b33c9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 61,
+                  "column": 7,
+                  "offset": 2049
+                },
+                "end": {
+                  "line": 61,
+                  "column": 24,
+                  "offset": 2066
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[1]",
+                "fingerprint": "dcd1d4919f1add8ea015159d1bc56eadce7302a8326f7e32effcf3ef56a93636"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 76,
+                  "column": 7,
+                  "offset": 2719
+                },
+                "end": {
+                  "line": 76,
+                  "column": 23,
+                  "offset": 2735
+                },
+                "semanticPath": "flow/for[0]/if[0]/stmt[0]",
+                "fingerprint": "99640be8314b7ccb43ccd0beeb5a2e2bf142f0f8c14efcfe8957e8a9d2deccae"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 4
+          },
+          "shape": {
+            "nodes": 35,
+            "edges": 75,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 4,
+              "tool": 12,
+              "loop": 2,
+              "try": 3,
+              "function": 6,
+              "condition": 4,
+              "jump": 2,
+              "output": 1
+            },
+            "codeNodes": 4,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8857142857142857,
+            "maxNesting": 6,
+            "toolCalls": 12
+          },
+          "covered": [
+            "condition",
+            "else-if-chain",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "try"
+          ],
+          "missing": [
+            "early-return"
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 4138,
+            "completionTokens": 15277,
+            "totalTokens": 19415
+          },
+          "ms": 362762
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.createDirectory",
+        "filesystem.writeFile",
+        "playwright.browserClick",
+        "playwright.browserClose",
+        "playwright.browserConsoleMessages",
+        "playwright.browserEvaluate",
+        "playwright.browserNavigate",
+        "playwright.browserResize",
+        "playwright.browserSnapshot",
+        "playwright.browserTakeScreenshot",
+        "playwright.browserType",
+        "playwright.browserWaitFor"
+      ],
+      "totalMs": 362816
+    },
+    {
+      "intent": "incident-responder",
+      "servers": [
+        "filesystem",
+        "everything",
+        "sequential-thinking"
+      ],
+      "toolCount": 28,
+      "systemPromptTokens": 4387,
+      "covers": [
+        "condition",
+        "else-if-chain",
+        "parallel",
+        "loop",
+        "try",
+        "early-return",
+        "function"
+      ],
+      "targetLines": 170,
+      "includeExamples": false,
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/**\n * Incident responder.\n *\n * Trigger payload: the incident itself — id, title, error rate (%), number of\n * affected users, the affected service, and the log files to sweep.\n */\n\ninterface IncidentInput {\n  id: string;\n  title: string;\n  errorRate: number;\n  affectedUsers: number;\n  service: string;\n  logFilePaths: string[];\n}\n\ntype Severity = \"sev1\" | \"sev2\" | \"sev3\" | \"sev4\";\n\ninterface StatusProbe {\n  temperature: number;\n  conditions: string;\n  humidity: number;\n}\n\ninterface CollectedLog {\n  path: string;\n  excerpt: string;\n}\n\ninterface FailedLog {\n  path: string;\n  reason: string;\n}\n\n/* ------------------------------------------------------------------ */\n/* Helpers — every call site in the flow body projects as its own     */\n/* function node, so deriving/recording stays visible in the graph.   */\n/* ------------------------------------------------------------------ */\n\n/** Numeric triage: severity from the incident numbers alone. */\nfunction classifySeverity(errorRate: number, affectedUsers: number): Severity {\n  if (errorRate > 50 || affectedUsers > 10000) {\n    return \"sev1\";\n  }\n  if (errorRate > 20 || affectedUsers > 1000) {\n    return \"sev2\";\n  }\n  if (errorRate > 5) {\n    return \"sev3\";\n  }\n  return \"sev4\";\n}\n\n/** Folder holding the incident's logs (folder of the first referenced path). */\nfunction logFolderOf(logFilePaths: string[]): string {\n  const first = logFilePaths[0] ?? \"\";\n  const cut = first.lastIndexOf(\"/\");\n  return cut === -1 ? \".\" : first.slice(0, cut);\n}\n\n/** Deterministic probe location for a service (the registry allows three). */\nfunction statusLocationFor(service: string): \"New York\" | \"Chicago\" | \"Los Angeles\" {\n  const options = [\"New York\", \"Chicago\", \"Los Angeles\"] as const;\n  let weight = 0;\n  for (const ch of service) {\n    weight += ch.charCodeAt(0);\n  }\n  return options[weight % options.length];\n}\n\n/** Comma-joined paths of the logs that were read successfully. */\nfunction joinedPaths(entries: CollectedLog[]): string {\n  return entries.map((entry) => entry.path).join(\", \");\n}\n\n/** Record one successfully read log, kept as a short recent-lines excerpt. */\nfunction noteCollectedLog(into: CollectedLog[], path: string, contents: string): void {\n  const tailRows = contents.split(\"\\n\").slice(-30);\n  let excerpt = tailRows.join(\"\\n\");\n  if (excerpt.length > 1600) {\n    excerpt = excerpt.slice(excerpt.length - 1600);\n  }\n  into.push({ path, excerpt });\n}\n\n/** Record one unreadable log together with the reason it could not be read. */\nfunction noteFailedLog(into: FailedLog[], path: string, error: unknown): void {\n  into.push({\n    path,\n    reason: error instanceof Error ? error.message : String(error),\n  });\n}\n\n/** Who gets woken up for a sev1/sev2, in words (for the reasoning trail). */\nfunction escalationTargets(severity: \"sev1\" | \"sev2\"): string {\n  return severity === \"sev1\"\n    ? \"the on-call channel AND the incident commander (simultaneously)\"\n    : \"the on-call channel only\";\n}\n\n/** Builds one escalation message for one audience — never assembled inline. */\nfunction escalationMessage(\n  severity: \"sev1\" | \"sev2\",\n  incident: IncidentInput,\n  audience: string,\n  status: StatusProbe,\n  logsRead: number,\n  logsFailed: number,\n): string {\n  return [\n    `[${severity.toUpperCase()}] ${incident.title} (${incident.id})`,\n    `service: ${incident.service}`,\n    `error rate: ${incident.errorRate}%`,\n    `affected users: ${incident.affectedUsers}`,\n    `evidence: ${logsRead} log file(s) parsed, ${logsFailed} unreadable`,\n    `live status probe: ${status.temperature}C, ${status.conditions}, humidity ${status.humidity}%`,\n    `audience: ${audience}`,\n    \"\",\n    \"Acknowledge and join the response bridge.\",\n  ].join(\"\\n\");\n}\n\n/** One dated line for the sev3 tracker or the sev4 low-priority registry. */\nfunction registryLine(level: \"sev3\" | \"sev4\", incident: IncidentInput): string {\n  const stampedAt = new Date().toISOString();\n  return `${stampedAt} ${level} ${incident.id} \"${incident.title}\" service=${incident.service} errorRate=${incident.errorRate}% affectedUsers=${incident.affectedUsers}`;\n}\n\n/** Append one line to accumulated file contents (tolerates missing newline). */\nfunction withAppendedLine(existing: string, line: string): string {\n  if (existing.length === 0) {\n    return `${line}\\n`;\n  }\n  return existing.endsWith(\"\\n\") ? `${existing}${line}\\n` : `${existing}\\n${line}\\n`;\n}\n\n/** Full markdown timeline for incidents/<id>.md. */\nfunction timelineMarkdown(\n  incident: IncidentInput,\n  severity: Severity,\n  status: StatusProbe | null,\n  collected: CollectedLog[],\n  failed: FailedLog[],\n): string {\n  const lines: string[] = [\n    `# Incident ${incident.id} — ${incident.title}`,\n    \"\",\n    `- service: ${incident.service}`,\n    `- error rate: ${incident.errorRate}%`,\n    `- affected users: ${incident.affectedUsers}`,\n    `- severity: ${severity}`,\n    `- recorded: ${new Date().toISOString()}`,\n    \"\",\n    \"## Log evidence\",\n  ];\n  if (collected.length === 0 && failed.length === 0) {\n    lines.push(\"- none collected (triaged from the incident numbers alone)\");\n  }\n  for (const entry of collected) {\n    lines.push(`### ${entry.path}`, \"\", \"```\");\n    for (const row of entry.excerpt.split(\"\\n\")) {\n      lines.push(row);\n    }\n    lines.push(\"```\", \"\");\n  }\n  for (const entry of failed) {\n    lines.push(`- UNREADABLE — ${entry.path}: ${entry.reason}`);\n  }\n  lines.push(\"\", \"## Actions taken\");\n  if (severity === \"sev4\") {\n    lines.push(\"- filed in incidents/low.log — below response threshold, nobody woken\");\n  } else if (severity === \"sev3\") {\n    lines.push(\"- appended to incidents/tracked.log for deferred follow-up\");\n  } else if (severity === \"sev2\") {\n    lines.push(\"- worked through three structured reasoning thoughts\");\n    lines.push(\"- on-call channel notified\");\n  } else {\n    lines.push(\"- worked through three structured reasoning thoughts\");\n    lines.push(\"- on-call channel notified\");\n    lines.push(\"- incident commander briefed (dispatched simultaneously with the page)\");\n  }\n  if (status !== null) {\n    lines.push(\"\", \"## Structured status payload\", `\\`${JSON.stringify(status)}\\``);\n  }\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(input: IncidentInput, tools: Tools) {\n  const incident = input;\n\n  // 1 — classify first, from the incident numbers alone.\n  const severity = classifySeverity(incident.errorRate, incident.affectedUsers);\n\n  let logsRead = 0;\n  let logsFailed = 0;\n\n  // Every write below lands under incidents/, so make sure it exists.\n  const incidentsDirReady = await tools.filesystem.createDirectory({ path: \"incidents\" });\n\n  let status: StatusProbe | null = null;\n\n  if (severity === \"sev4\") {\n    // 2 — not worth waking anyone: register it and stop right there.\n    let lowRegistry = \"\";\n    try {\n      const lowCurrent = await tools.filesystem.readTextFile({ path: \"incidents/low.log\" });\n      lowRegistry = lowCurrent.content;\n    } catch {\n      // incidents/low.log does not exist yet — start it fresh.\n    }\n    const lowLine = registryLine(\"sev4\", incident);\n    const lowRegistered = withAppendedLine(lowRegistry, lowLine);\n    const lowSaved = await tools.filesystem.writeFile({\n      path: \"incidents/low.log\",\n      content: lowRegistered,\n    });\n\n    const lowTimeline = timelineMarkdown(incident, \"sev4\", null, [], []);\n    const lowTimelineSaved = await tools.filesystem.writeFile({\n      path: `incidents/${incident.id}.md`,\n      content: lowTimeline,\n    });\n\n    return { severity, logsRead, logsFailed };\n  }\n\n  // 3 — gather the three context pieces at the same time, not in sequence.\n  const logFolder = logFolderOf(incident.logFilePaths);\n  const statusLocation = statusLocationFor(incident.service);\n  const [environment, structuredStatus, logFolderListing] = await Promise.all([\n    tools.everything.getEnv({}),\n    tools.everything.getStructuredContent({ location: statusLocation }),\n    tools.filesystem.listDirectory({ path: logFolder }),\n  ]);\n  status = structuredStatus;\n\n  // 4 — read every referenced log; one unreadable file never aborts the sweep.\n  const collectedLogs: CollectedLog[] = [];\n  const failedLogs: FailedLog[] = [];\n\n  for (const logPath of incident.logFilePaths) {\n    try {\n      const logContents = await tools.filesystem.readTextFile({ path: logPath, tail: 300 });\n      logsRead += 1;\n      noteCollectedLog(collectedLogs, logPath, logContents.content);\n    } catch (readError) {\n      logsFailed += 1;\n      noteFailedLog(failedLogs, logPath, readError);\n    }\n  }\n\n  if (severity === \"sev1\" || severity === \"sev2\") {\n    // 5 — reason through the collected context in three sequential\n    // thoughts before acting on anything.\n    const seenPaths = joinedPaths(collectedLogs);\n    const targets = escalationTargets(severity);\n\n    const situationAssessment = await tools.sequentialThinking.sequentialthinking({\n      thought: `Situation: incident ${incident.id} \"${incident.title}\" on ${incident.service} — error rate ${incident.errorRate}%, ${incident.affectedUsers} users affected, classified ${severity}.`,\n      thoughtNumber: 1,\n      totalThoughts: 3,\n      nextThoughtNeeded: true,\n    });\n\n    const evidenceReview = await tools.sequentialThinking.sequentialthinking({\n      thought: `Evidence: logs read: ${seenPaths || \"none\"}; unreadable: ${logsFailed}. Environment captured for ${incident.service}; live status probe says ${status.conditions} at ${status.temperature}C.`,\n      thoughtNumber: 2,\n      totalThoughts: 3,\n      nextThoughtNeeded: true,\n    });\n\n    const responseDecision = await tools.sequentialThinking.sequentialthinking({\n      thought: `Response: escalate as ${severity}; notify ${targets}; then write the timeline for ${incident.id} and report ${logsRead} read / ${logsFailed} failed logs.`,\n      thoughtNumber: 3,\n      totalThoughts: 3,\n      nextThoughtNeeded: false,\n    });\n\n    const outboxReady = await tools.filesystem.createDirectory({\n      path: `incidents/outbox/${incident.id}`,\n    });\n\n    // 6 — escalation.\n    if (severity === \"sev1\") {\n      const onCallPage = escalationMessage(\n        \"sev1\",\n        incident,\n        \"the on-call channel\",\n        status,\n        logsRead,\n        logsFailed,\n      );\n      const commanderBrief = escalationMessage(\n        \"sev1\",\n        incident,\n        \"the incident commander\",\n        status,\n        logsRead,\n        logsFailed,\n      );\n\n      // TODO: the registry has no paging/notification tool yet, so these two\n      // file drafts stand in for the real notification calls. Swap them for\n      // the on-call channel notifier and the incident-commander notifier once\n      // such tools are registered — they must keep firing together, exactly\n      // as this Promise.all does.\n      const [onCallNotified, commanderNotified] = await Promise.all([\n        tools.filesystem.writeFile({\n          path: `incidents/outbox/${incident.id}/on-call-channel.txt`,\n          content: onCallPage,\n        }),\n        tools.filesystem.writeFile({\n          path: `incidents/outbox/${incident.id}/incident-commander.txt`,\n          content: commanderBrief,\n        }),\n      ]);\n    } else {\n      const onCallPage = escalationMessage(\n        \"sev2\",\n        incident,\n        \"the on-call channel\",\n        status,\n        logsRead,\n        logsFailed,\n      );\n\n      // TODO: the registry has no paging/notification tool yet, so this file\n      // draft stands in for the real on-call channel notification. Swap it\n      // for the proper notifier call once such a tool is registered.\n      const onCallNotified = await tools.filesystem.writeFile({\n        path: `incidents/outbox/${incident.id}/on-call-channel.txt`,\n        content: onCallPage,\n      });\n    }\n  } else {\n    // sev3 — nobody gets woken: one dated line in the tracker.\n    let trackedRegistry = \"\";\n    try {\n      const trackedCurrent = await tools.filesystem.readTextFile({ path: \"incidents/tracked.log\" });\n      trackedRegistry = trackedCurrent.content;\n    } catch {\n      // incidents/tracked.log does not exist yet — start it fresh.\n    }\n    const trackedLine = registryLine(\"sev3\", incident);\n    const trackedEntry = withAppendedLine(trackedRegistry, trackedLine);\n    const trackedSaved = await tools.filesystem.writeFile({\n      path: \"incidents/tracked.log\",\n      content: trackedEntry,\n    });\n  }\n\n  // 7 — always close with the incident timeline.\n  const timeline = timelineMarkdown(incident, severity, status, collectedLogs, failedLogs);\n  const timelineSaved = await tools.filesystem.writeFile({\n    path: `incidents/${incident.id}.md`,\n    content: timeline,\n  });\n\n  // 8 — outcome of the response.\n  return { severity, logsRead, logsFailed };\n}\n",
+          "lines": 363,
+          "level": "L2",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 191,
+                  "column": 3,
+                  "offset": 6306
+                },
+                "end": {
+                  "line": 191,
+                  "column": 26,
+                  "offset": 6329
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "2213782ccf427426feecd870fd7a4188e13e8f3b592e640a24edecade6ffd3e0"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 196,
+                  "column": 3,
+                  "offset": 6473
+                },
+                "end": {
+                  "line": 197,
+                  "column": 22,
+                  "offset": 6512
+                },
+                "semanticPath": "flow/stmt[2..3]",
+                "fingerprint": "c42ff763718aafe9ed3a0a57ffcfa58f148552965d57479466312f80f47eeda1"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 202,
+                  "column": 3,
+                  "offset": 6679
+                },
+                "end": {
+                  "line": 202,
+                  "column": 41,
+                  "offset": 6717
+                },
+                "semanticPath": "flow/stmt[5]",
+                "fingerprint": "e7b57e52c04f991ca10208db844b20160582b5f367ce051bd0ef4b77bcc41897"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 206,
+                  "column": 5,
+                  "offset": 6822
+                },
+                "end": {
+                  "line": 206,
+                  "column": 26,
+                  "offset": 6843
+                },
+                "semanticPath": "flow/if[0]/stmt[0]",
+                "fingerprint": "d9435929d093ac778a78f1771e62fd366fe5fa4da7d35a711246ad1e925ce0f0"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 209,
+                  "column": 7,
+                  "offset": 6953
+                },
+                "end": {
+                  "line": 209,
+                  "column": 40,
+                  "offset": 6986
+                },
+                "semanticPath": "flow/if[0]/try[0]/stmt[1]",
+                "fingerprint": "c7d78993e3013b889b7f7d958997b160156c48e849e5e294e020e935e7f30778"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 237,
+                  "column": 3,
+                  "offset": 8032
+                },
+                "end": {
+                  "line": 241,
+                  "column": 38,
+                  "offset": 8221
+                },
+                "semanticPath": "flow/stmt[10..12]",
+                "fingerprint": "432011f942a3f6e4e8986997f4c64e0d574f0ac3d0ebfb706f0460bf35ae604e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 246,
+                  "column": 7,
+                  "offset": 8381
+                },
+                "end": {
+                  "line": 246,
+                  "column": 21,
+                  "offset": 8395
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[1]",
+                "fingerprint": "d963a6aa11d280384f2228af87befa06a382eed12d33ae9197e786bc8b1a80ef"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 249,
+                  "column": 7,
+                  "offset": 8497
+                },
+                "end": {
+                  "line": 249,
+                  "column": 23,
+                  "offset": 8513
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "937ff14cf427ac6eba9660a7d340bea80c8aa684e61e3095dba9c429955d5595"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 339,
+                  "column": 5,
+                  "offset": 11857
+                },
+                "end": {
+                  "line": 339,
+                  "column": 30,
+                  "offset": 11882
+                },
+                "semanticPath": "flow/if[1]/else/stmt[0]",
+                "fingerprint": "bd9f43e31ad99e16b811b96d337744c07576049667f41bf96715d46a2d9e167b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 342,
+                  "column": 7,
+                  "offset": 12000
+                },
+                "end": {
+                  "line": 342,
+                  "column": 48,
+                  "offset": 12041
+                },
+                "semanticPath": "flow/if[1]/else/try[0]/stmt[1]",
+                "fingerprint": "c51f43d172b4ec6866c70f0840e6f22e8f8a11f9141d1cc232802f4a106c609d"
+              }
+            }
+          ],
+          "diagnosticCodes": {
+            "info/unsupported-construct": 10
+          },
+          "shape": {
+            "nodes": 60,
+            "edges": 162,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 10,
+              "function": 16,
+              "tool": 18,
+              "condition": 3,
+              "try": 3,
+              "output": 2,
+              "merge": 4,
+              "parallel": 2,
+              "loop": 1
+            },
+            "codeNodes": 10,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8333333333333334,
+            "maxNesting": 3,
+            "toolCalls": 18
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "else-if-chain",
+            "function",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "usage": {
+            "promptTokens": 4404,
+            "completionTokens": 23733,
+            "totalTokens": 28137
+          },
+          "ms": 691446
+        }
+      ],
+      "toolsUsed": [
+        "everything.getEnv",
+        "everything.getStructuredContent",
+        "filesystem.createDirectory",
+        "filesystem.listDirectory",
+        "filesystem.readTextFile",
+        "filesystem.writeFile",
+        "sequentialThinking.sequentialthinking"
+      ],
+      "totalMs": 691517
+    }
+  ]
+}

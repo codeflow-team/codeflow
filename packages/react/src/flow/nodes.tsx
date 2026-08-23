@@ -1,72 +1,84 @@
 /**
- * Custom React Flow nodes — 07-ui.md §3 (compact / expanded / developer) and
- * §5 (code and unknown nodes must look visibly different; diagnostics show as a
- * badge on the node they belong to).
+ * Custom React Flow nodes — 07 §3 (compact / expanded / developer) and §5
+ * (`code` and `unknown` must be unmistakable; diagnostics show on the node they
+ * belong to).
+ *
+ * The node is the product's main object, so it is drawn like one: a tinted icon
+ * chip carrying the type, a real title, quiet key/value rows, and status shown
+ * as a word rather than a coloured dot. Everything machine-facing — the tool's
+ * qualified name, the source text — is held back for the developer level.
  */
 
 import type { ReactNode } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Trash2 } from "lucide-react";
 import type { Diagnostic, WorkflowNode } from "@codeflow/core";
 import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
 import { useOptionalCodeFlow } from "../context/hooks.js";
-import { developerLines, nodeIcon, nodeKindLabel, nodeSummaryRows } from "./summary.js";
+import { cn } from "../ui/cn.js";
+import { NodeGlyph } from "./visual.js";
+import { developerLines, nodeCaption, nodeSummaryRows } from "./summary.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
 
-function DiagnosticBadge({ diagnostics }: { diagnostics: Diagnostic[] }): ReactNode {
+/**
+ * Renders a display value, giving `{{ … }}` interpolations their own treatment.
+ *
+ * `{{ }}` is display syntax for a TypeScript expression (06 §3), and showing it
+ * as a tinted token is how the user learns that "this part is filled in when the
+ * flow runs" without being told.
+ */
+function Value({ text }: { text: string }): ReactNode {
+  const parts = text.split(/(\{\{[\s\S]*?\}\})/g).filter((part) => part.length > 0);
+  if (parts.length === 0) return null;
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith("{{") && part.endsWith("}}") ? (
+          <span
+            key={i}
+            className="rounded-[4px] bg-accent-soft px-1 font-mono text-[10.5px] text-accent"
+          >
+            {part.slice(2, -2).trim()}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function StatusBadge({ diagnostics }: { diagnostics: Diagnostic[] }): ReactNode {
   const severity = worstSeverity(diagnostics);
   if (severity === null) return null;
-  const glyph = severity === "error" ? "!" : severity === "warning" ? "!" : "i";
-  const title = diagnostics.map((d) => `${d.severity}: ${d.code} — ${d.message}`).join("\n");
+
+  const needsSetup = diagnostics.some((diagnostic) => diagnostic.code === "needs-configuration");
+  const label = needsSetup
+    ? "Needs setup"
+    : severity === "error"
+      ? diagnostics.length > 1
+        ? `${String(diagnostics.length)} problems`
+        : "Problem"
+      : severity === "warning"
+        ? "Check this"
+        : "Note";
+
+  const tone = needsSetup || severity === "warning" ? "warn" : severity === "error" ? "danger" : "info";
+  const title = diagnostics.map((d) => `${d.severity}: ${d.message}`).join("\n");
+
   return (
-    <span className={`cf-badge cf-badge--${severity}`} title={title} aria-label={`${String(diagnostics.length)} ${severity}`}>
-      {glyph}
-      {diagnostics.length > 1 ? <span className="cf-badge__count">{diagnostics.length}</span> : null}
+    <span
+      title={title}
+      aria-label={`${String(diagnostics.length)} ${severity}`}
+      className={cn(
+        "inline-flex h-[17px] shrink-0 items-center rounded-full px-1.5 text-[9.5px] font-semibold uppercase leading-none tracking-[0.03em]",
+        tone === "danger" && "bg-danger-soft text-danger",
+        tone === "warn" && "bg-warn-soft text-warn",
+        tone === "info" && "bg-info-soft text-info",
+      )}
+    >
+      {label}
     </span>
-  );
-}
-
-function NodeBody({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
-  if (data.mode === "compact") return null;
-
-  if (data.mode === "developer") {
-    return (
-      <pre className="cf-node__code">
-        {developerLines(data.node).map((line, i) => (
-          <span className="cf-node__code-line" key={i}>
-            {line}
-          </span>
-        ))}
-      </pre>
-    );
-  }
-
-  const rows = nodeSummaryRows(data.node);
-  if (rows.length === 0) return null;
-  return (
-    <dl className="cf-node__rows">
-      {rows.map((row) => (
-        <div className="cf-node__row" key={row.key}>
-          <dt className="cf-node__row-key">{row.key}</dt>
-          <dd className="cf-node__row-value">{row.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function NodeHeader({ data, selected }: { data: CodeFlowRFNode["data"]; selected: boolean }): ReactNode {
-  return (
-    <header className="cf-node__header">
-      <span className="cf-node__icon" aria-hidden="true">
-        {nodeIcon(data.node)}
-      </span>
-      <span className="cf-node__label" title={data.node.label}>
-        {data.node.label}
-      </span>
-      {data.mode !== "compact" ? <span className="cf-node__kind">{nodeKindLabel(data.node)}</span> : null}
-      <DiagnosticBadge diagnostics={data.diagnostics} />
-      {selected ? <DeleteButton node={data.node} /> : null}
-    </header>
   );
 }
 
@@ -82,17 +94,85 @@ function DeleteButton({ node }: { node: WorkflowNode }): ReactNode {
   return (
     <button
       type="button"
-      className="cf-node__delete"
       title={`Delete “${node.label}”`}
       aria-label={`Delete ${node.label}`}
       data-testid={`node-delete-${node.id}`}
+      className={cn(
+        "ml-1 grid size-5 shrink-0 cursor-pointer place-items-center rounded-md border-0 bg-transparent p-0",
+        "text-ink-faint outline-none transition-colors hover:bg-danger-soft hover:text-danger",
+        "focus-visible:ring-2 focus-visible:ring-ring/70",
+      )}
       onClick={(event) => {
         event.stopPropagation();
         void cf.patchNode(node.id, { $delete: true });
       }}
     >
-      ×
+      <Trash2 className="size-3" />
     </button>
+  );
+}
+
+function NodeHeader({ data, selected }: { data: CodeFlowRFNode["data"]; selected: boolean }): ReactNode {
+  const caption = nodeCaption(data.node, data.mode);
+  const compact = data.mode === "compact";
+  return (
+    <header className={cn("flex items-center gap-2.5 px-3", compact ? "py-2.5" : "pb-2 pt-3")}>
+      <span className="cf-node__chip">
+        <NodeGlyph node={data.node} className="size-3.5" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate text-[13px] font-semibold leading-tight tracking-[-0.005em] text-ink" title={data.node.label}>
+          {data.node.label}
+        </span>
+        {/* The status word rides with the caption rather than the title: a long
+            step name should run out of room before a badge does. */}
+        {caption === null && data.diagnostics.length === 0 ? null : (
+          <span className="flex min-w-0 items-center gap-1.5">
+            {caption === null ? null : (
+              <span
+                className={cn(
+                  "truncate text-[10.5px] leading-none text-ink-faint",
+                  data.mode === "developer" && "font-mono",
+                )}
+              >
+                {caption}
+              </span>
+            )}
+            <StatusBadge diagnostics={data.diagnostics} />
+          </span>
+        )}
+      </span>
+      {selected ? <DeleteButton node={data.node} /> : null}
+    </header>
+  );
+}
+
+function NodeBody({ data }: { data: CodeFlowRFNode["data"] }): ReactNode {
+  if (data.mode === "compact") return null;
+
+  if (data.mode === "developer") {
+    return (
+      <pre className="m-0 flex flex-col overflow-hidden whitespace-pre px-3 pb-2.5 font-mono text-[11px] leading-4 text-ink-dim">
+        {developerLines(data.node).map((line, i) => (
+          <span key={i}>{line}</span>
+        ))}
+      </pre>
+    );
+  }
+
+  const rows = nodeSummaryRows(data.node);
+  if (rows.length === 0) return null;
+  return (
+    <dl className="m-0 flex flex-col gap-0.5 px-3 pb-2.5">
+      {rows.map((row) => (
+        <div className="flex items-baseline gap-2 text-[11.5px] leading-5" key={row.key}>
+          <dt className="shrink-0 text-ink-faint">{row.key}</dt>
+          <dd className="m-0 min-w-0 flex-1 truncate text-ink-dim">
+            <Value text={row.value} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -106,16 +186,14 @@ function useChangedClass(nodeId: string): string {
 export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>): ReactNode {
   const type = data.node.type;
   const changed = useChangedClass(id);
+  const attention = data.diagnostics.some((diagnostic) => diagnostic.code === "needs-configuration");
   return (
     <div
-      className={[
-        "cf-node",
-        `cf-node--${type}`,
-        `cf-node--${data.mode}`,
-        selected === true ? "is-selected" : "",
-      ]
-        .filter(Boolean)
-        .join(" ") + changed}
+      className={
+        ["cf-node", `cf-node--${type}`, `cf-node--${data.mode}`, selected === true ? "is-selected" : "", attention ? "is-attention" : ""]
+          .filter(Boolean)
+          .join(" ") + changed
+      }
       data-node-type={type}
     >
       <Handle type="target" position={Position.Top} className="cf-handle" />
@@ -135,18 +213,15 @@ export function CodeFlowContainerNode({ id, data, selected }: NodeProps<CodeFlow
   const changed = useChangedClass(id);
   return (
     <div
-      className={[
-        "cf-container",
-        `cf-container--${type}`,
-        `cf-node--${data.mode}`,
-        selected === true ? "is-selected" : "",
-      ]
-        .filter(Boolean)
-        .join(" ") + changed}
+      className={
+        ["cf-container", `cf-container--${type}`, `cf-node--${data.mode}`, selected === true ? "is-selected" : ""]
+          .filter(Boolean)
+          .join(" ") + changed
+      }
       data-node-type={type}
     >
       <Handle type="target" position={Position.Top} className="cf-handle" />
-      <div className="cf-container__header">
+      <div className="cf-container__header rounded-t-[calc(var(--radius-node)-1px)]">
         <NodeHeader data={data} selected={selected === true} />
         <NodeBody data={data} />
       </div>
@@ -162,7 +237,7 @@ export function CodeFlowContainerNode({ id, data, selected }: NodeProps<CodeFlow
           type="source"
           position={Position.Bottom}
           className="cf-handle cf-handle--slot"
-          style={{ top: 42, bottom: "auto", left: `${String(35 + i * 15)}%` }}
+          style={{ top: 46, bottom: "auto", left: `${String(35 + i * 15)}%` }}
         />
       ))}
       <Handle type="source" position={Position.Bottom} className="cf-handle" />

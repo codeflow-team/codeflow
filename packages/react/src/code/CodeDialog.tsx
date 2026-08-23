@@ -9,6 +9,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Editor } from "@monaco-editor/react";
+import { Button } from "../ui/button.js";
+import { Modal } from "../ui/dialog.js";
+import { EngineNotice } from "../ui/notice.js";
 
 export interface CodeDialogProps {
   title: string;
@@ -31,53 +34,53 @@ export function CodeDialog(props: CodeDialogProps): ReactNode {
   useEffect(() => { setValue(props.initialValue); }, [props.initialValue]);
 
   return (
-    <div className="cf-dialog" role="dialog" aria-modal="true" aria-label={props.title}>
-      <div className="cf-dialog__panel">
-        <header className="cf-dialog__header">
-          <h2>{props.title}</h2>
-          <button type="button" className="cf-icon-button" onClick={props.onCancel} aria-label="Close">
-            ×
-          </button>
-        </header>
-        {props.hint === undefined ? null : <p className="cf-dialog__hint">{props.hint}</p>}
-        <div className="cf-dialog__editor">
-          <Editor
-            height="100%"
-            defaultLanguage="typescript"
-            theme={props.theme === "dark" ? "vs-dark" : "vs"}
-            value={value}
-            onChange={(next) => { setValue(next ?? ""); }}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 12,
-              lineNumbers: "on",
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              tabSize: 2,
-            }}
-          />
-        </div>
-        {props.error === null || props.error === undefined ? null : (
-          <p className="cf-alert cf-alert--error" data-testid="code-dialog-error">
-            {props.error}
-          </p>
-        )}
-        <footer className="cf-dialog__footer">
-          <button type="button" className="cf-button" onClick={props.onCancel}>
+    <Modal
+      open
+      onOpenChange={(open) => { if (!open) props.onCancel(); }}
+      title={props.title}
+      {...(props.hint === undefined ? {} : { description: props.hint })}
+      className="h-[min(38rem,calc(100dvh-3rem))]"
+      footer={
+        <>
+          <Button variant="ghost" size="md" onClick={props.onCancel}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="cf-button cf-button--primary"
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             disabled={props.busy === true || value === props.initialValue}
             title={value === props.initialValue ? "Nothing changed yet" : undefined}
             data-testid="code-dialog-save"
             onClick={() => { props.onSave(value); }}
           >
-            {props.busy === true ? "Applying…" : "Apply code"}
-          </button>
-        </footer>
+            {props.busy === true ? "Saving…" : "Save code"}
+          </Button>
+        </>
+      }
+    >
+      <div className="min-h-0 flex-1 border-y border-line bg-surface-2 py-2">
+        <Editor
+          height="100%"
+          defaultLanguage="typescript"
+          theme={props.theme === "dark" ? "vs-dark" : "vs"}
+          value={value}
+          onChange={(next) => { setValue(next ?? ""); }}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 13,
+            lineNumbers: "on",
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            tabSize: 2,
+            padding: { top: 10, bottom: 10 },
+          }}
+        />
       </div>
-    </div>
+      {props.error === null || props.error === undefined ? null : (
+        <div className="px-4 pt-3">
+          <EngineNotice tone="danger" role="alert" data-testid="code-dialog-error" message={props.error} />
+        </div>
+      )}
+    </Modal>
   );
 }

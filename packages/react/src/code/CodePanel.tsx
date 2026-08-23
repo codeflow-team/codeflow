@@ -104,12 +104,18 @@ export function CodePanel(props: CodePanelProps): ReactNode {
         options={{
           readOnly: props.onChange === undefined,
           minimap: { enabled: false },
-          fontSize: 12,
+          fontSize: 13,
+          lineHeight: 21,
           lineNumbers: "on",
           scrollBeyondLastLine: false,
           automaticLayout: true,
           tabSize: 2,
           renderWhitespace: "none",
+          renderLineHighlight: "none",
+          padding: { top: 12, bottom: 12 },
+          scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10 },
+          overviewRulerBorder: false,
+          guides: { indentation: false },
         }}
       />
     </div>

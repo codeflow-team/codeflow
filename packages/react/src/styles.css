@@ -1,686 +1,377 @@
 /*
- * @codeflow/react — minimal theme (07 §5: node/edge kinds must be visibly
- * distinguishable; `code`/`unknown` must read as "only editable as code").
+ * @codeflow/react — the shipped stylesheet.
  *
- * Light is the base; dark is a token swap driven by `data-cf-theme="dark"` on
- * any ancestor, with `prefers-color-scheme` as the default.
+ * Built with Tailwind v4 from the components in `src/**`, so the classes the
+ * components use are the classes this file contains. Two deliberate choices:
+ *
+ * - **No preflight.** A component library has no business resetting its host's
+ *   page. Every element we render sets its own box explicitly instead.
+ * - **React Flow overrides are unlayered.** `@xyflow/react/dist/style.css` is
+ *   itself unlayered, and unlayered rules always beat layered ones, so our
+ *   canvas chrome has to sit outside `@layer` to be able to override it.
+ *
+ * Everything visual is expressed through the tokens in `tokens.css` — there is
+ * no raw hex in this file.
  */
 
-:root {
-  --cf-bg: #f7f8fa;
-  --cf-surface: #ffffff;
-  --cf-surface-2: #f1f3f7;
-  --cf-border: #d7dce5;
-  --cf-border-strong: #b3bbc9;
-  --cf-text: #14181f;
-  --cf-text-dim: #5c6675;
-  --cf-accent: #3b82f6;
-  --cf-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+/* First line on purpose: a cascade layer takes its priority from where it is
+   first *declared*, so this has to be parsed before Tailwind's own layers. It
+   also fixes the order for a host's stylesheet, whose preflight would otherwise
+   land after our utilities and override them. */
+@layer theme, base, components, utilities;
 
-  --cf-error: #dc2626;
-  --cf-warning: #d97706;
-  --cf-info: #2563eb;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "./tokens.css";
 
-  --cf-trigger: #16a34a;
-  --cf-tool: #3b82f6;
-  --cf-function: #8b5cf6;
-  --cf-condition: #f59e0b;
-  --cf-loop: #0ea5e9;
-  --cf-try: #f97316;
-  --cf-parallel: #14b8a6;
-  --cf-merge: #94a3b8;
-  --cf-jump: #a855f7;
-  --cf-output: #ef4444;
-  --cf-code: #64748b;
-  --cf-unknown: #dc2626;
+@source "./**/*.{ts,tsx}";
+
+/* ========================================================================== */
+/* components                                                                 */
+/* ========================================================================== */
+
+@layer components {
+  /* --- node body — 07 §3 ------------------------------------------------- */
+
+  /*
+   * One shared shell; the accent hue and the silhouette are what tell the node
+   * types apart at a glance (07 §5). `--node` is set per type below so a single
+   * rule can tint border, icon chip and glow together.
+   */
+  .cf-node,
+  .cf-container {
+    --node: var(--cf-tool);
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-node);
+    background: var(--cf-surface);
+    color: var(--cf-text);
+    box-shadow: var(--cf-shadow-node);
+    border: 1px solid var(--cf-border);
+    overflow: hidden;
+    transition:
+      box-shadow 160ms ease,
+      border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  /* The accent lives on a hairline strip at the top rather than a 4px left
+     border: it reads as a colour band, not as a table cell. */
+  .cf-node::before,
+  .cf-container::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    background: var(--node);
+    opacity: 0.9;
+  }
+
+  .cf-node,
+  .cf-container {
+    position: relative;
+  }
+
+  .cf-node:hover,
+  .cf-container:hover {
+    border-color: color-mix(in srgb, var(--node) 45%, var(--cf-border));
+    box-shadow: var(--cf-shadow);
+  }
+
+  .cf-node.is-selected,
+  .cf-container.is-selected {
+    border-color: var(--node);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--node) 22%, transparent),
+      var(--cf-shadow);
+  }
+
+  .cf-node.is-changed,
+  .cf-container.is-changed {
+    border-color: color-mix(in srgb, var(--cf-success) 70%, var(--cf-border));
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--cf-success) 20%, transparent),
+      var(--cf-shadow);
+  }
+
+  .cf-node.is-attention,
+  .cf-container.is-attention {
+    border-color: color-mix(in srgb, var(--cf-warning) 60%, var(--cf-border));
+  }
+
+  /* icon chip */
+  .cf-node__chip {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--node) 14%, var(--cf-surface));
+    color: var(--node);
+    font-size: 0.75rem;
+    line-height: 1;
+  }
+
+  /* per-type accent + silhouette */
+  .cf-node[data-node-type="trigger"] { --node: var(--cf-trigger); border-radius: 1.25rem; }
+  .cf-node[data-node-type="trigger"]::before { display: none; }
+  .cf-node[data-node-type="tool"] { --node: var(--cf-tool); }
+  .cf-node[data-node-type="function"] { --node: var(--cf-function); }
+  .cf-node[data-node-type="condition"] {
+    --node: var(--cf-condition);
+    border-radius: var(--radius-node) var(--radius-node) var(--radius-node) 0;
+  }
+  .cf-node[data-node-type="parallel"] { --node: var(--cf-parallel); }
+  .cf-node[data-node-type="merge"] {
+    --node: var(--cf-merge);
+    border-radius: 999px;
+    background: var(--cf-surface-2);
+  }
+  .cf-node[data-node-type="merge"]::before { display: none; }
+  .cf-node[data-node-type="jump"] {
+    --node: var(--cf-jump);
+    border-radius: 999px;
+    border-style: dashed;
+  }
+  .cf-node[data-node-type="jump"]::before { display: none; }
+  .cf-node[data-node-type="output"] {
+    --node: var(--cf-output);
+    border-radius: var(--radius-node) var(--radius-node) 1.25rem 1.25rem;
+  }
+  .cf-node[data-node-type="output"]::before { display: none; }
+
+  /* 07 §5 — `code` and `unknown` must be unmistakably "code only". */
+  .cf-node[data-node-type="code"] {
+    --node: var(--cf-code);
+    border: 1px dashed color-mix(in srgb, var(--node) 55%, var(--cf-border));
+    background:
+      repeating-linear-gradient(
+        135deg,
+        transparent,
+        transparent 7px,
+        color-mix(in srgb, var(--node) 7%, transparent) 7px,
+        color-mix(in srgb, var(--node) 7%, transparent) 14px
+      ),
+      var(--cf-surface);
+  }
+  .cf-node[data-node-type="unknown"] {
+    --node: var(--cf-unknown);
+    border: 1px dashed color-mix(in srgb, var(--node) 60%, var(--cf-border));
+    background: color-mix(in srgb, var(--node) 6%, var(--cf-surface));
+  }
+
+  /*
+   * Containers — loop / try (07 §1: real nested subgraphs).
+   *
+   * The fill is translucent rather than opaque so the edges that run underneath
+   * the node layer still read through it. That is what lets the leaf cards sit
+   * on top of every line without hiding the `body` edge into the first child.
+   */
+  .cf-container {
+    --node: var(--cf-loop);
+    background: color-mix(in srgb, var(--node) 7%, transparent);
+    border-color: color-mix(in srgb, var(--node) 32%, var(--cf-border));
+    box-shadow: none;
+  }
+  .cf-container[data-node-type="try"] {
+    --node: var(--cf-try);
+    border-style: dashed;
+  }
+  .cf-container::before { opacity: 0.75; }
+  .cf-container__header {
+    background: var(--cf-surface);
+    border-bottom: 1px solid color-mix(in srgb, var(--node) 22%, var(--cf-border));
+  }
+
+  /* --- edges ------------------------------------------------------------- */
+
+  .cf-rf-edge--control .react-flow__edge-path {
+    stroke: var(--cf-border-strong);
+    stroke-width: 1.75;
+  }
+  .cf-rf-edge--data .react-flow__edge-path {
+    stroke: color-mix(in srgb, var(--cf-accent) 70%, transparent);
+    stroke-width: 1.25;
+    stroke-dasharray: 3 4;
+  }
+  .cf-rf-edge--true .react-flow__edge-path { stroke: var(--cf-trigger); }
+  .cf-rf-edge--false .react-flow__edge-path { stroke: var(--cf-text-faint); }
+  .cf-rf-edge--error .react-flow__edge-path { stroke: var(--cf-error); }
+
+  /* --- scrollbars -------------------------------------------------------- */
+
+  .cf-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cf-border-strong) transparent;
+  }
+  .cf-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+  .cf-scroll::-webkit-scrollbar-track { background: transparent; }
+  .cf-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--cf-border-strong) 70%, transparent);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+  .cf-scroll::-webkit-scrollbar-thumb:hover { background-color: var(--cf-border-strong); }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-cf-theme="light"]) {
-    --cf-bg: #0e1116;
-    --cf-surface: #171b22;
-    --cf-surface-2: #1f242d;
-    --cf-border: #2c333e;
-    --cf-border-strong: #3d4653;
-    --cf-text: #e6e9ef;
-    --cf-text-dim: #98a2b3;
+/* ========================================================================== */
+/* motion                                                                     */
+/* ========================================================================== */
+
+@keyframes cf-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes cf-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cf-slide-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cf-slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cf-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(320%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
-[data-cf-theme="dark"] {
-  --cf-bg: #0e1116;
-  --cf-surface: #171b22;
-  --cf-surface-2: #1f242d;
-  --cf-border: #2c333e;
-  --cf-border-strong: #3d4653;
-  --cf-text: #e6e9ef;
-  --cf-text-dim: #98a2b3;
-}
-
-/* -------------------------------------------------------------------------- */
-/* canvas                                                                      */
-/* -------------------------------------------------------------------------- */
+/* ========================================================================== */
+/* React Flow chrome — unlayered, so it can override the library's own CSS     */
+/* ========================================================================== */
 
 .cf-canvas {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 240px;
   background: var(--cf-bg);
   color: var(--cf-text);
-  font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--cf-font);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
-/* React Flow's own chrome follows the theme tokens too. */
+.cf-canvas .react-flow__background-pattern {
+  color: color-mix(in srgb, var(--cf-text-faint) 40%, transparent);
+}
+
 .cf-canvas .react-flow__attribution {
+  background: transparent;
+  color: var(--cf-text-faint);
   font-size: 9px;
-  opacity: 0.5;
-  background: var(--cf-surface);
-  color: var(--cf-text-dim);
+  opacity: 0.55;
+  padding-right: 4px;
 }
 .cf-canvas .react-flow__attribution a { color: inherit; }
-.cf-canvas .react-flow__background-pattern { color: var(--cf-border); }
-.cf-canvas .react-flow__minimap { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: 6px; }
-.cf-canvas .react-flow__minimap-mask { fill: color-mix(in srgb, var(--cf-bg) 65%, transparent); }
-.cf-canvas .react-flow__controls { box-shadow: none; }
-.cf-canvas .react-flow__controls-button {
-  background: var(--cf-surface);
-  border-bottom: 1px solid var(--cf-border);
-  fill: var(--cf-text);
-}
-.cf-canvas .react-flow__controls-button:hover { background: var(--cf-surface-2); }
 
-.cf-canvas__status {
-  position: absolute;
-  right: 12px;
-  top: 10px;
-  z-index: 6;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--cf-surface);
+.cf-canvas .react-flow__minimap {
+  background: color-mix(in srgb, var(--cf-surface) 82%, transparent);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--cf-border);
-  color: var(--cf-text-dim);
-  font-size: 11px;
-}
-.cf-canvas__status--error { color: var(--cf-error); border-color: var(--cf-error); }
-
-/* -------------------------------------------------------------------------- */
-/* nodes — 07 §3                                                               */
-/* -------------------------------------------------------------------------- */
-
-.cf-rf-node { border: none; background: none; padding: 0; }
-
-.cf-node,
-.cf-container {
-  box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  background: var(--cf-surface);
-  border: 1.5px solid var(--cf-border-strong);
-  border-radius: 8px;
-  color: var(--cf-text);
-  overflow: hidden;
-  border-left-width: 4px;
-  border-left-color: var(--cf-tool);
-}
-
-.cf-node.is-selected,
-.cf-container.is-selected {
-  outline: 2px solid var(--cf-accent);
-  outline-offset: 1px;
-}
-
-.cf-node__header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 9px;
-  min-height: 20px;
-}
-.cf-node__icon { font-size: 13px; line-height: 1; }
-.cf-node__label {
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cf-node__kind {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--cf-text-dim);
-  font-family: var(--cf-mono);
-  white-space: nowrap;
-}
-
-.cf-node__rows { margin: 0; padding: 0 9px 7px; }
-.cf-node__row { display: flex; gap: 6px; font-size: 11px; line-height: 18px; }
-.cf-node__row-key { color: var(--cf-text-dim); flex: 0 0 auto; }
-.cf-node__row-value {
-  margin: 0;
-  font-family: var(--cf-mono);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cf-node__code {
-  margin: 0;
-  padding: 2px 9px 8px;
-  display: flex;
-  flex-direction: column;
-  font-family: var(--cf-mono);
-  font-size: 11px;
-  line-height: 16px;
-  color: var(--cf-text);
-  white-space: pre;
+  border-radius: 10px;
+  box-shadow: var(--cf-shadow-sm);
   overflow: hidden;
 }
-
-/* node-type accents */
-.cf-node--trigger { border-left-color: var(--cf-trigger); border-radius: 18px; }
-.cf-node--tool { border-left-color: var(--cf-tool); }
-.cf-node--function { border-left-color: var(--cf-function); }
-.cf-node--condition {
-  border-left-color: var(--cf-condition);
-  border-color: var(--cf-condition);
-  background: color-mix(in srgb, var(--cf-condition) 8%, var(--cf-surface));
-  clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
-}
-.cf-node--merge {
-  border-left-color: var(--cf-merge);
-  border-radius: 999px;
-  background: var(--cf-surface-2);
-}
-.cf-node--jump {
-  border-left-color: var(--cf-jump);
-  border-radius: 999px;
-  border-style: dashed;
-  background: color-mix(in srgb, var(--cf-jump) 8%, var(--cf-surface));
-}
-.cf-node--output {
-  border-left-color: var(--cf-output);
-  border-radius: 4px 4px 16px 16px;
-  background: color-mix(in srgb, var(--cf-output) 7%, var(--cf-surface));
-}
-.cf-node--parallel { border-left-color: var(--cf-parallel); }
-
-/* 07 §5 — code and unknown must be unmistakable */
-.cf-node--code {
-  border: 1.5px dashed var(--cf-code);
-  border-left: 4px dashed var(--cf-code);
-  background: repeating-linear-gradient(
-    135deg,
-    var(--cf-surface),
-    var(--cf-surface) 8px,
-    var(--cf-surface-2) 8px,
-    var(--cf-surface-2) 16px
-  );
-}
-.cf-node--code .cf-node__label { font-family: var(--cf-mono); font-weight: 500; }
-
-.cf-node--unknown {
-  border: 1.5px dashed var(--cf-unknown);
-  border-left: 4px solid var(--cf-unknown);
-  background: color-mix(in srgb, var(--cf-unknown) 8%, var(--cf-surface));
+.cf-canvas .react-flow__minimap-mask {
+  fill: color-mix(in srgb, var(--cf-bg) 70%, transparent);
+  stroke: var(--cf-border-strong);
+  stroke-width: 2;
 }
 
-/* containers — loop / try */
-.cf-container {
-  background: color-mix(in srgb, var(--cf-loop) 6%, var(--cf-surface));
-  border: 1.5px solid var(--cf-loop);
-  border-left-width: 4px;
-  border-radius: 12px;
-}
-.cf-container--try {
-  background: color-mix(in srgb, var(--cf-try) 6%, var(--cf-surface));
-  border-color: var(--cf-try);
-  border-style: dashed;
-  border-left-style: solid;
-}
-.cf-container__header {
-  background: var(--cf-surface);
-  border-bottom: 1px solid var(--cf-border);
-  border-radius: 9px 9px 0 0;
-}
-
-.cf-handle {
-  width: 7px;
-  height: 7px;
-  background: var(--cf-border-strong);
-  border: 1px solid var(--cf-surface);
-}
-.cf-handle--slot { opacity: 0.35; }
-
-/* diagnostics badge on the node — 07 §5 */
-.cf-badge {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 4px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #fff;
-  justify-content: center;
-}
-.cf-node__kind + .cf-badge { margin-left: 6px; }
-.cf-badge--error { background: var(--cf-error); }
-.cf-badge--warning { background: var(--cf-warning); }
-.cf-badge--info { background: var(--cf-info); }
-.cf-badge__count { font-size: 9px; }
-
-/* -------------------------------------------------------------------------- */
-/* edges                                                                       */
-/* -------------------------------------------------------------------------- */
-
-.cf-rf-edge--control .react-flow__edge-path { stroke: var(--cf-border-strong); stroke-width: 1.6; }
-.cf-rf-edge--data .react-flow__edge-path { stroke: var(--cf-accent); stroke-width: 1.2; stroke-dasharray: 4 3; }
-.cf-rf-edge--true .react-flow__edge-path { stroke: var(--cf-trigger); }
-.cf-rf-edge--false .react-flow__edge-path { stroke: var(--cf-text-dim); }
-.cf-rf-edge--error .react-flow__edge-path { stroke: var(--cf-error); }
-.cf-rf-edge .react-flow__edge-text { font-size: 10px; fill: var(--cf-text-dim); }
-.cf-rf-edge .react-flow__edge-textbg { fill: var(--cf-bg); }
-
-/* -------------------------------------------------------------------------- */
-/* inspector                                                                   */
-/* -------------------------------------------------------------------------- */
-
-.cf-inspector,
-.cf-diagnostics {
-  box-sizing: border-box;
-  background: var(--cf-surface);
-  color: var(--cf-text);
-  font: 12px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-  padding: 12px;
-  overflow: auto;
-  height: 100%;
-}
-
-.cf-inspector__header { display: flex; gap: 10px; align-items: center; }
-.cf-inspector__icon { font-size: 20px; }
-.cf-inspector__title { margin: 0; font-size: 14px; }
-.cf-inspector__kind { margin: 0; font-size: 11px; color: var(--cf-text-dim); font-family: var(--cf-mono); }
-
-.cf-link {
-  margin: 8px 0;
-  padding: 0;
-  background: none;
-  border: none;
-  color: var(--cf-accent);
-  font-family: var(--cf-mono);
-  font-size: 11px;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-.cf-notice {
-  margin: 8px 0;
-  padding: 7px 9px;
-  border-radius: 6px;
-  background: var(--cf-surface-2);
-  border-left: 3px solid var(--cf-warning);
-  color: var(--cf-text-dim);
-  font-size: 11px;
-}
-.cf-notice--pending { border-left-color: var(--cf-info); }
-
-.cf-fields { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-.cf-field { display: flex; flex-direction: column; gap: 3px; }
-.cf-field__label { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 11px; }
-.cf-field__schema { font-family: var(--cf-mono); font-weight: 400; color: var(--cf-text-dim); }
-.cf-field__tag {
-  font-weight: 500;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: var(--cf-surface-2);
-  color: var(--cf-text-dim);
-  border: 1px solid var(--cf-border);
-}
-.cf-field__hint { font-size: 10px; color: var(--cf-text-dim); }
-
-.cf-input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 5px 7px;
-  border: 1px solid var(--cf-border);
-  border-radius: 5px;
-  background: var(--cf-surface-2);
-  color: var(--cf-text);
-  font-family: var(--cf-mono);
-  font-size: 11px;
-}
-.cf-input:disabled { cursor: not-allowed; opacity: 0.75; }
-.cf-input--code { resize: vertical; white-space: pre; }
-
-.cf-inspector__code,
-.cf-inspector__raw pre {
-  margin: 8px 0 0;
-  padding: 8px;
-  border-radius: 6px;
-  background: var(--cf-surface-2);
-  border: 1px solid var(--cf-border);
-  font-family: var(--cf-mono);
-  font-size: 11px;
-  overflow: auto;
-}
-.cf-inspector__raw { margin-top: 12px; }
-.cf-inspector__raw summary { cursor: pointer; color: var(--cf-text-dim); font-size: 11px; }
-
-.cf-ports { margin-top: 12px; }
-.cf-ports__title { margin: 0 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cf-text-dim); }
-.cf-ports ul { margin: 0; padding-left: 16px; }
-.cf-ports__schema { margin-left: 6px; color: var(--cf-text-dim); font-family: var(--cf-mono); }
-
-/* -------------------------------------------------------------------------- */
-/* diagnostics panel                                                           */
-/* -------------------------------------------------------------------------- */
-
-.cf-diagnostics__header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cf-diagnostics__header h2 { margin: 0; font-size: 13px; }
-.cf-diagnostics__counts { display: flex; gap: 6px; }
-.cf-chip { padding: 1px 7px; border-radius: 999px; font-size: 10px; border: 1px solid var(--cf-border); color: var(--cf-text-dim); }
-.cf-chip--error { border-color: var(--cf-error); color: var(--cf-error); }
-.cf-chip--warning { border-color: var(--cf-warning); color: var(--cf-warning); }
-.cf-chip--info { border-color: var(--cf-info); color: var(--cf-info); }
-
-.cf-diagnostics__list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.cf-diagnostics__list button {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  width: 100%;
-  text-align: left;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--cf-border);
-  background: var(--cf-surface-2);
-  color: var(--cf-text);
-  cursor: pointer;
-  font: inherit;
-}
-.cf-diagnostics__list button:hover { border-color: var(--cf-accent); }
-
-.cf-diagnostic { font-size: 11px; }
-.cf-diagnostic__code { font-family: var(--cf-mono); font-weight: 700; flex: 0 0 auto; }
-.cf-diagnostic__message { flex: 1 1 auto; }
-.cf-diagnostic__where { color: var(--cf-text-dim); flex: 0 0 auto; }
-.cf-diagnostic--error .cf-diagnostic__code { color: var(--cf-error); }
-.cf-diagnostic--warning .cf-diagnostic__code { color: var(--cf-warning); }
-.cf-diagnostic--info .cf-diagnostic__code { color: var(--cf-info); }
-
-.cf-inspector__diagnostics { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.cf-inspector__diagnostics li { padding: 6px 8px; border-radius: 6px; background: var(--cf-surface-2); border-left: 3px solid var(--cf-border); }
-.cf-inspector__diagnostics .cf-diagnostic--error { border-left-color: var(--cf-error); }
-.cf-inspector__diagnostics .cf-diagnostic--warning { border-left-color: var(--cf-warning); }
-.cf-inspector__diagnostics .cf-diagnostic--info { border-left-color: var(--cf-info); }
-
-/* -------------------------------------------------------------------------- */
-/* controls                                                                    */
-/* -------------------------------------------------------------------------- */
-
-.cf-toggle { display: inline-flex; border: 1px solid var(--cf-border); border-radius: 6px; overflow: hidden; }
-.cf-toggle__button {
-  padding: 4px 10px;
-  border: none;
-  background: var(--cf-surface);
-  color: var(--cf-text-dim);
-  font: 11px/1.4 system-ui, sans-serif;
-  cursor: pointer;
-}
-.cf-toggle__button + .cf-toggle__button { border-left: 1px solid var(--cf-border); }
-.cf-toggle__button.is-active { background: var(--cf-accent); color: #fff; }
-
-.cf-theme-toggle {
-  border: 1px solid var(--cf-border);
-  background: var(--cf-surface);
-  border-radius: 6px;
-  padding: 3px 8px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.cf-empty { color: var(--cf-text-dim); font-size: 12px; padding: 12px; }
-
-/* -------------------------------------------------------------------------- */
-/* Monaco                                                                      */
-/* -------------------------------------------------------------------------- */
-
-.cf-code { width: 100%; height: 100%; min-height: 160px; }
-.cf-monaco-range { background: color-mix(in srgb, var(--cf-accent) 22%, transparent); border-radius: 2px; }
-
-/* -------------------------------------------------------------------------- */
-/* editing — 06 / 07 §5                                                        */
-/* -------------------------------------------------------------------------- */
-
-.cf-button {
-  padding: 5px 10px;
-  border: 1px solid var(--cf-border);
-  border-radius: 6px;
-  background: var(--cf-surface);
-  color: var(--cf-text);
-  font: 11px/1.4 system-ui, sans-serif;
-  cursor: pointer;
-}
-.cf-button:hover:not(:disabled) { border-color: var(--cf-accent); }
-.cf-button:disabled { opacity: 0.5; cursor: not-allowed; }
-.cf-button--primary { background: var(--cf-accent); border-color: transparent; color: #fff; }
-.cf-button--danger { border-color: var(--cf-error); color: var(--cf-error); }
-.cf-button--danger:hover:not(:disabled) { background: color-mix(in srgb, var(--cf-error) 12%, var(--cf-surface)); }
-.cf-button--small { padding: 2px 8px; margin-left: 8px; }
-
-.cf-icon-button {
-  border: none;
-  background: none;
-  color: var(--cf-text-dim);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
-}
-.cf-icon-button:hover { color: var(--cf-text); }
-
-.cf-select {
-  padding: 4px 6px;
-  border: 1px solid var(--cf-border);
-  border-radius: 5px;
-  background: var(--cf-surface-2);
-  color: var(--cf-text);
-  font: 11px/1.4 system-ui, sans-serif;
-  max-width: 100%;
-}
-
-.cf-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.cf-checkbox { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--cf-text-dim); }
-.cf-checkbox__box { width: 13px; height: 13px; }
-
-.cf-section { margin-top: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cf-section__title {
-  margin: 0;
-  width: 100%;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--cf-text-dim);
-}
-
-.cf-tag {
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 9px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  vertical-align: middle;
-}
-.cf-tag--changed { background: color-mix(in srgb, var(--cf-trigger) 20%, var(--cf-surface)); color: var(--cf-trigger); }
-
-.cf-notice--stale { border-left-color: var(--cf-warning); }
-
-.cf-alert {
-  margin: 8px 0;
-  padding: 8px 9px;
-  border-radius: 6px;
-  border: 1px solid var(--cf-border);
-  background: var(--cf-surface-2);
-  font-size: 11px;
-}
-.cf-alert__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.cf-alert__head code { font-family: var(--cf-mono); font-weight: 700; }
-.cf-alert__message { margin: 4px 0 0; }
-.cf-alert__list { margin: 6px 0 0; padding-left: 16px; }
-.cf-alert__list code { font-family: var(--cf-mono); font-weight: 700; }
-.cf-alert--error { border-color: var(--cf-error); background: color-mix(in srgb, var(--cf-error) 10%, var(--cf-surface)); }
-.cf-alert--error .cf-alert__head code { color: var(--cf-error); }
-.cf-alert--warning { border-color: var(--cf-warning); background: color-mix(in srgb, var(--cf-warning) 10%, var(--cf-surface)); }
-.cf-alert--ok { border-color: var(--cf-trigger); background: color-mix(in srgb, var(--cf-trigger) 8%, var(--cf-surface)); }
-
-.cf-field__convert {
-  font-size: 10px;
-  color: var(--cf-warning);
-  background: color-mix(in srgb, var(--cf-warning) 10%, var(--cf-surface));
-  border-radius: 5px;
-  padding: 5px 6px;
-}
-.cf-field__convert .cf-link { margin: 0; font-size: 10px; }
-
-/* preview diff — 07 §5 */
-.cf-preview { margin-top: 10px; }
-.cf-preview__title {
-  margin: 0 0 4px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--cf-text-dim);
-}
-.cf-diff { margin: 6px 0 0; font-family: var(--cf-mono); font-size: 11px; }
-.cf-diff--empty { color: var(--cf-text-dim); font-family: inherit; }
-.cf-diff__patch { border: 1px solid var(--cf-border); border-radius: 6px; overflow: hidden; margin-bottom: 6px; }
-.cf-diff__where {
-  padding: 3px 7px;
-  background: var(--cf-surface-2);
-  border-bottom: 1px solid var(--cf-border);
-  color: var(--cf-text-dim);
-  font-size: 10px;
-}
-.cf-diff__body { margin: 0; padding: 4px 0; display: flex; flex-direction: column; overflow-x: auto; }
-.cf-diff__line { padding: 0 7px; white-space: pre; }
-.cf-diff__line--old { background: color-mix(in srgb, var(--cf-error) 14%, transparent); color: var(--cf-error); }
-.cf-diff__line--new { background: color-mix(in srgb, var(--cf-trigger) 14%, transparent); color: var(--cf-trigger); }
-
-/* -------------------------------------------------------------------------- */
-/* palette — 07 §2                                                             */
-/* -------------------------------------------------------------------------- */
-
-.cf-palette {
-  box-sizing: border-box;
-  background: var(--cf-surface);
-  color: var(--cf-text);
-  font: 12px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-  padding: 10px 12px;
-  overflow: auto;
-}
-.cf-palette__header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cf-palette__title { margin: 0; font-size: 13px; }
-.cf-palette__header .cf-select { margin-left: auto; max-width: 60%; }
-.cf-palette__group { margin-top: 8px; }
-.cf-palette__group-title {
-  margin: 0 0 4px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--cf-text-dim);
-}
-.cf-palette__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.cf-palette__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  text-align: left;
-  padding: 5px 8px;
-  border: 1px solid var(--cf-border);
-  border-radius: 6px;
-  background: var(--cf-surface-2);
-  color: var(--cf-text);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-.cf-palette__item:hover:not(:disabled) { border-color: var(--cf-accent); }
-.cf-palette__item:disabled { opacity: 0.5; cursor: not-allowed; }
-.cf-palette__icon { font-size: 13px; }
-.cf-palette__label { font-weight: 600; }
-.cf-palette__name { margin-left: auto; color: var(--cf-text-dim); font-family: var(--cf-mono); font-size: 10px; }
-
-/* -------------------------------------------------------------------------- */
-/* node chrome for editing                                                     */
-/* -------------------------------------------------------------------------- */
-
-.cf-node__delete {
-  margin-left: 4px;
-  border: none;
-  background: none;
-  color: var(--cf-error);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 2px;
-}
-.cf-node__delete:hover { transform: scale(1.15); }
-
-.cf-node.is-changed,
-.cf-container.is-changed {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cf-trigger) 65%, transparent);
-}
-
-/* -------------------------------------------------------------------------- */
-/* code dialog                                                                 */
-/* -------------------------------------------------------------------------- */
-
-.cf-dialog {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in srgb, #000 45%, transparent);
-}
-.cf-dialog__panel {
-  display: flex;
-  flex-direction: column;
-  width: min(760px, 90vw);
-  height: min(560px, 80vh);
-  background: var(--cf-surface);
-  color: var(--cf-text);
-  border: 1px solid var(--cf-border-strong);
+.cf-canvas .react-flow__controls {
+  box-shadow: var(--cf-shadow-sm);
   border-radius: 10px;
   overflow: hidden;
-  font: 12px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  border: 1px solid var(--cf-border);
 }
-.cf-dialog__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
+.cf-canvas .react-flow__controls-button {
+  width: 26px;
+  height: 26px;
+  background: color-mix(in srgb, var(--cf-surface) 88%, transparent);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--cf-border);
+  fill: var(--cf-text-dim);
+  transition: background 140ms ease, fill 140ms ease;
 }
-.cf-dialog__header h2 { margin: 0; font-size: 13px; }
-.cf-dialog__hint { margin: 0; padding: 6px 12px; color: var(--cf-text-dim); font-size: 11px; }
-.cf-dialog__editor { flex: 1 1 auto; min-height: 0; }
-.cf-dialog__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--cf-border);
+.cf-canvas .react-flow__controls-button:last-child { border-bottom: none; }
+.cf-canvas .react-flow__controls-button:hover {
+  background: var(--cf-surface-3);
+  fill: var(--cf-text);
 }
-.cf-dialog .cf-alert { margin: 0 12px; }
+
+.cf-canvas .react-flow__edge-text {
+  font-family: var(--cf-font);
+  font-size: 9.5px;
+  font-weight: 500;
+  fill: var(--cf-text-dim);
+}
+.cf-canvas .react-flow__edge-textbg { fill: var(--cf-bg); }
+
+.cf-canvas .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  min-width: 0;
+  min-height: 0;
+  border: 1.5px solid var(--cf-surface);
+  background: var(--cf-border-strong);
+  border-radius: 999px;
+  transition: background 140ms ease;
+}
+.cf-canvas .react-flow__node:hover .react-flow__handle { background: var(--cf-text-faint); }
+.cf-canvas .react-flow__handle.cf-handle--slot { opacity: 0.4; }
+
+.cf-canvas .react-flow__node.selected .cf-node,
+.cf-canvas .react-flow__node.selected .cf-container {
+  z-index: 2;
+}
+
+/* React Flow puts its own outline on selected nodes; ours is on `.cf-node`. */
+.cf-canvas .react-flow__node:focus,
+.cf-canvas .react-flow__node:focus-visible { outline: none; }
+.cf-canvas .react-flow__node.selected { box-shadow: none; }
+
+/* ========================================================================== */
+/* Monaco                                                                     */
+/* ========================================================================== */
+
+/* Monaco sizes itself against its container, so the container must have a
+   height of its own — `height: 100%` inside a flex parent that was told to fill
+   the drawer. Without this the editor collapses to a few pixels. */
+.cf-code {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.cf-monaco-range {
+  background: color-mix(in srgb, var(--cf-accent) 20%, transparent);
+  border-radius: 3px;
+}
+.cf-code .monaco-editor,
+.cf-code .monaco-editor .overflow-guard {
+  border-radius: 0;
+}
+.cf-code .monaco-editor,
+.cf-code .monaco-editor-background,
+.cf-code .monaco-editor .margin {
+  background-color: var(--cf-surface) !important;
+}

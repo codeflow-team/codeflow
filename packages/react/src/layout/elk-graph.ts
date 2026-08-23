@@ -56,15 +56,29 @@ function baseOptions(direction: LayoutDirection): Record<string, string> {
 }
 
 /**
- * A container is sized by ELK from its children, but it must never end up
- * narrower than its own header — hence the measured minimum.
+ * A container is sized by ELK from its children, never the other way round: the
+ * box grows to hold what is inside it, so a `for`/`while`/`try` can always be
+ * read as a structure rather than as a lid pressed onto its contents.
+ *
+ * Three things keep it legible:
+ *
+ * - the top inset follows the container's *own* header (title, caption, and for
+ *   a `while` its condition row), because a fixed inset lets the first child
+ *   ride up over the header of a taller one;
+ * - the inside is spaced more generously than the top level — nesting is what
+ *   makes a diagram hard to read, so the deeper level gets the extra air;
+ * - the minimum is the header's own size plus padding, so an empty or very
+ *   small body still reads as a container and not as a label.
  */
 function containerOptions(direction: LayoutDirection, own: { width: number; height: number }): Record<string, string> {
-  const { top, left, bottom, right } = CONTAINER_PADDING;
+  const { left, bottom, right } = CONTAINER_PADDING;
+  const top = Math.max(CONTAINER_PADDING.top, Math.round(own.height + 16));
   const minWidth = Math.max(CONTAINER_MIN_SIZE.width, Math.round(own.width + left + right));
   const minHeight = Math.max(CONTAINER_MIN_SIZE.height, Math.round(own.height + top + bottom));
   return {
     ...baseOptions(direction),
+    "elk.layered.spacing.nodeNodeBetweenLayers": "54",
+    "elk.spacing.nodeNode": "38",
     "elk.padding": `[top=${String(top)},left=${String(left)},bottom=${String(bottom)},right=${String(right)}]`,
     "elk.nodeSize.constraints": "MINIMUM_SIZE",
     "elk.nodeSize.minimum": `(${String(minWidth)},${String(minHeight)})`,

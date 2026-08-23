@@ -8,7 +8,7 @@ import type { WorkflowNode } from "@codeflow/core";
 import {
   DEVELOPER_MAX_LINES,
   developerLines,
-  nodeKindLabel,
+  nodeCaption,
   nodeSummaryRows,
   type DisclosureMode,
 } from "../flow/summary.js";
@@ -18,50 +18,66 @@ export interface NodeSize {
   height: number;
 }
 
-/** Approximate advance width of the UI font at 12px, and of the mono font at 11px. */
-const CHAR = 6.9;
+/**
+ * Approximate advance widths: the title face at 13px, the row face at 11.5px,
+ * and the mono face at 11px. These track the type scale in `styles.css` — a
+ * change there is a change here.
+ */
+const CHAR = 7.1;
+const ROW_CHAR = 6.45;
 const MONO_CHAR = 6.6;
 
-const HEADER_HEIGHT = 34;
-const ROW_HEIGHT = 18;
-const PADDING_X = 28;
+/** Title row: 12px top padding + 24px chip + caption line + 8px bottom. */
+const HEADER_HEIGHT = 46;
+const HEADER_HEIGHT_COMPACT = 44;
+const ROW_HEIGHT = 20;
+/** Horizontal chrome: 12px padding + 24px chip + 10px gap + 12px padding. */
+const PADDING_X = 58;
+const ROW_PADDING_X = 34;
 const PADDING_Y = 10;
+/** Room the delete affordance takes on the title line when selected. */
+const BADGE_ROOM = 20;
 
-const MIN_WIDTH = 168;
-const MAX_WIDTH = 430;
-const MONO_MAX_WIDTH = 460;
+const MIN_WIDTH = 184;
+const MAX_WIDTH = 440;
+const MONO_MAX_WIDTH = 470;
 
 /** Padding a container reserves for its header before its children start. */
-export const CONTAINER_PADDING = { top: 56, left: 20, bottom: 22, right: 20 };
-export const CONTAINER_MIN_SIZE = { width: 260, height: 140 };
+export const CONTAINER_PADDING = { top: 64, left: 22, bottom: 24, right: 22 };
+export const CONTAINER_MIN_SIZE = { width: 280, height: 150 };
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
 export function measureNode(node: WorkflowNode, mode: DisclosureMode): NodeSize {
-  // icon + label, and — outside compact — the type caption rendered beside it.
-  const captionChars = mode === "compact" ? 0 : nodeKindLabel(node).length + 2;
-  const headerWidth = PADDING_X + 22 + (node.label.length + captionChars) * CHAR;
+  // The caption sits *under* the title now, so it competes for width instead of
+  // adding to it; its face is smaller, hence the 0.55 factor.
+  const caption = nodeCaption(node, mode);
+  const titleChars = Math.max(node.label.length, (caption?.length ?? 0) * 0.55);
+  const headerWidth = PADDING_X + BADGE_ROOM + titleChars * CHAR;
 
   if (mode === "compact") {
-    return { width: clamp(headerWidth, MIN_WIDTH, MAX_WIDTH), height: HEADER_HEIGHT + PADDING_Y };
+    return { width: clamp(headerWidth, MIN_WIDTH, MAX_WIDTH), height: HEADER_HEIGHT_COMPACT };
   }
 
   if (mode === "developer") {
     const lines = developerLines(node);
     const widest = lines.reduce((max, line) => Math.max(max, line.length), 0);
     return {
-      width: clamp(Math.max(headerWidth, PADDING_X + widest * MONO_CHAR), MIN_WIDTH, MONO_MAX_WIDTH),
-      height: HEADER_HEIGHT + PADDING_Y + Math.min(lines.length, DEVELOPER_MAX_LINES + 1) * 16 + 6,
+      width: clamp(Math.max(headerWidth, ROW_PADDING_X + widest * MONO_CHAR), MIN_WIDTH, MONO_MAX_WIDTH),
+      height: HEADER_HEIGHT + Math.min(lines.length, DEVELOPER_MAX_LINES + 1) * 16 + PADDING_Y,
     };
   }
 
   const rows = nodeSummaryRows(node);
-  const rowWidth = rows.reduce((max, row) => Math.max(max, (row.key.length + row.value.length + 3) * CHAR), 0);
+  const rowWidth = rows.reduce(
+    (max, row) => Math.max(max, ROW_PADDING_X + (row.key.length + row.value.length + 3) * ROW_CHAR),
+    0,
+  );
   return {
-    width: clamp(Math.max(headerWidth, PADDING_X + rowWidth), MIN_WIDTH, MAX_WIDTH),
-    height: HEADER_HEIGHT + PADDING_Y + rows.length * ROW_HEIGHT + (rows.length > 0 ? 6 : 0),
+    width: clamp(Math.max(headerWidth, rowWidth), MIN_WIDTH, MAX_WIDTH),
+    height: HEADER_HEIGHT + rows.length * ROW_HEIGHT + (rows.length > 0 ? PADDING_Y : 0),
   };
 }
 

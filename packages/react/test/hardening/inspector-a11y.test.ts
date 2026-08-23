@@ -146,8 +146,10 @@ describe("every form control in the inspector is identified and labelled", () =>
     const html = await render(toolNode("slack.send"));
     // Regression guard for the fix itself: the label element must still carry
     // the field name, or the a11y fix would have traded one problem for another.
-    expect(html).toMatch(/<label[^>]*class="cf-field__label"[^>]*>channel/);
-    expect(html).toMatch(/<label[^>]*class="cf-field__label"[^>]*>message/);
+    // The class list and the capitalisation are presentation (the label is
+    // title-cased for reading); the marker class and the name are the contract.
+    expect(html).toMatch(/<label[^>]*class="[^"]*\bcf-field__label\b[^"]*"[^>]*>channel/i);
+    expect(html).toMatch(/<label[^>]*class="[^"]*\bcf-field__label\b[^"]*"[^>]*>message/i);
   });
 
   it("keeps a single labelling element per control — no duplicate labels", async () => {
@@ -172,6 +174,6 @@ describe("every form control in the inspector is identified and labelled", () =>
       }),
     );
     expect(formControls(html)).toEqual([]);
-    expect(html).toContain("Select a node to inspect it.");
+    expect(html).toContain("Nothing selected");
   });
 });

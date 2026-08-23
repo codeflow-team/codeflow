@@ -86,6 +86,12 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
       height: box?.height ?? fallback.height,
       selected: selected === node.id,
       draggable: true,
+      // Stacking order is what keeps the picture readable: leaf cards sit on
+      // top so no line is ever drawn across a step's title, while a container
+      // stays at the bottom. A container's fill is translucent (styles.css), so
+      // the edges underneath it still read through — which is why they can be
+      // left below the whole node layer instead of fighting it.
+      zIndex: container ? 0 : 20,
       data: {
         node,
         mode: options.mode,
@@ -111,7 +117,7 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
       type: edge.kind === "data" ? "default" : "smoothstep",
       animated: edge.kind === "data",
       label: edge.label,
-      zIndex: 1200,
+      zIndex: 0,
       className: `cf-rf-edge cf-rf-edge--${edge.kind}${labelModifier(edge.label)}`,
       data: {
         kind: edge.kind,

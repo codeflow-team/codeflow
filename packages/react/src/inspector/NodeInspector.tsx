@@ -2,6 +2,11 @@
  * `<NodeInspector>` — the power-user level of progressive disclosure (07 §4),
  * and the place edits are made (07 §5).
  *
+ * It is written as a product form, not a debug panel: a step has a name, its
+ * settings have labels and helper text, and "Apply" is the one primary action on
+ * screen. What is machine-facing — the qualified tool name, the source range,
+ * the raw node record — is folded into the levels that ask for it.
+ *
  * Three rules from the specs shape every control here:
  *
  * - an edit is applied **relative to the form the value has** (06 §3), so the
@@ -16,9 +21,27 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  ArrowRightLeft,
+  ChevronRight,
+  Code,
+  MousePointerClick,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { WorkflowNode } from "@codeflow/core";
 import { useCodeFlow } from "../context/hooks.js";
-import { nodeIcon, nodeKindLabel } from "../flow/summary.js";
+import { nodeCaption } from "../flow/summary.js";
+import { NodeGlyph, nodeVisual } from "../flow/visual.js";
+import { diagnosticHeadline, errorHeadline, splitSpecRefs } from "../copy.js";
+import { cn } from "../ui/cn.js";
+import { Button } from "../ui/button.js";
+import { Badge } from "../ui/badge.js";
+import { Field, FieldHint, FieldLabel, Input, Textarea } from "../ui/input.js";
+import { Notice } from "../ui/notice.js";
+import { Select } from "../ui/select.js";
+import { Hint } from "../ui/tooltip.js";
 import { CodeDiff } from "../diff/CodeDiff.js";
 import { CodeDialog } from "../code/CodeDialog.js";
 import { localFunctionBody, nodeRegionText } from "../code/region.js";
@@ -40,6 +63,8 @@ export interface NodeInspectorProps {
   nodeId?: string | null;
   className?: string;
   theme?: "light" | "dark";
+  /** Renders a close affordance — set when the panel is shown as an overlay. */
+  onClose?: () => void;
 }
 
 interface DraftState {
@@ -67,6 +92,31 @@ function controlId(nodeId: string, name: string): string {
   return `cf-${nodeId}-${name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
+/** A titled block in the panel body. */
+function Section({
+  title,
+  description,
+  children,
+  testId,
+}: {
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+  testId?: string;
+}): ReactNode {
+  return (
+    <section className="flex flex-col gap-3 border-t border-line px-4 py-4" data-testid={testId}>
+      <div>
+        <h3 className="m-0 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-faint">{title}</h3>
+        {description === undefined ? null : (
+          <p className="m-0 mt-1 text-[11.5px] leading-snug text-ink-dim">{description}</p>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function NodeInspector(props: NodeInspectorProps): ReactNode {
   const {
     graph,
@@ -75,6 +125,7 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
     selectedNodeId,
     nodeDiagnostics,
     focusRange,
+    mode,
     editingEnabled,
     editingDisabledReason,
     sourceDirty,
@@ -190,9 +241,57 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
   }, [preview, node, dirty.length, debouncedDraft, previewPatch]);
 
   if (node === null || model === null) {
+    /**
+     * Nothing selected is still a state worth filling: it answers "what am I
+     * looking at?" with what the flow starts from and how big it is, so the
+     * panel is never a blank column waiting to be earned.
+     */
+    const trigger = graph?.nodes.find((candidate) => candidate.type === "trigger") ?? null;
+    const steps = graph?.nodes.filter((candidate) => candidate.type !== "trigger" && candidate.type !== "output").length ?? 0;
+    const problems = graph?.diagnostics.filter((diagnostic) => diagnostic.severity !== "info").length ?? 0;
+
     return (
-      <aside className={`cf-inspector ${props.className ?? ""}`}>
-        <p className="cf-empty">Select a node to inspect it.</p>
+      <aside className={cn("flex h-full flex-col bg-surface font-sans", props.className)}>
+        {graph === null ? null : (
+          <div className="flex flex-col gap-3 border-b border-line px-4 pb-4 pt-4">
+            <h2 className="m-0 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-faint">This flow</h2>
+            <dl className="m-0 flex flex-col gap-2.5">
+              <div className="flex items-baseline gap-3">
+                <dt className="w-20 shrink-0 text-[12px] text-ink-faint">Starts with</dt>
+                <dd className="m-0 min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">
+                  {trigger?.label ?? "—"}
+                </dd>
+              </div>
+              <div className="flex items-baseline gap-3">
+                <dt className="w-20 shrink-0 text-[12px] text-ink-faint">Steps</dt>
+                <dd className="m-0 text-[12.5px] font-medium text-ink">{steps}</dd>
+              </div>
+              <div className="flex items-baseline gap-3">
+                <dt className="w-20 shrink-0 text-[12px] text-ink-faint">Needs work</dt>
+                <dd className="m-0 text-[12.5px] font-medium">
+                  {problems === 0 ? (
+                    <span className="text-ok">Nothing</span>
+                  ) : (
+                    <span className="text-warn">{problems} step{problems === 1 ? "" : "s"}</span>
+                  )}
+                </dd>
+              </div>
+            </dl>
+          </div>
+        )}
+        <div className="grid flex-1 place-items-center p-8">
+          <div className="flex max-w-[15rem] flex-col items-center gap-3 text-center">
+            <span className="grid size-11 place-items-center rounded-2xl bg-surface-2 text-ink-faint ring-1 ring-line">
+              <MousePointerClick className="size-5" />
+            </span>
+            <div>
+              <p className="m-0 text-[13.5px] font-semibold text-ink">Nothing selected</p>
+              <p className="m-0 mt-1 text-[12px] leading-relaxed text-ink-dim">
+                Pick a step in the diagram to see what it does and change its settings.
+              </p>
+            </div>
+          </div>
+        </div>
       </aside>
     );
   }
@@ -201,6 +300,8 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
   const error = patchError !== null && patchError.nodeId === node.id ? patchError : null;
   const success = lastPatch !== null && lastPatch.nodeIds.includes(node.id) ? lastPatch : null;
   const changed = changedNodeIds.has(node.id);
+  const advanced = mode !== "compact";
+  const visual = nodeVisual(node);
 
   const codeEditText =
     model.codeEdit === null || graph === null
@@ -217,305 +318,422 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
     if (outcome.ok) after?.();
   };
 
+  const noticeSplit = model.notice === null ? null : splitSpecRefs(model.notice);
+
   return (
-    <aside className={`cf-inspector ${props.className ?? ""}`} data-node-id={node.id}>
-      <header className="cf-inspector__header">
-        <span className="cf-inspector__icon" aria-hidden="true">
-          {nodeIcon(node)}
+    <aside
+      className={cn("flex h-full min-h-0 flex-col bg-surface font-sans text-ink", props.className)}
+      data-node-id={node.id}
+    >
+      {/* ---------------------------------------------------------------- */}
+      {/* identity                                                          */}
+      {/* ---------------------------------------------------------------- */}
+      <header className="flex items-start gap-3 px-4 pb-3 pt-4">
+        <span className={cn("mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl", visual.chipClass)}>
+          <NodeGlyph node={node} className="size-4.5" />
         </span>
-        <div>
-          <h2 className="cf-inspector__title">
-            {node.label}
+        <div className="min-w-0 flex-1">
+          <h2 className="m-0 flex items-center gap-2 text-[15px] font-semibold leading-tight tracking-[-0.01em]">
+            <span className="truncate">{node.label}</span>
             {changed ? (
-              <span className="cf-tag cf-tag--changed" title="Updated by the last patch">
+              <Badge tone="ok" title="Updated by the last change">
                 updated
-              </span>
+              </Badge>
             ) : null}
           </h2>
-          <p className="cf-inspector__kind">{nodeKindLabel(node)}</p>
+          <p className="m-0 mt-1 text-[12px] leading-none text-ink-dim">{nodeCaption(node, "expanded") ?? node.type}</p>
         </div>
+        {props.onClose === undefined ? null : (
+          <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={props.onClose}>
+            <X />
+          </Button>
+        )}
       </header>
 
-      <button type="button" className="cf-link" onClick={() => { focusRange(node.source); }}>
-        {`${node.source.file}:${String(node.source.start.line)}:${String(node.source.start.column)}`}
-      </button>
+      <div className="cf-scroll min-h-0 flex-1 overflow-y-auto pb-4">
+        {/* -------------------------------------------------------------- */}
+        {/* what the flow says about this step                              */}
+        {/* -------------------------------------------------------------- */}
+        {diagnostics.length > 0 ||
+        noticeSplit !== null ||
+        !editingEnabled ||
+        sourceDirty ||
+        error !== null ||
+        localError !== null ||
+        success !== null ? (
+          <div className="flex flex-col gap-2 px-4 pb-4">
+            {diagnostics.map((diagnostic, i) => {
+              const split = splitSpecRefs(diagnostic.message);
+              return (
+                <Notice
+                  key={i}
+                  tone={diagnostic.severity === "error" ? "danger" : diagnostic.severity === "warning" ? "warn" : "info"}
+                  title={diagnosticHeadline(diagnostic.code)}
+                  code={diagnostic.code}
+                  refs={split.refs}
+                >
+                  {split.text}
+                </Notice>
+              );
+            })}
 
-      {diagnostics.length > 0 ? (
-        <ul className="cf-inspector__diagnostics">
-          {diagnostics.map((diagnostic, i) => (
-            <li key={i} className={`cf-diagnostic cf-diagnostic--${diagnostic.severity}`}>
-              <code>{diagnostic.code}</code> {diagnostic.message}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+            {noticeSplit === null ? null : (
+              <Notice tone="muted" refs={noticeSplit.refs}>
+                {noticeSplit.text}
+              </Notice>
+            )}
 
-      {model.notice !== null ? <p className="cf-notice">{model.notice}</p> : null}
+            {!editingEnabled ? (
+              <Notice tone="info" title="Read-only" data-testid="editing-disabled">
+                {splitSpecRefs(editingDisabledReason).text}
+              </Notice>
+            ) : null}
 
-      {!editingEnabled ? (
-        <p className="cf-notice cf-notice--pending" data-testid="editing-disabled">
-          Read-only — {editingDisabledReason}
-        </p>
-      ) : null}
+            {editingEnabled && sourceDirty ? (
+              <Notice
+                tone="warn"
+                title="The code has been edited since this diagram was drawn"
+                data-testid="source-dirty"
+                actions={
+                  canReanalyze ? (
+                    <Button variant="secondary" size="xs" onClick={requestReanalyze}>
+                      Refresh the diagram
+                    </Button>
+                  ) : undefined
+                }
+              >
+                Your change is still checked against the file first, and refused if this step moved.
+              </Notice>
+            ) : null}
 
-      {editingEnabled && sourceDirty ? (
-        <p className="cf-notice cf-notice--stale" data-testid="source-dirty">
-          The editor holds source this graph was not built from. An edit is still checked against the file first and
-          refused if this node moved (06 §5).
-          {canReanalyze ? (
-            <button type="button" className="cf-button cf-button--small" onClick={requestReanalyze}>
-              Re-analyze
-            </button>
-          ) : null}
-        </p>
-      ) : null}
+            {error !== null ? (
+              <Notice
+                tone="danger"
+                role="alert"
+                data-testid="patch-error"
+                title={errorHeadline(error.code)}
+                code={error.code}
+                refs={splitSpecRefs(error.message).refs}
+                onDismiss={clearPatchError}
+                actions={
+                  error.code === "patch-conflict" && canReanalyze ? (
+                    <Button variant="secondary" size="xs" onClick={requestReanalyze}>
+                      Refresh the diagram
+                    </Button>
+                  ) : undefined
+                }
+              >
+                {splitSpecRefs(error.message).text}
+              </Notice>
+            ) : null}
 
-      {error !== null ? (
-        <div className={`cf-alert cf-alert--error`} data-testid="patch-error" role="alert">
-          <div className="cf-alert__head">
-            <code>{error.code}</code>
-            <button type="button" className="cf-icon-button" onClick={clearPatchError} aria-label="Dismiss">
-              ×
-            </button>
+            {localError !== null ? (
+              <Notice
+                tone="warn"
+                role="alert"
+                data-testid="edit-error"
+                refs={splitSpecRefs(localError).refs}
+                onDismiss={() => { setLocalError(null); }}
+              >
+                {splitSpecRefs(localError).text}
+              </Notice>
+            ) : null}
+
+            {success !== null && error === null ? (
+              <Notice
+                tone="ok"
+                data-testid="patch-applied"
+                title={`Saved — ${String(success.patches.length)} place${success.patches.length === 1 ? "" : "s"} in the code changed`}
+              >
+                {/* The patch's own diagnostics are deliberately not repeated
+                    here: they are already on this step, above, as the notices
+                    the user has to act on. Saying it twice makes both quieter. */}
+                <details className="group">
+                  <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11.5px] font-medium text-ink-dim outline-none hover:text-ink">
+                    <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
+                    See what changed
+                  </summary>
+                  <CodeDiff patches={success.patches} className="mt-2" />
+                </details>
+              </Notice>
+            ) : null}
           </div>
-          <p className="cf-alert__message">{error.message}</p>
-          {error.code === "patch-conflict" && canReanalyze ? (
-            <button type="button" className="cf-button cf-button--small" onClick={requestReanalyze}>
-              Re-analyze the flow
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
 
-      {localError !== null ? (
-        <div className="cf-alert cf-alert--warning" data-testid="edit-error" role="alert">
-          <p className="cf-alert__message">{localError}</p>
-        </div>
-      ) : null}
+        {/* -------------------------------------------------------------- */}
+        {/* settings                                                        */}
+        {/* -------------------------------------------------------------- */}
+        {model.fields.length > 0 ? (
+          <div className="flex flex-col gap-4 border-t border-line px-4 py-4">
+            {model.fields.map((field) => {
+              const spec = specs.get(field.name);
+              if (spec === undefined) return null;
+              return (
+                <FieldRow
+                  key={field.name}
+                  nodeId={node.id}
+                  field={field}
+                  spec={spec}
+                  text={draft.text[field.name] ?? spec.value}
+                  checked={draft.checked[field.name] ?? spec.checked}
+                  template={draft.template[field.name] === true}
+                  disabled={!editingEnabled || busy}
+                  disabledReason={editingEnabled ? null : editingDisabledReason}
+                  advanced={advanced}
+                  onText={(value) => {
+                    setDraft((current) => ({ ...current, text: { ...current.text, [field.name]: value } }));
+                  }}
+                  onChecked={(value) => {
+                    setDraft((current) => ({ ...current, checked: { ...current.checked, [field.name]: value } }));
+                  }}
+                  onTemplate={(value) => {
+                    setDraft((current) => ({ ...current, template: { ...current.template, [field.name]: value } }));
+                  }}
+                />
+              );
+            })}
+          </div>
+        ) : null}
 
-      {success !== null && error === null ? (
-        <div className="cf-alert cf-alert--ok" data-testid="patch-applied">
-          <p className="cf-alert__message">
-            Applied — {success.patches.length} source range{success.patches.length === 1 ? "" : "s"} changed.
-          </p>
-          {success.diagnostics.length > 0 ? (
-            <ul className="cf-alert__list">
-              {success.diagnostics.map((diagnostic, i) => (
-                <li key={i}>
-                  <code>{diagnostic.code}</code> {diagnostic.message}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <CodeDiff patches={success.patches} />
-        </div>
-      ) : null}
+        {preview && previewResult !== null ? (
+          <section className="border-t border-line px-4 py-4" data-testid="preview">
+            <h3 className="m-0 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-faint">
+              Preview — not saved yet
+            </h3>
+            {previewResult.ok ? (
+              <>
+                <CodeDiff patches={previewResult.patches} className="mt-2" />
+                {previewResult.diagnostics.length > 0 ? (
+                  <ul className="m-0 mt-2 list-none space-y-1 p-0 text-[11.5px] text-ink-dim">
+                    {previewResult.diagnostics.map((diagnostic, i) => (
+                      <li key={i}>{splitSpecRefs(diagnostic.message).text}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </>
+            ) : (
+              <Notice tone="warn" className="mt-2">
+                {splitSpecRefs(previewResult.message).text}
+              </Notice>
+            )}
+          </section>
+        ) : null}
 
-      {model.fields.length > 0 ? (
-        <div className="cf-fields">
-          {model.fields.map((field) => {
-            const spec = specs.get(field.name);
-            if (spec === undefined) return null;
-            return (
-              <FieldRow
-                key={field.name}
-                nodeId={node.id}
-                field={field}
-                spec={spec}
-                text={draft.text[field.name] ?? spec.value}
-                checked={draft.checked[field.name] ?? spec.checked}
-                template={draft.template[field.name] === true}
+        {/* -------------------------------------------------------------- */}
+        {/* what this step is running (developer level)                      */}
+        {/* -------------------------------------------------------------- */}
+        {model.code !== null ? (
+          <Section title="Code">
+            <pre className="cf-scroll m-0 overflow-x-auto rounded-lg border border-line bg-surface-2 p-3 font-mono text-[11.5px] leading-[1.6] text-ink">
+              <code>{model.code}</code>
+            </pre>
+          </Section>
+        ) : null}
+
+        {model.codeEdit !== null ? (
+          <Section title="Custom code" testId="code-edit">
+            {codeEditText === null ? (
+              <Notice tone="warn">
+                This step&apos;s code could not be found in the file as it is now — open the code view to edit it.
+              </Notice>
+            ) : (
+              <Button
+                variant="secondary"
                 disabled={!editingEnabled || busy}
-                disabledReason={editingEnabled ? null : editingDisabledReason}
-                onText={(value) => {
-                  setDraft((current) => ({ ...current, text: { ...current.text, [field.name]: value } }));
-                }}
-                onChecked={(value) => {
-                  setDraft((current) => ({ ...current, checked: { ...current.checked, [field.name]: value } }));
-                }}
-                onTemplate={(value) => {
-                  setDraft((current) => ({ ...current, template: { ...current.template, [field.name]: value } }));
-                }}
-              />
-            );
-          })}
-        </div>
-      ) : null}
+                data-testid="edit-code"
+                onClick={() => { setCodeOpen(true); }}
+              >
+                <Code />
+                {model.codeEdit.label}
+              </Button>
+            )}
+          </Section>
+        ) : null}
 
+        {/* -------------------------------------------------------------- */}
+        {/* swap the tool — power user and above                             */}
+        {/* -------------------------------------------------------------- */}
+        {advanced && model.toolChange !== null && registry !== null ? (
+          <Section
+            title="Which action"
+            description={
+              toolTarget === null || toolTarget === model.toolChange.current
+                ? undefined
+                : "Settings the new action does not have are dropped rather than guessed at, and the step comes back asking to be set up."
+            }
+            testId="tool-change"
+          >
+            <Field>
+              <FieldLabel htmlFor={controlId(node.id, "tool")}>Action</FieldLabel>
+              <Select
+                id={controlId(node.id, "tool")}
+                name="tool"
+                value={toolTarget ?? model.toolChange.current}
+                disabled={!editingEnabled || busy}
+                onValueChange={setToolTarget}
+                options={[
+                  ...(registry.getTool(model.toolChange.current) === undefined
+                    ? [
+                        {
+                          value: model.toolChange.current,
+                          label: model.toolChange.current,
+                          description: "not in this workspace",
+                        },
+                      ]
+                    : []),
+                  ...registry.listTools().map((tool) => ({
+                    value: tool.name,
+                    label: tool.label,
+                    description: tool.name,
+                  })),
+                ]}
+              />
+            </Field>
+            <Button
+              variant="secondary"
+              disabled={!editingEnabled || busy || toolTarget === null || toolTarget === model.toolChange.current}
+              data-testid="change-tool"
+              onClick={() => { void runPatch({ $tool: toolTarget }); }}
+            >
+              <ArrowRightLeft />
+              Swap action
+            </Button>
+          </Section>
+        ) : null}
+
+        {/* -------------------------------------------------------------- */}
+        {/* what this step hands on                                          */}
+        {/* -------------------------------------------------------------- */}
+        {advanced ? <PortList title="Passes on" node={node} which="outputs" /> : null}
+        {/* Inputs repeat the settings above for a tool, so they are only worth
+            their space at the level that wants the types too. */}
+        {mode === "developer" ? <PortList title="Takes" node={node} which="inputs" /> : null}
+
+        {/* -------------------------------------------------------------- */}
+        {/* remove                                                           */}
+        {/* -------------------------------------------------------------- */}
+        <Section title="Remove">
+          {node.capabilities.deletable ? (
+            confirmDelete ? (
+              <div className="flex flex-col gap-2">
+                <p className="m-0 text-[12px] text-ink-dim">
+                  Remove “{node.label}” from the flow? If a later step still needs what it produces, the change is
+                  refused and nothing is lost.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="danger-solid"
+                    disabled={!editingEnabled || busy}
+                    data-testid="confirm-delete"
+                    onClick={() => { void runPatch({ $delete: true }, () => { setConfirmDelete(false); }); }}
+                  >
+                    <Trash2 />
+                    Yes, remove it
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setConfirmDelete(false); }}>
+                    Keep it
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="danger"
+                disabled={!editingEnabled || busy}
+                data-testid="delete-node"
+                onClick={() => { setConfirmDelete(true); clearPatchError(); }}
+                className="self-start"
+              >
+                <Trash2 />
+                Remove this step
+              </Button>
+            )
+          ) : (
+            <FieldHint>
+              This step is not written anywhere in the code — it is drawn from the shape of the flow, so there is
+              nothing to remove.
+            </FieldHint>
+          )}
+        </Section>
+
+        {/* -------------------------------------------------------------- */}
+        {/* developer detail                                                 */}
+        {/* -------------------------------------------------------------- */}
+        {mode === "developer" ? (
+          <Section title="Technical details">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 self-start rounded-md border-0 bg-transparent p-0 font-mono text-[11.5px] text-accent underline decoration-accent/40 underline-offset-2 outline-none hover:decoration-accent focus-visible:ring-2 focus-visible:ring-ring/70"
+              onClick={() => { focusRange(node.source); }}
+            >
+              <Code className="size-3.5" />
+              {`${node.source.file}:${String(node.source.start.line)}:${String(node.source.start.column)}`}
+            </button>
+            <details className="group">
+              <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11.5px] font-medium text-ink-dim outline-none hover:text-ink">
+                <ChevronRight className="size-3 transition-transform group-open:rotate-90" />
+                Node record
+              </summary>
+              <pre className="cf-scroll m-0 mt-2 max-h-64 overflow-auto rounded-lg border border-line bg-surface-2 p-3 font-mono text-[11px] leading-[1.6] text-ink-dim">
+                <code>
+                  {JSON.stringify(
+                    { id: node.id, type: node.type, capabilities: node.capabilities, data: node.data },
+                    null,
+                    2,
+                  )}
+                </code>
+              </pre>
+            </details>
+          </Section>
+        ) : null}
+      </div>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* the one primary action                                            */}
+      {/* ---------------------------------------------------------------- */}
       {editableFields.length > 0 ? (
-        <div className="cf-actions">
-          <button
-            type="button"
-            className="cf-button cf-button--primary"
+        <footer className="flex items-center gap-2 border-t border-line bg-surface-2 px-4 py-3">
+          <Button
+            variant="primary"
+            size="md"
             disabled={!editingEnabled || busy || dirty.length === 0}
             title={dirty.length === 0 ? "Nothing changed yet" : undefined}
             data-testid="apply"
             onClick={() => { void apply(); }}
           >
-            {busy ? "Applying…" : `Apply${dirty.length > 1 ? ` (${String(dirty.length)})` : ""}`}
-          </button>
-          <button
-            type="button"
-            className="cf-button"
-            disabled={dirty.length === 0}
-            onClick={() => { setDraft(EMPTY_DRAFT); setLocalError(null); }}
+            {busy ? "Saving…" : dirty.length > 1 ? `Apply ${String(dirty.length)} changes` : "Apply change"}
+          </Button>
+          <Hint label="Undo the edits in this panel">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Revert"
+              disabled={dirty.length === 0}
+              onClick={() => { setDraft(EMPTY_DRAFT); setLocalError(null); }}
+            >
+              <RotateCcw />
+            </Button>
+          </Hint>
+          <label
+            className="ml-auto inline-flex cursor-pointer select-none items-center gap-2 text-[12px] text-ink-dim"
+            htmlFor={controlId(node.id, "preview")}
           >
-            Revert
-          </button>
-          <label className="cf-checkbox" htmlFor={controlId(node.id, "preview")}>
             <input
               type="checkbox"
               id={controlId(node.id, "preview")}
               name="preview"
+              className="size-3.5 cursor-pointer accent-[color:var(--cf-accent)]"
               checked={preview}
               onChange={(event) => { setPreview(event.target.checked); }}
             />
-            Preview diff
+            Preview
           </label>
-        </div>
+        </footer>
       ) : null}
-
-      {preview && previewResult !== null ? (
-        <section className="cf-preview" data-testid="preview">
-          <h3 className="cf-preview__title">Preview — not applied yet</h3>
-          {previewResult.ok ? (
-            <>
-              <CodeDiff patches={previewResult.patches} />
-              {previewResult.diagnostics.length > 0 ? (
-                <ul className="cf-alert__list">
-                  {previewResult.diagnostics.map((diagnostic, i) => (
-                    <li key={i}>
-                      <code>{diagnostic.code}</code> {diagnostic.message}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </>
-          ) : (
-            <p className="cf-alert cf-alert--warning cf-alert__message">{previewResult.message}</p>
-          )}
-        </section>
-      ) : null}
-
-      {model.toolChange !== null && registry !== null ? (
-        <section className="cf-section" data-testid="tool-change">
-          <label className="cf-section__title" htmlFor={controlId(node.id, "tool")}>
-            Tool
-          </label>
-          <select
-            className="cf-select"
-            id={controlId(node.id, "tool")}
-            name="tool"
-            value={toolTarget ?? model.toolChange.current}
-            disabled={!editingEnabled || busy}
-            onChange={(event) => { setToolTarget(event.target.value); }}
-          >
-            {registry.getTool(model.toolChange.current) === undefined ? (
-              <option value={model.toolChange.current}>{model.toolChange.current} (not in registry)</option>
-            ) : null}
-            {registry.listTools().map((tool) => (
-              <option key={tool.name} value={tool.name}>
-                {tool.icon === undefined ? "" : `${tool.icon} `}
-                {tool.label} — {tool.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="cf-button"
-            disabled={!editingEnabled || busy || toolTarget === null || toolTarget === model.toolChange.current}
-            data-testid="change-tool"
-            onClick={() => { void runPatch({ $tool: toolTarget }); }}
-          >
-            Change tool
-          </button>
-          <p className="cf-field__hint">
-            Incompatible fields are not reinterpreted: they are dropped and the node comes back as
-            “replace &amp; reconfigure” with a warning (06 §2).
-          </p>
-        </section>
-      ) : null}
-
-      {model.codeEdit !== null ? (
-        <section className="cf-section" data-testid="code-edit">
-          <h3 className="cf-section__title">Code</h3>
-          {codeEditText === null ? (
-            <p className="cf-notice">
-              This node&apos;s code region could not be located in the current source — edit it in the code panel
-              (06 §2).
-            </p>
-          ) : (
-            <button
-              type="button"
-              className="cf-button"
-              disabled={!editingEnabled || busy}
-              data-testid="edit-code"
-              onClick={() => { setCodeOpen(true); }}
-            >
-              {model.codeEdit.label}
-            </button>
-          )}
-        </section>
-      ) : null}
-
-      {model.code !== null ? (
-        <pre className="cf-inspector__code">
-          <code>{model.code}</code>
-        </pre>
-      ) : null}
-
-      <section className="cf-section">
-        <h3 className="cf-section__title">Node</h3>
-        {node.capabilities.deletable ? (
-          confirmDelete ? (
-            <>
-              <button
-                type="button"
-                className="cf-button cf-button--danger"
-                disabled={!editingEnabled || busy}
-                data-testid="confirm-delete"
-                onClick={() => { void runPatch({ $delete: true }, () => { setConfirmDelete(false); }); }}
-              >
-                Confirm delete
-              </button>
-              <button type="button" className="cf-button" onClick={() => { setConfirmDelete(false); }}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="cf-button cf-button--danger"
-              disabled={!editingEnabled || busy}
-              data-testid="delete-node"
-              onClick={() => { setConfirmDelete(true); clearPatchError(); }}
-            >
-              Delete node
-            </button>
-          )
-        ) : (
-          <p className="cf-field__hint">
-            This node is synthetic — it has no statement of its own to delete (03 §4).
-          </p>
-        )}
-      </section>
-
-      <PortList title="Inputs" node={node} which="inputs" />
-      <PortList title="Outputs" node={node} which="outputs" />
-
-      <details className="cf-inspector__raw">
-        <summary>Node data</summary>
-        <pre>
-          <code>
-            {JSON.stringify({ id: node.id, type: node.type, capabilities: node.capabilities, data: node.data }, null, 2)}
-          </code>
-        </pre>
-      </details>
 
       {codeOpen && codeEditText !== null && model.codeEdit !== null ? (
         <CodeDialog
           title={`${model.codeEdit.label} — ${node.label}`}
-          hint="The whole region is replaced in one patch: an opaque region has no smaller edit (06 §2)."
+          hint="The whole block is replaced in one go: there is no smaller edit for a piece of custom code."
           initialValue={codeEditText}
           busy={busy}
           error={error === null ? null : error.message}
@@ -538,9 +756,17 @@ interface FieldRowProps {
   template: boolean;
   disabled: boolean;
   disabledReason: string | null;
+  /** Show the schema type and the patch-operation tag (power user and above). */
+  advanced: boolean;
   onText: (value: string) => void;
   onChecked: (value: boolean) => void;
   onTemplate: (value: boolean) => void;
+}
+
+/** Field labels come from tool schemas: `channel` reads better as "Channel". */
+function humanLabel(label: string): string {
+  const spaced = label.replace(/[_-]+/g, " ").replace(/([a-z\d])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 function FieldRow(props: FieldRowProps): ReactNode {
@@ -548,40 +774,56 @@ function FieldRow(props: FieldRowProps): ReactNode {
   const blocked = field.patch === null || field.blockedReason !== null;
   const reason = field.blockedReason ?? props.disabledReason;
   const disabled = blocked || props.disabled;
-  const placeholder = field.missing ? "not set — needs configuration" : "";
+  /**
+   * An inserted step gets `undefined` written into its required inputs as an
+   * explicit placeholder (06 §2). That is honest source, and it is also a value
+   * no one typed — so it is shown as "not filled in" rather than as content.
+   */
+  const unset = field.missing || props.text.trim() === "undefined";
+  const placeholder = unset ? "Not set yet" : "";
   const wantsTemplate = spec.kind === "text" && hasInterpolation(props.text);
-
-  const inputClass = `cf-input${spec.kind === "expression" || spec.kind === "code" ? " cf-input--code" : ""}`;
-  const title = reason ?? undefined;
+  const mono = spec.kind === "expression" || spec.kind === "code" || spec.kind === "template";
   const id = controlId(props.nodeId, `field-${field.name}`);
+  const title = reason ?? undefined;
+  const blockedSplit = field.blockedReason === null ? null : splitSpecRefs(field.blockedReason);
+  const hintSplit = spec.hint === null ? null : splitSpecRefs(spec.hint);
 
   return (
-    <div className={`cf-field${field.display.friendly ? "" : " cf-field--code"}`}>
-      <label className="cf-field__label" htmlFor={id}>
-        {field.label}
-        {field.schema !== undefined && typeof field.schema === "string" ? (
-          <span className="cf-field__schema">{field.schema}</span>
+    <Field>
+      {/* `cf-field__label` is load-bearing: the a11y suite asserts the visible
+          label element is the one carrying the field name. */}
+      <FieldLabel className="cf-field__label" htmlFor={id}>
+        {humanLabel(field.label)}
+        {unset ? (
+          <Badge tone="warn" title="This value has to be filled in">
+            needs a value
+          </Badge>
         ) : null}
-        {!field.declaredEditable ? <span className="cf-field__tag">not declared editable</span> : null}
-        {!field.display.friendly ? <span className="cf-field__tag">code mode</span> : null}
-        {field.patch !== null && field.patch !== "field" ? <span className="cf-field__tag">{field.patch}</span> : null}
-      </label>
+        {props.advanced && field.schema !== undefined && typeof field.schema === "string" ? (
+          <span className="font-mono text-[10.5px] font-normal text-ink-faint">{field.schema}</span>
+        ) : null}
+        {props.advanced && !field.declaredEditable ? <Badge>not declared editable</Badge> : null}
+        {props.advanced && !field.display.friendly ? <Badge tone="accent">code</Badge> : null}
+      </FieldLabel>
 
       {spec.kind === "checkbox" ? (
-        <input
-          type="checkbox"
-          className="cf-checkbox__box"
-          id={id}
-          name={field.name}
-          data-field={field.name}
-          disabled={disabled}
-          title={title}
-          checked={props.checked}
-          onChange={(event) => { props.onChecked(event.target.checked); }}
-        />
+        <label className="inline-flex cursor-pointer select-none items-center gap-2 text-[12.5px] text-ink-dim">
+          <input
+            type="checkbox"
+            className="size-4 cursor-pointer accent-[color:var(--cf-accent)] disabled:cursor-not-allowed"
+            id={id}
+            name={field.name}
+            data-field={field.name}
+            disabled={disabled}
+            title={title}
+            checked={props.checked}
+            onChange={(event) => { props.onChecked(event.target.checked); }}
+          />
+          {props.checked ? "Yes" : "No"}
+        </label>
       ) : spec.kind === "code" ? (
-        <textarea
-          className={inputClass}
+        <Textarea
+          mono
           id={id}
           name={field.name}
           data-field={field.name}
@@ -593,13 +835,14 @@ function FieldRow(props: FieldRowProps): ReactNode {
           onChange={(event) => { props.onText(event.target.value); }}
         />
       ) : (
-        <input
-          className={inputClass}
+        <Input
+          mono={mono}
           id={id}
           name={field.name}
           data-field={field.name}
           disabled={disabled}
           title={title}
+          invalid={unset}
           type={spec.kind === "number" ? "number" : "text"}
           value={props.text}
           placeholder={placeholder}
@@ -608,30 +851,33 @@ function FieldRow(props: FieldRowProps): ReactNode {
       )}
 
       {wantsTemplate ? (
-        <span className="cf-field__convert" data-testid={`convert-${field.name}`}>
-          {props.template ? (
-            <>
-              Will be written as a template literal.{" "}
-              <button type="button" className="cf-link" onClick={() => { props.onTemplate(false); }}>
-                keep it a plain string
-              </button>
-            </>
-          ) : (
-            <>
-              {IMPLICIT_TEMPLATE_REFUSAL}{" "}
-              <button type="button" className="cf-link" onClick={() => { props.onTemplate(true); }}>
-                Make it a template
-              </button>
-            </>
-          )}
-        </span>
+        <Notice
+          tone="warn"
+          data-testid={`convert-${field.name}`}
+          actions={
+            props.template ? (
+              <Button variant="ghost" size="xs" onClick={() => { props.onTemplate(false); }}>
+                Keep it plain text
+              </Button>
+            ) : (
+              <Button variant="secondary" size="xs" onClick={() => { props.onTemplate(true); }}>
+                Yes, insert a value here
+              </Button>
+            )
+          }
+        >
+          {props.template
+            ? "This field will now mix text with values from earlier steps."
+            : splitSpecRefs(IMPLICIT_TEMPLATE_REFUSAL).text}
+        </Notice>
       ) : null}
 
-      {field.blockedReason !== null ? <span className="cf-field__hint">{field.blockedReason}</span> : null}
-      {field.blockedReason === null && spec.hint !== null ? (
-        <span className="cf-field__hint">{spec.hint}</span>
+      {blockedSplit !== null ? <FieldHint tone="warn">{blockedSplit.text}</FieldHint> : null}
+      {blockedSplit === null && unset ? (
+        <FieldHint tone="warn">This has to be filled in before the flow can run.</FieldHint>
       ) : null}
-    </div>
+      {blockedSplit === null && !unset && hintSplit !== null ? <FieldHint>{hintSplit.text}</FieldHint> : null}
+    </Field>
   );
 }
 
@@ -639,16 +885,19 @@ function PortList({ title, node, which }: { title: string; node: WorkflowNode; w
   const ports = node[which];
   if (ports.length === 0) return null;
   return (
-    <section className="cf-ports">
-      <h3 className="cf-ports__title">{title}</h3>
-      <ul>
+    <Section title={title}>
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {ports.map((port) => (
-          <li key={port.id}>
-            <code>{port.label}</code>
-            {typeof port.schema === "string" ? <span className="cf-ports__schema">{port.schema}</span> : null}
+          <li key={port.id} className="flex items-baseline gap-2 text-[12px]">
+            <code className="rounded-[5px] bg-surface-2 px-1.5 py-0.5 font-mono text-[11.5px] text-ink">
+              {port.label}
+            </code>
+            {typeof port.schema === "string" ? (
+              <span className="truncate font-mono text-[11px] text-ink-faint">{port.schema}</span>
+            ) : null}
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   );
 }

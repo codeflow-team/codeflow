@@ -1,0 +1,235 @@
+/*
+ * CodeFlow design tokens.
+ *
+ * Two layers, deliberately:
+ *
+ * 1. `--cf-*` custom properties hold the *values*. They are plain CSS variables
+ *    on `:root`, so a host can override any of them without touching Tailwind,
+ *    and so dark mode is one swap of the same names rather than a second set of
+ *    rules.
+ * 2. `@theme inline` maps those variables onto Tailwind v4's theme namespace, so
+ *    `bg-surface`, `text-ink-dim`, `border-line`, `rounded-card` are generated
+ *    from the same source and can never drift from it.
+ *
+ * Dark is resolved in three places on purpose (see the notes below each block):
+ * the light palette is the unconditional base, `prefers-color-scheme` covers the
+ * "system" setting, and `[data-cf-theme="dark"]` lets an explicit choice win.
+ */
+
+/* Note: the `@layer theme, base, components, utilities;` order statement lives
+   at the *top of each stylesheet entry*, not here. A layer takes its priority
+   from where it is first seen, so the declaration only has any effect if it is
+   parsed before Tailwind's own `@layer utilities { … }` — declaring it in an
+   imported file that lands after them leaves `base` and `components` stacked
+   on top of `utilities`, and a host's preflight starts winning over every
+   utility class this library ships. */
+
+:root {
+  /* --- surfaces & ink ---------------------------------------------------- */
+  --cf-bg: #f4f6fb;
+  --cf-surface: #ffffff;
+  --cf-surface-2: #f3f5fa;
+  --cf-surface-3: #e9edf5;
+  --cf-border: #e4e8f1;
+  --cf-border-strong: #cbd3e2;
+  --cf-text: #10141d;
+  --cf-text-dim: #5b6579;
+  --cf-text-faint: #8b94a7;
+
+  /* --- brand ------------------------------------------------------------- */
+  --cf-accent: #5145e5;
+  --cf-accent-hover: #443ad0;
+  --cf-accent-fg: #ffffff;
+  --cf-accent-soft: #eceafd;
+  --cf-ring: #a29bf5;
+
+  /* --- status ------------------------------------------------------------ */
+  --cf-error: #d92d20;
+  --cf-error-soft: #fdeceb;
+  --cf-warning: #b54708;
+  --cf-warning-soft: #fdf1e3;
+  --cf-info: #175cd3;
+  --cf-info-soft: #e8f0fe;
+  --cf-success: #067647;
+  --cf-success-soft: #e5f6ee;
+
+  /* --- node accents (one hue per node type — 07 §3, §5) ------------------ */
+  --cf-trigger: #059669;
+  --cf-tool: #2563eb;
+  --cf-function: #7c3aed;
+  --cf-condition: #d97706;
+  --cf-loop: #0891b2;
+  --cf-try: #ea580c;
+  --cf-parallel: #0d9488;
+  --cf-merge: #64748b;
+  --cf-jump: #c026d3;
+  --cf-output: #e11d48;
+  --cf-code: #52606d;
+  --cf-unknown: #dc2626;
+
+  /* --- type -------------------------------------------------------------- */
+  --cf-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+  --cf-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* --- shape & depth ----------------------------------------------------- */
+  --cf-radius: 0.625rem;
+  --cf-scrim: rgb(16 20 29 / 0.42);
+  --cf-shadow-sm: 0 1px 2px rgb(16 20 29 / 0.06), 0 1px 1px rgb(16 20 29 / 0.04);
+  --cf-shadow: 0 2px 4px rgb(16 20 29 / 0.05), 0 6px 16px -6px rgb(16 20 29 / 0.12);
+  --cf-shadow-lg: 0 12px 32px -8px rgb(16 20 29 / 0.22), 0 2px 6px rgb(16 20 29 / 0.06);
+  --cf-shadow-node: 0 1px 2px rgb(16 20 29 / 0.05), 0 4px 10px -4px rgb(16 20 29 / 0.1);
+}
+
+/* "System" is the default theme state: no attribute is set, so the media query
+   is the only thing that separates light from dark. It is scoped away from an
+   explicit light choice so the toggle stays authoritative in both directions. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-cf-theme="light"]) {
+    --cf-bg: #0a0c11;
+    --cf-surface: #14181f;
+    --cf-surface-2: #1a1f28;
+    --cf-surface-3: #232935;
+    --cf-border: #252b36;
+    --cf-border-strong: #3a4250;
+    --cf-text: #e8ecf4;
+    --cf-text-dim: #9aa4b6;
+    --cf-text-faint: #6c7688;
+
+    --cf-accent: #7b73ff;
+    --cf-accent-hover: #8d86ff;
+    --cf-accent-fg: #0a0c11;
+    --cf-accent-soft: #1e1e3d;
+    --cf-ring: #6d64e8;
+
+    --cf-error: #f97066;
+    --cf-error-soft: #2a1517;
+    --cf-warning: #fdb022;
+    --cf-warning-soft: #2a1e0d;
+    --cf-info: #7cb0f8;
+    --cf-info-soft: #10203a;
+    --cf-success: #47cd89;
+    --cf-success-soft: #0c2419;
+
+    --cf-trigger: #34d399;
+    --cf-tool: #60a5fa;
+    --cf-function: #a78bfa;
+    --cf-condition: #fbbf24;
+    --cf-loop: #22d3ee;
+    --cf-try: #fb923c;
+    --cf-parallel: #2dd4bf;
+    --cf-merge: #94a3b8;
+    --cf-jump: #e879f9;
+    --cf-output: #fb7185;
+    --cf-code: #94a3b8;
+    --cf-unknown: #f87171;
+
+    --cf-scrim: rgb(0 0 0 / 0.68);
+    --cf-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+    --cf-shadow: 0 2px 4px rgb(0 0 0 / 0.35), 0 8px 20px -8px rgb(0 0 0 / 0.6);
+    --cf-shadow-lg: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 6px rgb(0 0 0 / 0.4);
+    --cf-shadow-node: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px -6px rgb(0 0 0 / 0.5);
+  }
+}
+
+/* An explicit choice — set by `<ThemeToggle>`/`applyTheme` — outranks both. */
+[data-cf-theme="dark"] {
+  --cf-bg: #0a0c11;
+  --cf-surface: #14181f;
+  --cf-surface-2: #1a1f28;
+  --cf-surface-3: #232935;
+  --cf-border: #252b36;
+  --cf-border-strong: #3a4250;
+  --cf-text: #e8ecf4;
+  --cf-text-dim: #9aa4b6;
+  --cf-text-faint: #6c7688;
+
+  --cf-accent: #7b73ff;
+  --cf-accent-hover: #8d86ff;
+  --cf-accent-fg: #0a0c11;
+  --cf-accent-soft: #1e1e3d;
+  --cf-ring: #6d64e8;
+
+  --cf-error: #f97066;
+  --cf-error-soft: #2a1517;
+  --cf-warning: #fdb022;
+  --cf-warning-soft: #2a1e0d;
+  --cf-info: #7cb0f8;
+  --cf-info-soft: #10203a;
+  --cf-success: #47cd89;
+  --cf-success-soft: #0c2419;
+
+  --cf-trigger: #34d399;
+  --cf-tool: #60a5fa;
+  --cf-function: #a78bfa;
+  --cf-condition: #fbbf24;
+  --cf-loop: #22d3ee;
+  --cf-try: #fb923c;
+  --cf-parallel: #2dd4bf;
+  --cf-merge: #94a3b8;
+  --cf-jump: #e879f9;
+  --cf-output: #fb7185;
+  --cf-code: #94a3b8;
+  --cf-unknown: #f87171;
+
+  --cf-scrim: rgb(0 0 0 / 0.68);
+  --cf-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --cf-shadow: 0 2px 4px rgb(0 0 0 / 0.35), 0 8px 20px -8px rgb(0 0 0 / 0.6);
+  --cf-shadow-lg: 0 16px 40px -12px rgb(0 0 0 / 0.7), 0 2px 6px rgb(0 0 0 / 0.4);
+  --cf-shadow-node: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 12px -6px rgb(0 0 0 / 0.5);
+}
+
+@theme inline {
+  --color-canvas: var(--cf-bg);
+  --color-surface: var(--cf-surface);
+  --color-surface-2: var(--cf-surface-2);
+  --color-surface-3: var(--cf-surface-3);
+  --color-line: var(--cf-border);
+  --color-line-strong: var(--cf-border-strong);
+  --color-ink: var(--cf-text);
+  --color-ink-dim: var(--cf-text-dim);
+  --color-ink-faint: var(--cf-text-faint);
+
+  --color-accent: var(--cf-accent);
+  --color-accent-hover: var(--cf-accent-hover);
+  --color-accent-fg: var(--cf-accent-fg);
+  --color-accent-soft: var(--cf-accent-soft);
+  --color-ring: var(--cf-ring);
+  --color-scrim: var(--cf-scrim);
+
+  --color-danger: var(--cf-error);
+  --color-danger-soft: var(--cf-error-soft);
+  --color-warn: var(--cf-warning);
+  --color-warn-soft: var(--cf-warning-soft);
+  --color-info: var(--cf-info);
+  --color-info-soft: var(--cf-info-soft);
+  --color-ok: var(--cf-success);
+  --color-ok-soft: var(--cf-success-soft);
+
+  --color-node-trigger: var(--cf-trigger);
+  --color-node-tool: var(--cf-tool);
+  --color-node-function: var(--cf-function);
+  --color-node-condition: var(--cf-condition);
+  --color-node-loop: var(--cf-loop);
+  --color-node-try: var(--cf-try);
+  --color-node-parallel: var(--cf-parallel);
+  --color-node-merge: var(--cf-merge);
+  --color-node-jump: var(--cf-jump);
+  --color-node-output: var(--cf-output);
+  --color-node-code: var(--cf-code);
+  --color-node-unknown: var(--cf-unknown);
+
+  --font-sans: var(--cf-font);
+  --font-mono: var(--cf-mono);
+
+  --radius-card: var(--cf-radius);
+  --radius-node: 0.75rem;
+
+  --shadow-xs: var(--cf-shadow-sm);
+  --shadow-soft: var(--cf-shadow);
+  --shadow-pop: var(--cf-shadow-lg);
+  --shadow-node: var(--cf-shadow-node);
+}
+
+/* Explicit-choice dark, for the rare rule that needs to branch on the theme
+   rather than read a token (e.g. a raster asset or a blend mode). */
+@custom-variant dark (&:where([data-cf-theme="dark"], [data-cf-theme="dark"] *));

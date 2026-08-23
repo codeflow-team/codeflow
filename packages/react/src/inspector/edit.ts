@@ -89,7 +89,7 @@ export function editorSpecFor(field: InspectorField): FieldEditorSpec {
       kind: "code",
       value: field.display.raw,
       checked: false,
-      hint: "Shown as code: the friendly form would be ambiguous here, so this box holds the TypeScript source verbatim (06 §3).",
+      hint: "Shown as code: the friendly form would be ambiguous for this value, so the box holds the expression exactly as it is written (06 §3).",
     };
   }
 
@@ -105,7 +105,7 @@ export function editorSpecFor(field: InspectorField): FieldEditorSpec {
         kind: "template",
         value: field.display.text,
         checked: false,
-        hint: "Template literal — `{{ expr }}` is one interpolation (06 §3).",
+        hint: "Text mixed with values from earlier steps. Each {{ … }} is one value filled in when the flow runs (06 §3).",
       };
     case "expression":
     case "null":
@@ -113,7 +113,7 @@ export function editorSpecFor(field: InspectorField): FieldEditorSpec {
         kind: "expression",
         value: field.display.raw,
         checked: false,
-        hint: "TypeScript expression, written back verbatim (06 §3).",
+        hint: "A value worked out when the flow runs, written as code and saved exactly as typed (06 §3).",
       };
     case "empty":
       return emptySpec(field);
@@ -122,10 +122,10 @@ export function editorSpecFor(field: InspectorField): FieldEditorSpec {
 
 function emptySpec(field: InspectorField): FieldEditorSpec {
   if (field.editor === "expression") {
-    return { kind: "expression", value: "", checked: false, hint: "TypeScript expression (06 §3)." };
+    return { kind: "expression", value: "", checked: false, hint: "A value worked out when the flow runs, written as code (06 §3)." };
   }
   if (field.editor === "code") {
-    return { kind: "code", value: "", checked: false, hint: "TypeScript source, written back verbatim." };
+    return { kind: "code", value: "", checked: false, hint: "Code, saved into the file exactly as typed." };
   }
   const schema = typeof field.schema === "string" ? field.schema : null;
   if (schema === "number") return { kind: "number", value: "", checked: false, hint: null };
@@ -193,7 +193,7 @@ export function encodeAsTemplate(input: string): FieldValue {
 }
 
 export const IMPLICIT_TEMPLATE_REFUSAL =
-  "`{{ }}` is only how an expression is *displayed*. This value is a plain string literal, so typing `{{ … }}` would store those characters literally. Use “Make it a template” to turn it into a template literal on purpose (06 §3).";
+  "This field holds plain text, so {{ … }} would be saved as those exact characters rather than as a value from an earlier step. Turning it into a fill-in-the-value field is a deliberate change (06 §3).";
 
 /**
  * The `changes` object for one node edit. Argument fields go in flat (the shape

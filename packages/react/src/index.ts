@@ -52,7 +52,7 @@ export type { NodePaletteProps, InsertPlacement } from "./palette/NodePalette.js
 export { CodeDiff } from "./diff/CodeDiff.js";
 export type { CodeDiffProps } from "./diff/CodeDiff.js";
 
-export { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel.js";
+export { DiagnosticsPanel, useDiagnosticCounts } from "./diagnostics/DiagnosticsPanel.js";
 export type { DiagnosticsPanelProps } from "./diagnostics/DiagnosticsPanel.js";
 
 export { DisclosureToggle } from "./controls/DisclosureToggle.js";
@@ -60,6 +60,39 @@ export { ThemeToggle, applyTheme, useTheme } from "./controls/ThemeToggle.js";
 export type { CodeFlowTheme } from "./controls/ThemeToggle.js";
 
 export { CodeFlowNode, CodeFlowContainerNode } from "./flow/nodes.js";
+
+/* --- design system -------------------------------------------------------
+ * shadcn-shaped components over Base UI primitives. Exported so a host app can
+ * build its own chrome (top bar, panels, empty states) out of the same buttons,
+ * selects and notices the library uses, instead of approximating them.
+ */
+
+export { cn } from "./ui/cn.js";
+export { Button, buttonVariants } from "./ui/button.js";
+export type { ButtonProps } from "./ui/button.js";
+export { Badge, Kbd, badgeVariants } from "./ui/badge.js";
+export type { BadgeProps } from "./ui/badge.js";
+export { Field, FieldHint, FieldLabel, Input, Textarea } from "./ui/input.js";
+export type { InputProps, TextareaProps } from "./ui/input.js";
+export { Select } from "./ui/select.js";
+export type { SelectOption, SelectProps } from "./ui/select.js";
+export { Modal, Sheet, DialogPrimitive } from "./ui/dialog.js";
+export type { ModalProps, SheetProps } from "./ui/dialog.js";
+export { Popover } from "./ui/popover.js";
+export type { PopoverProps } from "./ui/popover.js";
+export { Segmented } from "./ui/segmented.js";
+export type { SegmentedItem, SegmentedProps } from "./ui/segmented.js";
+export { Hint, TooltipProvider } from "./ui/tooltip.js";
+export type { HintProps } from "./ui/tooltip.js";
+export { Notice, EngineNotice } from "./ui/notice.js";
+export type { NoticeProps, NoticeTone } from "./ui/notice.js";
+export { ToastHost, useToast } from "./ui/toast.js";
+
+export { diagnosticHeadline, errorHeadline, nodeTypeName, splitSpecRefs } from "./copy.js";
+export type { SplitMessage } from "./copy.js";
+
+export { NodeGlyph, RegistryGlyph, nodeVisual, REGISTRY_ICONS } from "./flow/visual.js";
+export type { NodeVisual, NodeVisualType } from "./flow/visual.js";
 
 /* --- adapters and pure helpers (also the unit-test surface) --------------- */
 
@@ -104,6 +137,7 @@ export type { NodeSize, Measurer } from "./layout/measure.js";
 
 export {
   nodeIcon,
+  nodeCaption,
   nodeKindLabel,
   nodeSummaryRows,
   nodeSourceText,

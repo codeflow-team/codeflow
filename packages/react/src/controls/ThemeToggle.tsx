@@ -5,6 +5,9 @@
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Moon, Sun } from "lucide-react";
+import { Button } from "../ui/button.js";
+import { Hint } from "../ui/tooltip.js";
 
 export type CodeFlowTheme = "light" | "dark";
 
@@ -30,8 +33,16 @@ export function ThemeToggle({
 }): ReactNode {
   const toggle = useCallback(() => { onChange(theme === "light" ? "dark" : "light"); }, [theme, onChange]);
   return (
-    <button type="button" className={`cf-theme-toggle ${className ?? ""}`} onClick={toggle} aria-label="Toggle theme">
-      {theme === "light" ? "🌙" : "☀️"}
-    </button>
+    <Hint label={theme === "light" ? "Switch to dark" : "Switch to light"}>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Toggle theme"
+        onClick={toggle}
+        {...(className === undefined ? {} : { className })}
+      >
+        {theme === "light" ? <Moon /> : <Sun />}
+      </Button>
+    </Hint>
   );
 }

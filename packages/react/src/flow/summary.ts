@@ -48,7 +48,49 @@ export function nodeIcon(node: WorkflowNode): string {
   }
 }
 
-/** Short type caption under the label in expanded mode. */
+/**
+ * The line under the title.
+ *
+ * Beginner level shows icon + label only (07 §4), so there is none. The power
+ * level gets a plain-language description of what kind of step this is — the
+ * qualified tool name is a developer fact and waits for the developer level,
+ * where it is exactly what is wanted.
+ */
+export function nodeCaption(node: WorkflowNode, mode: DisclosureMode): string | null {
+  if (mode === "compact") return null;
+  if (mode === "developer") return nodeKindLabel(node);
+
+  switch (node.type) {
+    case "trigger":
+      return "Starts the flow";
+    case "tool":
+      return "Action";
+    case "function":
+      return stringData(node, "functionSource") === "library" ? "Shared function" : "Function in this file";
+    case "condition":
+      return "Decision";
+    case "loop":
+      return stringData(node, "kind") === "while" ? "Repeat" : "Repeats for each item";
+    case "try":
+      return "Handles errors";
+    case "parallel":
+      return "Runs at the same time";
+    case "merge":
+      return "Paths come back together";
+    case "jump":
+      return stringData(node, "kind") === "continue" ? "Skips to the next item" : "Stops the loop";
+    case "output":
+      return node.data["explicit"] === true ? "Finishes the flow" : "End of the flow";
+    case "code":
+      return "Custom code";
+    case "unknown":
+      return "Not recognised";
+    default:
+      return null;
+  }
+}
+
+/** Short type caption — the machine-facing one, shown at the developer level. */
 export function nodeKindLabel(node: WorkflowNode): string {
   switch (node.type) {
     case "tool":
@@ -81,7 +123,7 @@ function outputRow(node: WorkflowNode): SummaryRow[] {
   const value = node.outputs
     .map((port) => (typeof port.schema === "string" ? `${port.label}: ${port.schema}` : port.label))
     .join(", ");
-  return [{ key: "Output", value }];
+  return [{ key: "Gives", value }];
 }
 
 /** Rows rendered in the *expanded* level (07 §3). */
@@ -92,7 +134,7 @@ export function nodeSummaryRows(node: WorkflowNode): SummaryRow[] {
     case "function":
       return [...argumentRows(node), ...outputRow(node)];
     case "condition":
-      return [{ key: "If", value: formatFieldValue(stringData(node, "expression")).text }];
+      return [{ key: "When", value: formatFieldValue(stringData(node, "expression")).text }];
     case "loop":
       // `for…of` already reads "For Each pr in prs" in the label — no second copy.
       return stringData(node, "kind") === "while"
@@ -112,13 +154,13 @@ export function nodeSummaryRows(node: WorkflowNode): SummaryRow[] {
       const expression = stringData(node, "expression");
       return [
         {
-          key: "Return",
+          key: "Result",
           value: expression === null ? (node.data["explicit"] === true ? "(nothing)" : "(implicit end)") : formatFieldValue(expression).text,
         },
       ];
     }
     case "trigger":
-      return [{ key: "Input", value: stringData(node, "inputType") ?? "unknown" }, ...outputRow(node)];
+      return [{ key: "Takes", value: stringData(node, "inputType") ?? "unknown" }, ...outputRow(node)];
     case "merge":
       return [{ key: "Merge", value: stringData(node, "of") ?? "" }, ...outputRow(node)];
     case "parallel":

@@ -9,6 +9,7 @@
 
 import type { ReactNode } from "react";
 import type { TextPatch } from "@codeflow/core";
+import { cn } from "../ui/cn.js";
 
 export interface CodeDiffProps {
   patches: readonly TextPatch[];
@@ -33,30 +34,35 @@ function where(patch: TextPatch): string {
 export function CodeDiff(props: CodeDiffProps): ReactNode {
   if (props.patches.length === 0) {
     return (
-      <p className={`cf-diff cf-diff--empty ${props.className ?? ""}`}>
-        {props.emptyLabel ?? "No change — the source would not move by a single byte."}
+      <p className={cn("m-0 text-[11.5px] italic text-ink-faint", props.className)}>
+        {props.emptyLabel ?? "No change — the file would not move by a single character."}
       </p>
     );
   }
 
   return (
-    <div className={`cf-diff ${props.className ?? ""}`} data-testid="code-diff">
+    <div className={cn("flex flex-col gap-2", props.className)} data-testid="code-diff">
       {props.patches.map((patch, i) => (
-        <div className="cf-diff__patch" key={i}>
-          <div className="cf-diff__where">line {where(patch)}</div>
-          <pre className="cf-diff__body">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface" key={i}>
+          <div className="border-b border-line bg-surface-2 px-2.5 py-1 font-mono text-[10.5px] text-ink-faint">
+            line {where(patch)}
+          </div>
+          <pre className="cf-scroll m-0 flex flex-col overflow-x-auto py-1 font-mono text-[11.5px] leading-[1.55]">
             {lines(patch.oldText).map((line, j) => (
-              <span className="cf-diff__line cf-diff__line--old" key={`o${String(j)}`}>
+              <span
+                className="whitespace-pre bg-danger-soft px-2.5 text-danger"
+                key={`o${String(j)}`}
+              >
                 {`- ${line}`}
               </span>
             ))}
             {lines(patch.newText).map((line, j) => (
-              <span className="cf-diff__line cf-diff__line--new" key={`n${String(j)}`}>
+              <span className="whitespace-pre bg-ok-soft px-2.5 text-ok" key={`n${String(j)}`}>
                 {`+ ${line}`}
               </span>
             ))}
             {patch.oldText.length === 0 && patch.newText.length === 0 ? (
-              <span className="cf-diff__line">(empty)</span>
+              <span className="px-2.5 text-ink-faint">(empty)</span>
             ) : null}
           </pre>
         </div>

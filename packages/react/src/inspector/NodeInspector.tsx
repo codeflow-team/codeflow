@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { WorkflowNode } from "@codeflow/core";
-import { useCodeFlow } from "../context/provider.js";
+import { useCodeFlow } from "../context/hooks.js";
 import { nodeIcon, nodeKindLabel } from "../flow/summary.js";
 import { CodeDiff } from "../diff/CodeDiff.js";
 import { CodeDialog } from "../code/CodeDialog.js";

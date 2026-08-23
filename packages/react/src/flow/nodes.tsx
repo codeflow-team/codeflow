@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import type { Diagnostic, WorkflowNode } from "@codeflow/core";
 import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
-import { useOptionalCodeFlow } from "../context/provider.js";
+import { useOptionalCodeFlow } from "../context/hooks.js";
 import { developerLines, nodeIcon, nodeKindLabel, nodeSummaryRows } from "./summary.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
 

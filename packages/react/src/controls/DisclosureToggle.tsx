@@ -4,7 +4,7 @@
  */
 
 import type { ReactNode } from "react";
-import { useCodeFlow } from "../context/provider.js";
+import { useCodeFlow } from "../context/hooks.js";
 import type { DisclosureMode } from "../flow/summary.js";
 
 const LEVELS: { mode: DisclosureMode; label: string; hint: string }[] = [

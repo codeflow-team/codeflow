@@ -6,7 +6,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import type { Diagnostic, WorkflowNode } from "@codeflow/core";
-import { useCodeFlow } from "../context/provider.js";
+import { useCodeFlow } from "../context/hooks.js";
 import { diagnosticsByNode } from "../graph/index.js";
 
 export interface DiagnosticsPanelProps {

@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Editor, type OnMount } from "@monaco-editor/react";
-import { useCodeFlow } from "../context/provider.js";
+import { useCodeFlow } from "../context/hooks.js";
 
 type MonacoEditor = Parameters<OnMount>[0];
 type MonacoApi = Parameters<OnMount>[1];

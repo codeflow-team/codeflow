@@ -20,7 +20,7 @@ import {
   type NodeMouseHandler,
   type NodeTypes,
 } from "@xyflow/react";
-import { useCodeFlow } from "../context/provider.js";
+import { useCodeFlow } from "../context/hooks.js";
 import type { DisclosureMode } from "../flow/summary.js";
 import { CodeFlowContainerNode, CodeFlowNode } from "../flow/nodes.js";
 import {

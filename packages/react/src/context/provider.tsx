@@ -14,10 +14,11 @@
  * (00 §2.1).
  */
 
+// The context object lives in its own module so it keeps one identity across
+// Fast Refresh re-execution — see context.ts.
+import { CodeFlowContext } from "./context.js";
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -28,102 +29,22 @@ import {
   CodeFlowError,
   type CodeFlowErrorCode,
   type CodeFlowSession,
-  type Diagnostic,
-  type GraphChange,
   type PatchResult,
   type RegistryLookup,
   type SourceMapping,
-  type TextPatch,
   type WorkflowGraph,
-  type WorkflowNode,
 } from "@codeflow/core";
 import { computePatch } from "@codeflow/core";
-import { buildIndex, diagnosticsByNode, nodeAtOffset, type GraphIndex } from "../graph/index.js";
+import { buildIndex, diagnosticsByNode, nodeAtOffset } from "../graph/index.js";
+import { EDITING_DISABLED_REASON } from "./types.js";
+import type {
+  CodeFlowContextValue,
+  PatchFailure,
+  PatchOutcome,
+  PatchSuccess,
+  PreviewOutcome,
+} from "./types.js";
 import type { DisclosureMode } from "../flow/summary.js";
-
-/** Why an edit was refused — `code` is the patch engine's, not a UI invention. */
-export interface PatchFailure {
-  nodeId: string;
-  code: CodeFlowErrorCode | "unknown";
-  message: string;
-}
-
-/** What the last successful patch did, kept so the UI can show it (07 §5). */
-export interface PatchSuccess {
-  /** The node the edit was addressed to. */
-  nodeId: string;
-  /**
-   * Nodes this patch is *about*: the edited node plus anything it added. An
-   * insert is addressed to the anchor node but the user is looking at the new
-   * one, so both have to be able to show what happened.
-   */
-  nodeIds: string[];
-  patches: TextPatch[];
-  diagnostics: Diagnostic[];
-  changes: GraphChange[];
-  at: number;
-}
-
-export type PatchOutcome =
-  | { ok: true; result: PatchResult }
-  | ({ ok: false } & PatchFailure);
-
-export type PreviewOutcome =
-  | { ok: true; patches: TextPatch[]; diagnostics: Diagnostic[] }
-  | { ok: false; code: CodeFlowErrorCode | "unknown"; message: string };
-
-export interface CodeFlowContextValue {
-  graph: WorkflowGraph | null;
-  session: CodeFlowSession | null;
-  registry: RegistryLookup | null;
-
-  index: GraphIndex;
-  nodeDiagnostics: Map<string, Diagnostic[]>;
-
-  selectedNodeId: string | null;
-  selectedNode: WorkflowNode | null;
-  selectNode: (nodeId: string | null) => void;
-  /** Select whichever node owns `offset` in the source — code panel → canvas. */
-  selectNodeAtOffset: (offset: number) => WorkflowNode | null;
-
-  mode: DisclosureMode;
-  setMode: (mode: DisclosureMode) => void;
-
-  /** Source range the code panel should reveal/highlight; canvas → code panel. */
-  focusedRange: SourceMapping | null;
-  focusRange: (range: SourceMapping | null) => void;
-
-  /* --- editing (06) ------------------------------------------------------ */
-
-  /** False when an edit could not be applied end-to-end; the reason says why. */
-  editingEnabled: boolean;
-  editingDisabledReason: string;
-
-  /** The host's current text — may be ahead of `graph.source.content`. */
-  source: string;
-  /** True when the editor holds text the graph was not built from (06 §5). */
-  sourceDirty: boolean;
-
-  /** Apply one edit (06 §4). Never throws: refusals come back as `ok: false`. */
-  patchNode: (nodeId: string, changes: Record<string, unknown>) => Promise<PatchOutcome>;
-  /** The same patch computed but not committed — "preview diff before apply" (07 §5). */
-  previewPatch: (nodeId: string, changes: Record<string, unknown>) => PreviewOutcome;
-
-  lastPatch: PatchSuccess | null;
-  patchError: PatchFailure | null;
-  clearPatchError: () => void;
-  /** Nodes the last patch added or updated — highlighted on the canvas. */
-  changedNodeIds: Set<string>;
-
-  /** Ask the host to re-analyze its current source (offered after a conflict). */
-  requestReanalyze: () => void;
-  canReanalyze: boolean;
-}
-
-export const EDITING_DISABLED_REASON =
-  "Editing needs a CodeFlowSession and an `onPatched` handler on <CodeFlowProvider> (06 §4).";
-
-const CodeFlowContext = createContext<CodeFlowContextValue | null>(null);
 
 export interface CodeFlowProviderProps {
   /** The graph to display. Falls back to `session.getGraph()` when omitted. */
@@ -383,25 +304,4 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
   );
 
   return <CodeFlowContext.Provider value={value}>{props.children}</CodeFlowContext.Provider>;
-}
-
-export function useCodeFlow(): CodeFlowContextValue {
-  const value = useContext(CodeFlowContext);
-  if (value === null) throw new Error("useCodeFlow must be used inside <CodeFlowProvider>");
-  return value;
-}
-
-/** Like `useCodeFlow`, but `null` outside a provider — for optional chrome. */
-export function useOptionalCodeFlow(): CodeFlowContextValue | null {
-  return useContext(CodeFlowContext);
-}
-
-export function useSelectedNode(): WorkflowNode | null {
-  return useCodeFlow().selectedNode;
-}
-
-export function useNodeDiagnostics(nodeId: string | null): Diagnostic[] {
-  const { nodeDiagnostics } = useCodeFlow();
-  if (nodeId === null) return [];
-  return nodeDiagnostics.get(nodeId) ?? [];
 }

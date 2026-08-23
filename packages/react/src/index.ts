@@ -16,22 +16,22 @@
  *   import "@codeflow/react/styles.css";
  */
 
+export { CodeFlowProvider } from "./context/provider.js";
+export type { CodeFlowProviderProps } from "./context/provider.js";
 export {
-  CodeFlowProvider,
   useCodeFlow,
   useOptionalCodeFlow,
   useSelectedNode,
   useNodeDiagnostics,
-  EDITING_DISABLED_REASON,
-} from "./context/provider.js";
+} from "./context/hooks.js";
+export { EDITING_DISABLED_REASON } from "./context/types.js";
 export type {
   CodeFlowContextValue,
-  CodeFlowProviderProps,
   PatchFailure,
   PatchSuccess,
   PatchOutcome,
   PreviewOutcome,
-} from "./context/provider.js";
+} from "./context/types.js";
 
 export { WorkflowCanvas } from "./canvas/WorkflowCanvas.js";
 export type { WorkflowCanvasProps } from "./canvas/WorkflowCanvas.js";

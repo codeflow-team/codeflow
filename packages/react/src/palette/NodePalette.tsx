@@ -15,7 +15,7 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { useCodeFlow } from "../context/provider.js";
+import { useCodeFlow } from "../context/hooks.js";
 import { CONTAINER_NODE_TYPES } from "../graph/index.js";
 
 export type InsertPlacement = "before" | "after" | "into" | "end";

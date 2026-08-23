@@ -17,6 +17,25 @@ export interface GenerateToolsDtsOptions {
   namespaces?: string[];
   /** Interface name; defaults to `Tools`, the name the flow contract uses. */
   interfaceName?: string;
+  /**
+   * Also document each **argument** of a tool, as `@param` lines under the
+   * tool's own description.
+   *
+   * The signature already carries every argument's name, type and optionality,
+   * so this looks redundant — and for a human reading the file it nearly is.
+   * For an AI writing against it, it is not. `sequentialthinking` publishes
+   * `nextThoughtNeeded?: boolean` with the description "Whether another thought
+   * step is needed"; the type alone says "you may leave this out", the
+   * description says what leaving it out means. The generate-and-run eval
+   * caught a model omitting exactly that field, writing a flow that reached L2
+   * and then died on the first call
+   * (`packages/core/test/ai/results/generate-and-run-summary*.md`).
+   *
+   * Off by default: descriptions are server-authored prose and can be long, so
+   * this trades context tokens for argument accuracy, and 10 §4 leaves that
+   * trade to the caller.
+   */
+  parameterDocs?: boolean;
 }
 
 interface Namespace {
@@ -76,21 +95,67 @@ function insert(root: Namespace, tool: RegisteredTool): void {
   current.tools.set(method, tool);
 }
 
+/**
+ * `@param` lines for the arguments that carry a description of their own.
+ *
+ * Only the **top level** of the input schema, and only properties whose
+ * description says something: nesting the whole schema back into prose would
+ * cost more tokens than the schema it duplicates, and a `@param` that repeats
+ * the property name adds nothing the signature did not already say.
+ *
+ * Optionality is restated in words (`(optional)`) rather than left to the `?`
+ * in the signature, because the observed failure was precisely a model reading
+ * `?` as "ignore me".
+ */
+function parameterDocLines(tool: RegisteredTool): string[] {
+  const schema = tool.inputSchema as Record<string, unknown> | undefined;
+  if (schema === undefined || typeof schema !== "object") return [];
+  const properties = schema["properties"];
+  if (typeof properties !== "object" || properties === null) return [];
+  const required = Array.isArray(schema["required"])
+    ? new Set((schema["required"] as unknown[]).map((name) => String(name)))
+    : new Set<string>();
+
+  const lines: string[] = [];
+  for (const [name, value] of Object.entries(properties as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) continue;
+    const description = (value as Record<string, unknown>)["description"];
+    if (typeof description !== "string" || description.trim().length === 0) continue;
+    const optional = required.has(name) ? "" : " (optional)";
+    lines.push(`@param ${name}${optional} — ${description.trim().replace(/\s+/g, " ")}`);
+  }
+  return lines;
+}
+
 function signature(name: string, tool: RegisteredTool): string {
   const input = schemaToTs(tool.inputSchema);
-  const output = tool.outputSchema === undefined ? "void" : schemaToTs(tool.outputSchema);
+  // No declared output schema means "we were not told", not "there is no result".
+  // `void` was a lie a live run exposed: an MCP tool that declares no output still
+  // answers with one, and code written against `void` either drops the value or
+  // prints a wrong number for it. `unknown` says what is true — something comes
+  // back and the caller has to establish what it is.
+  const output = tool.outputSchema === undefined ? "unknown" : schemaToTs(tool.outputSchema);
   return `${name}(input: ${input}): Promise<${output}>;`;
 }
 
-function emit(ns: Namespace, indent: string): string[] {
+function emit(ns: Namespace, indent: string, parameterDocs: boolean): string[] {
   const lines: string[] = [];
   for (const [name, child] of [...ns.namespaces.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) {
     lines.push(`${indent}${name}: {`);
-    lines.push(...emit(child, `${indent}  `));
+    lines.push(...emit(child, `${indent}  `, parameterDocs));
     lines.push(`${indent}};`);
   }
   for (const [name, tool] of [...ns.tools.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) {
-    lines.push(...jsDoc(tool.description ?? tool.label, indent));
+    const params = parameterDocs ? parameterDocLines(tool) : [];
+    const description = tool.description ?? tool.label;
+    lines.push(
+      ...jsDoc(
+        params.length === 0
+          ? description
+          : [description ?? "", "", ...params].join("\n").replace(/^\n+/, ""),
+        indent,
+      ),
+    );
     lines.push(`${indent}${signature(name, tool)}`);
   }
   return lines;
@@ -109,7 +174,7 @@ export function generateToolsDts(
   const root = emptyNamespace();
   for (const tool of tools) insert(root, tool);
 
-  const body = emit(root, "  ");
+  const body = emit(root, "  ", options.parameterDocs === true);
   const declaration =
     body.length === 0
       ? [`export interface ${interfaceName} {}`]

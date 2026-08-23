@@ -27,6 +27,12 @@ export interface BuildGenerationContextOptions {
   includeExamples?: boolean;
   /** Set when the AI is editing an existing flow rather than creating one. */
   existingSource?: string;
+  /**
+   * Document each argument of a tool, not just the tool — see
+   * `GenerateToolsDtsOptions.parameterDocs`. Off by default: it buys accuracy
+   * with tokens, and 10 §4 says the caller owns that trade.
+   */
+  parameterDocs?: boolean;
 }
 
 /** Conformance level of AI output — 10 §5. */

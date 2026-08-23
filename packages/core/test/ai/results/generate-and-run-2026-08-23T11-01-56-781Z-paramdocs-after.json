@@ -1,0 +1,588 @@
+{
+  "kind": "generate-and-run",
+  "evalVersion": 1,
+  "model": "stealth/ox-alpha",
+  "maxTokens": 32000,
+  "runtimeRetries": 0,
+  "includeExamples": true,
+  "parameterDocs": true,
+  "ranAt": "2026-08-23T11:01:56.782Z",
+  "rates": {
+    "total": 3,
+    "l2First": 3,
+    "ranFirst": 1,
+    "l2ButNotRunnable": 2,
+    "l2ButNotRunnableRate": 0.6666666666666666,
+    "fixedByRuntimeFeedback": 0,
+    "neverRan": 2
+  },
+  "errorClassesFirstAttempt": {
+    "no-effect": 2,
+    "none": 1
+  },
+  "errorClassesAllAttempts": {
+    "no-effect": 2,
+    "none": 1
+  },
+  "stepProgress": {
+    "attempted": 3,
+    "meanRatio": 0.949667616334283
+  },
+  "results": [
+    {
+      "intent": "parallel-audit",
+      "repetition": 1,
+      "parameterDocs": true,
+      "toolCount": 37,
+      "systemPromptTokens": 6175,
+      "targetLines": 110,
+      "covers": [
+        "parallel",
+        "loop",
+        "condition",
+        "function",
+        "try"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\ntype Grade = \"large\" | \"documented\" | \"plain\";\n\ninterface ModuleRecord {\n  path: string;\n  grade: Grade;\n}\n\nfunction parsePaths(content: string): string[] {\n  return content\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0);\n}\n\nfunction countNonEmptyLines(text: string): number {\n  return text.split(\"\\n\").filter((line) => line.trim().length > 0).length;\n}\n\nfunction capModules(paths: string[], max: number): string[] {\n  return paths.slice(0, max);\n}\n\nfunction parseSizeBytes(info: string): number {\n  const labelled = info.match(/size[\"']?\\s*[:=]\\s*(\\d+)/i);\n  if (labelled !== null) {\n    return Number(labelled[1]);\n  }\n  const bytes = info.match(/(\\d+)\\s*bytes?\\b/i);\n  if (bytes !== null) {\n    return Number(bytes[1]);\n  }\n  const first = info.match(/\\d+/);\n  return first === null ? 0 : Number(first[0]);\n}\n\nfunction gradeModule(sizeBytes: number, text: string): Grade {\n  if (sizeBytes > 200) {\n    return \"large\";\n  }\n  if (text.includes(\"/**\")) {\n    return \"documented\";\n  }\n  return \"plain\";\n}\n\nfunction recordModule(records: ModuleRecord[], path: string, grade: Grade): void {\n  records.push({ path, grade });\n}\n\nfunction recordFailure(failures: string[], path: string, error: unknown): void {\n  failures.push(`${path}: ${String(error)}`);\n}\n\nfunction renderAudit(\n  records: ModuleRecord[],\n  failures: string[],\n  thoughtCount: number\n): string {\n  const moduleLines = records.map((record) => `- ${record.path}: ${record.grade}`);\n  const failureLines = failures.map((failure) => `- ${failure}`);\n  return [\n    \"# Repository Audit\",\n    \"\",\n    \"## modules\",\n    \"\",\n    ...(moduleLines.length > 0 ? moduleLines : [\"- (no modules graded)\"]),\n    \"\",\n    \"## unreadable\",\n    \"\",\n    ...(failureLines.length > 0 ? failureLines : [\"- (none)\"]),\n    \"\",\n    \"## reasoning\",\n    \"\",\n    `Sequential reasoning ran for this audit: ${thoughtCount} thoughts recorded, numbered 1 through ${thoughtCount} of 3. After the third thought, the reasoning tool was told no further thought was needed.`,\n    \"\"\n  ].join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  // Step 1: gather the three inventory views at the same time.\n  const [listing, tree, allowedDirs] = await Promise.all([\n    tools.fs.listDirectoryWithSizes({ path: input.root }),\n    tools.fs.directoryTree({ path: input.root }),\n    tools.fs.listAllowedDirectories({})\n  ]);\n\n  // Step 2: find the TypeScript modules and cap the workload.\n  const search = await tools.fs.searchFiles({ path: input.root, pattern: \"*.ts\" });\n  const allMatches = parsePaths(search.content);\n  const modulePaths = capModules(allMatches, input.maxModules);\n\n  const topLevelEntries = countNonEmptyLines(listing.content);\n  const allowedRoots = parsePaths(allowedDirs.content);\n\n  const moduleRecords: ModuleRecord[] = [];\n  const failures: string[] = [];\n  const gradeCounts: Record<Grade, number> = { large: 0, documented: 0, plain: 0 };\n\n  // Step 3: fetch metadata, then read, then grade each module.\n  for (const modulePath of modulePaths) {\n    try {\n      const info = await tools.fs.getFileInfo({ path: modulePath });\n      const sizeBytes = parseSizeBytes(info.content);\n      const source = await tools.fs.readTextFile({ path: modulePath });\n      const grade = gradeModule(sizeBytes, source.content);\n      recordModule(moduleRecords, modulePath, grade);\n      gradeCounts[grade] += 1;\n    } catch (error) {\n      recordFailure(failures, modulePath, error);\n    }\n  }\n\n  // Step 4: think the audit through in exactly three sequential thoughts.\n  const thought1 = await tools.reasoning.sequentialThinking({\n    thought: `Audit thought 1 of 3 — inventory: ${topLevelEntries} top-level entries under ${input.root}, ${allowedRoots.length} allowed root(s) reported by the server, recursive tree captured. Searched for *.ts and capped at ${input.maxModules} module(s): ${moduleRecords.length} graded, ${failures.length} unreadable.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 1,\n    totalThoughts: 3\n  });\n\n  const thought2 = await tools.reasoning.sequentialThinking({\n    thought: `Audit thought 2 of 3 — grading: ${gradeCounts.large} large (over 200 bytes), ${gradeCounts.documented} documented (text contains /**), ${gradeCounts.plain} plain. Modules graded plain or large without a JSDoc header are the documentation gaps for the release checklist.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 2,\n    totalThoughts: 3\n  });\n\n  const thought3 = await tools.reasoning.sequentialThinking({\n    thought: `Audit thought 3 of 3 — conclusion: ${moduleRecords.length} module(s) audited with ${failures.length} read failure(s) recorded and skipped. Next: write audit.md with the per-module grades and this reasoning trail, then report the counts per grade.`,\n    nextThoughtNeeded: false,\n    thoughtNumber: 3,\n    totalThoughts: 3\n  });\n\n  const thoughts = [thought1, thought2, thought3];\n\n  // Step 5: write the audit report next to the sources.\n  const report = renderAudit(moduleRecords, failures, thoughts.length);\n  await tools.fs.writeFile({\n    path: `${input.root}/audit.md`,\n    content: report\n  });\n\n  // Step 6: report the outcome.\n  return {\n    large: gradeCounts.large,\n    documented: gradeCounts.documented,\n    plain: gradeCounts.plain,\n    thoughtsRecorded: thoughts.length\n  };\n}\n",
+          "lines": 156,
+          "level": "L2",
+          "validateRounds": 2,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 100,
+                  "column": 3,
+                  "offset": 2882
+                },
+                "end": {
+                  "line": 102,
+                  "column": 84,
+                  "offset": 3040
+                },
+                "semanticPath": "flow/stmt[6..8]",
+                "fingerprint": "9e4c5992649605eae6a14eb5b844df6f1a1a50ca89c3daf768305484af12170f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 112,
+                  "column": 7,
+                  "offset": 3473
+                },
+                "end": {
+                  "line": 112,
+                  "column": 31,
+                  "offset": 3497
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[5]",
+                "fingerprint": "fe0375c7a354d67f60221b2d88edd411ed339dc83d4372fd425277976778c699"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 140,
+                  "column": 3,
+                  "offset": 4953
+                },
+                "end": {
+                  "line": 140,
+                  "column": 51,
+                  "offset": 5001
+                },
+                "semanticPath": "flow/stmt[13]",
+                "fingerprint": "4448c75e1c1c84666e362837baefcbb4d9128268aeddce7e92fc478ddebe4b91"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 28,
+            "edges": 69,
+            "nodeTypes": {
+              "trigger": 1,
+              "parallel": 1,
+              "tool": 10,
+              "merge": 1,
+              "function": 9,
+              "code": 3,
+              "loop": 1,
+              "try": 1,
+              "output": 1
+            },
+            "codeNodes": 3,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8928571428571429,
+            "toolCalls": 10
+          },
+          "covered": [
+            "function",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [
+            "condition"
+          ],
+          "run": {
+            "status": "ok",
+            "ms": 4036,
+            "stepsRun": 25,
+            "stepsTotal": 26,
+            "mcpCalls": 14,
+            "mcpCallsOk": 14,
+            "stubCalls": 0,
+            "toolsCalled": [
+              "fs.directoryTree",
+              "fs.getFileInfo",
+              "fs.listAllowedDirectories",
+              "fs.listDirectoryWithSizes",
+              "fs.readTextFile",
+              "fs.searchFiles",
+              "fs.writeFile",
+              "reasoning.sequentialThinking"
+            ],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "large": 0,
+              "documented": 0,
+              "plain": 3,
+              "thoughtsRecorded": 3
+            },
+            "workspace": "/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-OqSsIo/workspace",
+            "input": {
+              "root": "/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-OqSsIo/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file audit.md",
+                  "ok": false,
+                  "detail": "written (566 bytes) but does not mention: orders.ts"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "audit.md",
+                  "bytes": 566
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "audit.md",
+                  "bytes": 566,
+                  "head": "# Repository Audit\n\n## modules\n\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-OqSsIo/workspace/index.ts: plain\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-OqSsIo/workspace/money.ts: plain\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-OqSsIo/workspace/orders.test.ts: plain\n\n## unreadable\n\n- (none)\n\n## reasoning\n\nSequent"
+                }
+              ]
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "file audit.md: written (566 bytes) but does not mention: orders.ts",
+          "modelMs": 288191,
+          "usage": {
+            "promptTokens": 7861,
+            "completionTokens": 1750,
+            "totalTokens": 9611
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": false,
+      "finalLevel": "L2",
+      "finalRunPassed": false,
+      "staticRetries": 1,
+      "runtimeRetries": 0,
+      "totalMs": 292319
+    },
+    {
+      "intent": "parallel-audit",
+      "repetition": 2,
+      "parameterDocs": true,
+      "toolCount": 37,
+      "systemPromptTokens": 6175,
+      "targetLines": 110,
+      "covers": [
+        "parallel",
+        "loop",
+        "condition",
+        "function",
+        "try"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\ntype ModuleGrade = \"large\" | \"documented\" | \"plain\";\n\ninterface GradedModule {\n  path: string;\n  grade: ModuleGrade;\n}\n\n/** Turns the raw searchFiles output into absolute module paths. */\nfunction parseModulePaths(content: string): string[] {\n  const trimmed = content.trim();\n  if (trimmed.startsWith(\"[\")) {\n    try {\n      const parsed: unknown = JSON.parse(trimmed);\n      if (Array.isArray(parsed)) {\n        return parsed.filter(\n          (entry): entry is string => typeof entry === \"string\" && entry.endsWith(\".ts\")\n        );\n      }\n    } catch {\n      // Not JSON — fall through to line parsing below.\n    }\n  }\n  return trimmed\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0)\n    .filter((line) => !/^\\d+\\s+matches?:/i.test(line))\n    .map((line) => line.replace(/^\\[(FILE|DIR)\\]\\s*/i, \"\"))\n    .filter((line) => line.endsWith(\".ts\"));\n}\n\n/** Pulls the byte size out of getFileInfo's textual report. */\nfunction parseSizeBytes(info: string): number {\n  const bytesMatch = info.match(/([\\d,]+)\\s*bytes/i);\n  if (bytesMatch !== null) {\n    return Number(bytesMatch[1].replace(/,/g, \"\"));\n  }\n  const anyNumber = info.match(/\\d+/);\n  return anyNumber === null ? 0 : Number(anyNumber[0]);\n}\n\n/** Grades one module: large over 200 bytes, else documented when it carries JSDoc, else plain. */\nfunction gradeModule(sizeBytes: number, text: string): ModuleGrade {\n  if (sizeBytes > 200) {\n    return \"large\";\n  }\n  if (text.includes(\"/**\")) {\n    return \"documented\";\n  }\n  return \"plain\";\n}\n\nfunction recordGrade(grades: GradedModule[], path: string, grade: ModuleGrade) {\n  grades.push({ path, grade });\n}\n\nfunction recordFailure(failures: string[], path: string, error: unknown) {\n  failures.push(`${path}: ${String(error)}`);\n}\n\nfunction countByGrade(grades: GradedModule[]): Record<ModuleGrade, number> {\n  const counts: Record<ModuleGrade, number> = { large: 0, documented: 0, plain: 0 };\n  for (const entry of grades) {\n    counts[entry.grade] += 1;\n  }\n  return counts;\n}\n\nfunction excerpt(text: string, maxLines: number): string {\n  return text.split(\"\\n\").slice(0, maxLines).join(\"\\n\");\n}\n\nfunction buildAuditReport(\n  root: string,\n  grades: GradedModule[],\n  failures: string[],\n  sizedListing: string,\n  tree: string,\n  allowedDirectories: string\n): string {\n  const lines: string[] = [\"# Repository audit\", \"\", `Root: ${root}`, \"\"];\n  lines.push(\n    \"## scope\",\n    \"\",\n    \"Allowed directories:\",\n    \"```\",\n    excerpt(allowedDirectories, 5),\n    \"```\",\n    \"\",\n    \"Top of the directory tree:\",\n    \"```\",\n    excerpt(tree, 12),\n    \"```\",\n    \"\"\n  );\n  lines.push(\"## modules\", \"\");\n  for (const entry of grades) {\n    lines.push(`- ${entry.path}: ${entry.grade}`);\n  }\n  if (failures.length > 0) {\n    lines.push(\"\", \"## unreadable modules\", \"\");\n    for (const failure of failures) {\n      lines.push(`- ${failure}`);\n    }\n  }\n  lines.push(\n    \"\",\n    \"## reasoning\",\n    \"\",\n    \"Three sequential thoughts were taken (1 of 3, 2 of 3, 3 of 3); after the third no further thought was needed.\"\n  );\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const [sizedListing, tree, allowedDirectories] = await Promise.all([\n    tools.fs.listDirectoryWithSizes({ path: input.root }),\n    tools.fs.directoryTree({ path: input.root }),\n    tools.fs.listAllowedDirectories({}),\n  ]);\n\n  const searchResult = await tools.fs.searchFiles({ path: input.root, pattern: \"*.ts\" });\n  const modulePaths = parseModulePaths(searchResult.content);\n\n  const grades: GradedModule[] = [];\n  const failures: string[] = [];\n  let processed = 0;\n\n  for (const modulePath of modulePaths) {\n    if (processed >= input.maxModules) {\n      break;\n    }\n    processed += 1;\n    try {\n      const info = await tools.fs.getFileInfo({ path: modulePath });\n      const source = await tools.fs.readTextFile({ path: modulePath });\n      const sizeBytes = parseSizeBytes(info.content);\n      const grade = gradeModule(sizeBytes, source.content);\n      recordGrade(grades, modulePath, grade);\n    } catch (error) {\n      recordFailure(failures, modulePath, error);\n    }\n  }\n\n  const counts = countByGrade(grades);\n\n  const thoughtOne = await tools.reasoning.sequentialThinking({\n    thought: `Inventory: gathered the sized listing, the recursive tree and the allow-list for ${input.root}; found ${modulePaths.length} TypeScript modules and graded ${grades.length} of them within the limit of ${input.maxModules}.`,\n    thoughtNumber: 1,\n    totalThoughts: 3,\n    nextThoughtNeeded: true,\n  });\n  const thoughtTwo = await tools.reasoning.sequentialThinking({\n    thought: `Grading: ${counts.large} large (over 200 bytes), ${counts.documented} documented (contain /**), ${counts.plain} plain; ${failures.length} module(s) could not be read and were skipped.`,\n    thoughtNumber: 2,\n    totalThoughts: 3,\n    nextThoughtNeeded: true,\n  });\n  const thoughtThree = await tools.reasoning.sequentialThinking({\n    thought: `Conclusion: the audit covers ${grades.length} modules with ${failures.length} unreadable; writing audit.md with the per-module grades and this reasoning record.`,\n    thoughtNumber: 3,\n    totalThoughts: 3,\n    nextThoughtNeeded: false,\n  });\n  const thoughts = [thoughtOne, thoughtTwo, thoughtThree];\n\n  const report = buildAuditReport(\n    input.root,\n    grades,\n    failures,\n    sizedListing.content,\n    tree.content,\n    allowedDirectories.content\n  );\n  await tools.fs.writeFile({ path: `${input.root}/audit.md`, content: report });\n\n  return {\n    counts,\n    thoughtsRecorded: thoughts.length,\n    failures,\n  };\n}\n",
+          "lines": 187,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 130,
+                  "column": 3,
+                  "offset": 3630
+                },
+                "end": {
+                  "line": 132,
+                  "column": 21,
+                  "offset": 3718
+                },
+                "semanticPath": "flow/stmt[3..5]",
+                "fingerprint": "6eb36de99968c1342d4e2bfa4dfc9084320c2b84867b93e3a5fec2d24a7a6596"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 138,
+                  "column": 5,
+                  "offset": 3826
+                },
+                "end": {
+                  "line": 138,
+                  "column": 20,
+                  "offset": 3841
+                },
+                "semanticPath": "flow/for[0]/stmt[1]",
+                "fingerprint": "42b4fbc273d67997faf65df9fc1d76ca812f811ebb6975ad5c72bb2d16840a78"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 170,
+                  "column": 3,
+                  "offset": 5323
+                },
+                "end": {
+                  "line": 170,
+                  "column": 59,
+                  "offset": 5379
+                },
+                "semanticPath": "flow/stmt[11]",
+                "fingerprint": "e1b7a71ba8c8e0a57974f9191a2b0283f33a247d851c4dc4892c9e87ab19e818"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 29,
+            "edges": 71,
+            "nodeTypes": {
+              "trigger": 1,
+              "parallel": 1,
+              "tool": 10,
+              "merge": 2,
+              "function": 7,
+              "code": 3,
+              "loop": 1,
+              "condition": 1,
+              "jump": 1,
+              "try": 1,
+              "output": 1
+            },
+            "codeNodes": 3,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.896551724137931,
+            "toolCalls": 10
+          },
+          "covered": [
+            "condition",
+            "function",
+            "jump",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 3796,
+            "stepsRun": 25,
+            "stepsTotal": 26,
+            "mcpCalls": 14,
+            "mcpCallsOk": 14,
+            "stubCalls": 0,
+            "toolsCalled": [
+              "fs.directoryTree",
+              "fs.getFileInfo",
+              "fs.listAllowedDirectories",
+              "fs.listDirectoryWithSizes",
+              "fs.readTextFile",
+              "fs.searchFiles",
+              "fs.writeFile",
+              "reasoning.sequentialThinking"
+            ],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "counts": {
+                "large": 0,
+                "documented": 0,
+                "plain": 3
+              },
+              "thoughtsRecorded": 3,
+              "failures": []
+            },
+            "workspace": "/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-hNqyiQ/workspace",
+            "input": {
+              "root": "/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-hNqyiQ/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file audit.md",
+                  "ok": false,
+                  "detail": "written (986 bytes) but does not mention: orders.ts"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "audit.md",
+                  "bytes": 986
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "audit.md",
+                  "bytes": 986,
+                  "head": "# Repository audit\n\nRoot: /var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-hNqyiQ/workspace\n\n## scope\n\nAllowed directories:\n```\nAllowed directories:\n/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-hNqyiQ/workspace\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-hNqyiQ/workspace\n```\n\nTop of the directory tree:\n```\n[\n  {\n    \"name\": \"CHANGELOG.md\",\n  "
+                }
+              ]
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "file audit.md: written (986 bytes) but does not mention: orders.ts",
+          "modelMs": 276004,
+          "usage": {
+            "promptTokens": 6393,
+            "completionTokens": 9245,
+            "totalTokens": 15638
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": false,
+      "finalLevel": "L2",
+      "finalRunPassed": false,
+      "staticRetries": 0,
+      "runtimeRetries": 0,
+      "totalMs": 279828
+    },
+    {
+      "intent": "parallel-audit",
+      "repetition": 3,
+      "parameterDocs": true,
+      "toolCount": 37,
+      "systemPromptTokens": 6175,
+      "targetLines": 110,
+      "covers": [
+        "parallel",
+        "loop",
+        "condition",
+        "function",
+        "try"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\ntype Grade = \"large\" | \"documented\" | \"plain\";\n\ninterface ModuleGrade {\n  path: string;\n  grade: Grade;\n}\n\ninterface SkippedModule {\n  path: string;\n  reason: string;\n}\n\nfunction parseModulePaths(listing: string): string[] {\n  return listing\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0);\n}\n\nfunction takeFirst(paths: string[], limit: number): string[] {\n  return paths.slice(0, Math.max(0, limit));\n}\n\nfunction countLines(text: string): number {\n  return text.split(\"\\n\").filter((line) => line.trim().length > 0).length;\n}\n\nfunction moduleSizeBytes(metadata: string, text: string): number {\n  const labeled = metadata.match(/size:\\s*(\\d+)/i);\n  if (labeled) {\n    return Number(labeled[1]);\n  }\n  const bytes = metadata.match(/(\\d+)\\s*bytes/i);\n  if (bytes) {\n    return Number(bytes[1]);\n  }\n  return text.length;\n}\n\nfunction gradeModule(sizeBytes: number, text: string): Grade {\n  if (sizeBytes > 200) {\n    return \"large\";\n  }\n  if (text.includes(\"/**\")) {\n    return \"documented\";\n  }\n  return \"plain\";\n}\n\nfunction recordGrade(grades: ModuleGrade[], path: string, grade: Grade) {\n  grades.push({ path, grade });\n}\n\nfunction recordSkipped(skipped: SkippedModule[], path: string, error: unknown) {\n  skipped.push({ path, reason: String(error) });\n}\n\nfunction countGrades(grades: ModuleGrade[]): Record<Grade, number> {\n  const counts: Record<Grade, number> = { large: 0, documented: 0, plain: 0 };\n  for (const entry of grades) {\n    counts[entry.grade] += 1;\n  }\n  return counts;\n}\n\nfunction summarizeGrades(grades: ModuleGrade[]): string {\n  const counts = countGrades(grades);\n  return `${counts.large} large, ${counts.documented} documented, ${counts.plain} plain`;\n}\n\nfunction renderAuditReport(\n  root: string,\n  tree: string,\n  grades: ModuleGrade[],\n  skipped: SkippedModule[],\n  thoughtCount: number\n): string {\n  const lines: string[] = [];\n  lines.push(\"# Repository audit\");\n  lines.push(\"\");\n  lines.push(`Root: ${root}`);\n  lines.push(\"\");\n  lines.push(\"## modules\");\n  lines.push(\"\");\n  for (const entry of grades) {\n    lines.push(`- ${entry.path}: ${entry.grade}`);\n  }\n  if (skipped.length > 0) {\n    lines.push(\"\");\n    lines.push(\"## skipped\");\n    lines.push(\"\");\n    for (const entry of skipped) {\n      lines.push(`- ${entry.path}: ${entry.reason}`);\n    }\n  }\n  lines.push(\"\");\n  lines.push(\"## layout\");\n  lines.push(\"\");\n  lines.push(tree.trim());\n  lines.push(\"\");\n  lines.push(\"## reasoning\");\n  lines.push(\"\");\n  lines.push(\n    `Sequential thinking: took ${thoughtCount} thoughts (numbered 1 to ${thoughtCount} out of 3); the final thought set nextThoughtNeeded to false.`\n  );\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const [sizedListing, tree, allowedDirs] = await Promise.all([\n    tools.fs.listDirectoryWithSizes({ path: input.root }),\n    tools.fs.directoryTree({ path: input.root }),\n    tools.fs.listAllowedDirectories({}),\n  ]);\n\n  const moduleMatches = await tools.fs.searchFiles({ path: input.root, pattern: \"*.ts\" });\n  const modules = parseModulePaths(moduleMatches.content);\n  const selectedModules = takeFirst(modules, input.maxModules);\n\n  const grades: ModuleGrade[] = [];\n  const skipped: SkippedModule[] = [];\n\n  for (const modulePath of selectedModules) {\n    try {\n      const info = await tools.fs.getFileInfo({ path: modulePath });\n      const source = await tools.fs.readTextFile({ path: modulePath });\n      const sizeBytes = moduleSizeBytes(info.content, source.content);\n      const grade = gradeModule(sizeBytes, source.content);\n      recordGrade(grades, modulePath, grade);\n    } catch (error) {\n      recordSkipped(skipped, modulePath, error);\n      continue;\n    }\n  }\n\n  const listingEntries = countLines(sizedListing.content);\n  const gradeSummary = summarizeGrades(grades);\n\n  const thought1 = await tools.reasoning.sequentialThinking({\n    thought: `Release-checklist audit of ${input.root}. Gathered in one parallel batch: the sized directory listing (${listingEntries} entries), the recursive tree, and the allowed directories (${allowedDirs.content}). The *.ts search matched ${modules.length} modules; auditing the first ${selectedModules.length} within the cap of ${input.maxModules}.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 1,\n    totalThoughts: 3,\n  });\n\n  const thought2 = await tools.reasoning.sequentialThinking({\n    thought: `Grades are in for ${grades.length} modules: ${gradeSummary}. ${skipped.length} module(s) could not be read and were recorded as skipped instead of aborting the audit.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 2,\n    totalThoughts: 3,\n  });\n\n  const thought3 = await tools.reasoning.sequentialThinking({\n    thought: `Verdict: ${gradeSummary} across the audited module surface, with ${skipped.length} skipped. Writing audit.md with every module grade and this three-thought reasoning trace completes the checklist; no further thought needed.`,\n    nextThoughtNeeded: false,\n    thoughtNumber: 3,\n    totalThoughts: 3,\n  });\n\n  const thoughts = [thought1, thought2, thought3];\n\n  const report = renderAuditReport(input.root, tree.content, grades, skipped, thoughts.length);\n  await tools.fs.writeFile({ path: `${input.root}/audit.md`, content: report });\n\n  const counts = countGrades(grades);\n  return {\n    large: counts.large,\n    documented: counts.documented,\n    plain: counts.plain,\n    skipped: skipped.length,\n    thoughtsRecorded: thoughts.length,\n  };\n}\n",
+          "lines": 178,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 125,
+                  "column": 3,
+                  "offset": 3273
+                },
+                "end": {
+                  "line": 126,
+                  "column": 39,
+                  "offset": 3345
+                },
+                "semanticPath": "flow/stmt[4..5]",
+                "fingerprint": "f250e0f54cc03ae621331b6c37fdf41c8518a03a464e899e2598863413f80a36"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 165,
+                  "column": 3,
+                  "offset": 5135
+                },
+                "end": {
+                  "line": 165,
+                  "column": 51,
+                  "offset": 5183
+                },
+                "semanticPath": "flow/stmt[12]",
+                "fingerprint": "4448c75e1c1c84666e362837baefcbb4d9128268aeddce7e92fc478ddebe4b91"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 29,
+            "edges": 75,
+            "nodeTypes": {
+              "trigger": 1,
+              "parallel": 1,
+              "tool": 10,
+              "merge": 1,
+              "function": 10,
+              "code": 2,
+              "loop": 1,
+              "try": 1,
+              "jump": 1,
+              "output": 1
+            },
+            "codeNodes": 2,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.9310344827586207,
+            "toolCalls": 10
+          },
+          "covered": [
+            "function",
+            "jump",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [
+            "condition"
+          ],
+          "run": {
+            "status": "ok",
+            "ms": 3715,
+            "stepsRun": 25,
+            "stepsTotal": 27,
+            "mcpCalls": 14,
+            "mcpCallsOk": 14,
+            "stubCalls": 0,
+            "toolsCalled": [
+              "fs.directoryTree",
+              "fs.getFileInfo",
+              "fs.listAllowedDirectories",
+              "fs.listDirectoryWithSizes",
+              "fs.readTextFile",
+              "fs.searchFiles",
+              "fs.writeFile",
+              "reasoning.sequentialThinking"
+            ],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "large": 0,
+              "documented": 0,
+              "plain": 3,
+              "skipped": 0,
+              "thoughtsRecorded": 3
+            },
+            "workspace": "/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-RbIYp7/workspace",
+            "input": {
+              "root": "/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-RbIYp7/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file audit.md",
+                  "ok": true,
+                  "detail": "1345 bytes"
+                }
+              ],
+              "ok": true,
+              "newFiles": [
+                {
+                  "path": "audit.md",
+                  "bytes": 1345
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "audit.md",
+                  "bytes": 1345,
+                  "head": "# Repository audit\n\nRoot: /var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-RbIYp7/workspace\n\n## modules\n\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-RbIYp7/workspace/index.ts: plain\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-RbIYp7/workspace/money.ts: plain\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-"
+                }
+              ]
+            },
+            "passed": true
+          },
+          "errorClass": "none",
+          "errorReason": "",
+          "modelMs": 256976,
+          "usage": {
+            "promptTokens": 6393,
+            "completionTokens": 9605,
+            "totalTokens": 15998
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": true,
+      "finalLevel": "L2",
+      "finalRunPassed": true,
+      "staticRetries": 0,
+      "runtimeRetries": 0,
+      "totalMs": 260722
+    }
+  ]
+}

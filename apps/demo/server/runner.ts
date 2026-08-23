@@ -20,7 +20,15 @@
  * throwaway directory. A production runtime must isolate properly (09 §1).
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -224,7 +232,11 @@ export function startRun(request: RunRequest, workerEntry: string, emit: (frame:
   let settle: () => void = () => undefined;
   const finished = new Promise<void>((resolve) => { settle = resolve; });
 
-  const scratch = mkdtempSync(join(tmpdir(), "codeflow-run-"));
+  // realpath, because on macOS `tmpdir()` is a symlink (/var → /private/var) and
+  // the filesystem MCP server answers with resolved paths. A flow that joins or
+  // strips its own root against what the server returns then builds a path that
+  // does not exist — a live run hit exactly that.
+  const scratch = realpathSync(mkdtempSync(join(tmpdir(), "codeflow-run-")));
   const workspace = join(scratch, "workspace");
   seedWorkspace(workspace);
 

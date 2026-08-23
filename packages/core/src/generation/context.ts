@@ -51,6 +51,7 @@ export function buildGenerationContext(
       path: TOOLS_DTS_PATH,
       content: generateToolsDts(registry, {
         ...(options.namespaces === undefined ? {} : { namespaces: options.namespaces }),
+        ...(options.parameterDocs === undefined ? {} : { parameterDocs: options.parameterDocs }),
       }),
     },
   ];

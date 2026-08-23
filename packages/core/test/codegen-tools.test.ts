@@ -38,17 +38,17 @@ export interface Tools {
   };
   slack: {
     /** Send a Slack message */
-    send(input: { channel: string; message: string }): Promise<void>;
+    send(input: { channel: string; message: string }): Promise<unknown>;
   };
 }
 `;
     expect(generateToolsDts(registry)).toBe(expected);
   });
 
-  it("emits Promise<void> when a tool declares no output schema", () => {
+  it("emits Promise<unknown> when a tool declares no output schema — not void, which a live run proved to be a lie", () => {
     const registry = createRegistry();
     registry.registerTool({ name: "slack.send", label: "Send a Slack message", inputSchema: {} });
-    expect(generateToolsDts(registry)).toContain("send(input: {}): Promise<void>;");
+    expect(generateToolsDts(registry)).toContain("send(input: {}): Promise<unknown>;");
   });
 
   it("falls back to the label when there is no description", () => {

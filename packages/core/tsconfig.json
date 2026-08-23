@@ -1,10 +1,24 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": ".",
+    // `..` rather than `.` so the stress suite can import `@codeflow/examples`
+    // from source (see `paths` below). This config only ever type-checks
+    // (`--noEmit`); `tsconfig.build.json` pins `rootDir` back to `src` for the
+    // emit, so the shape of `dist/` is unaffected.
+    "rootDir": "..",
     "outDir": "dist",
     "types": [],
-    "lib": ["ES2022"]
+    "lib": ["ES2022"],
+    // `packages/core/test/stress` analyzes the flows `@codeflow/examples`
+    // publishes. Core cannot *depend* on that package — examples depends on
+    // core, and a devDependency back would make the build graph cyclic — so the
+    // stress suite resolves it from source, exactly as `vitest.config.ts` does.
+    // Mapping `@codeflow/core` too keeps that resolution inside this checkout
+    // instead of reaching for a `dist/` that may not have been built yet.
+    "paths": {
+      "@codeflow/core": ["./src/index.ts"],
+      "@codeflow/examples": ["../examples/src/index.ts"]
+    }
   },
   "include": ["src", "test", "vitest.config.ts"],
   // Fixture flow sources are *input data* for the analyzer, not project code:

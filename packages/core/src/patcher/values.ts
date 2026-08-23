@@ -47,20 +47,64 @@ export type ResolvedValue =
   | { kind: "template"; text: string }
   | { kind: "remove" };
 
+function isLiteralValue(value: unknown): value is LiteralValue {
+  if (value === null) return true;
+  const type = typeof value;
+  return type === "string" || type === "number" || type === "boolean";
+}
+
+/**
+ * The **payload** is checked, not only the `kind`.
+ *
+ * Checking the kind alone let `{ kind: "expression", value: "…" }` — the right
+ * kind with the key of a *different* kind, and the most likely mistake a host
+ * or an AI makes against this encoding — through as valid. `renderValue` then
+ * had no `text` to return, produced `undefined`, and the patch engine wrote the
+ * four characters `undefined` over a value the user was looking at (or crashed
+ * with a `TypeError` further down, depending on which operation was running).
+ * Both outcomes are a patch that does something other than what the caller
+ * asked for, without saying so — the failure O2/I6 exist to prevent. A wrong
+ * payload is now a `patch-unsupported` refusal that names the key it wanted.
+ */
 export function isFieldValue(value: unknown): value is FieldValue {
   if (value === null) return true;
   const type = typeof value;
   if (type === "string" || type === "number" || type === "boolean") return true;
   if (type !== "object") return false;
-  const kind = (value as { kind?: unknown }).kind;
-  return kind === "literal" || kind === "expression" || kind === "template" || kind === "remove";
+  const record = value as Record<string, unknown>;
+  switch (record["kind"]) {
+    case "literal":
+      return "value" in record && isLiteralValue(record["value"]);
+    case "expression":
+    case "template":
+      return typeof record["text"] === "string";
+    case "remove":
+      return true;
+    default:
+      return false;
+  }
 }
+
+/** The payload key each kind requires — used to say what was missing. */
+const REQUIRED_PAYLOAD: Record<string, string> = {
+  literal: '`value` (a string, number, boolean or null)',
+  expression: "`text` (a TypeScript expression, as a string)",
+  template: "`text` (the template body, as a string)",
+};
 
 export function asFieldValue(field: string, value: unknown): FieldValue {
   if (!isFieldValue(value)) {
+    const kind =
+      typeof value === "object" && value !== null
+        ? (value as { kind?: unknown })["kind"]
+        : undefined;
+    const detail =
+      typeof kind === "string" && REQUIRED_PAYLOAD[kind] !== undefined
+        ? ` — { kind: "${kind}" } needs ${REQUIRED_PAYLOAD[kind]}`
+        : "";
     throw new CodeFlowError(
       "patch-unsupported",
-      `Value for "${field}" is not a supported field value — use a string/number/boolean/null, or { kind: "literal" | "expression" | "template" | "remove" } (06 §3).`,
+      `Value for "${field}" is not a supported field value${detail}. Use a string/number/boolean/null, or { kind: "literal", value } | { kind: "expression", text } | { kind: "template", text } | { kind: "remove" } (06 §3).`,
     );
   }
   return value;

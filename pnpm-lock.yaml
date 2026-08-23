@@ -26,6 +26,9 @@ importers:
       '@codeflow/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@codeflow/examples':
+        specifier: workspace:*
+        version: link:../../packages/examples
       '@codeflow/react':
         specifier: workspace:*
         version: link:../../packages/react
@@ -89,6 +92,22 @@ importers:
         specifier: ^24.0.0
         version: 24.0.0
     devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
+
+  packages/examples:
+    dependencies:
+      '@codeflow/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@codeflow/mcp':
+        specifier: workspace:*
+        version: link:../mcp
       typescript:
         specifier: ^5.7.2
         version: 5.9.3

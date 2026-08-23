@@ -1,0 +1,31 @@
+{
+  "name": "@codeflow/examples",
+  "version": "0.0.0",
+  "description": "CodeFlow example flows + the registries they run against — real MCP tool schemas, converted to ToolDefinitions at authoring time.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "embed": "node scripts/generate-tools.mjs && node scripts/embed-flows.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@codeflow/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@codeflow/mcp": "workspace:*",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

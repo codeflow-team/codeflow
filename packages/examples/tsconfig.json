@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": [],
+    "lib": ["ES2022"]
+  },
+  "include": ["src", "test", "vitest.config.ts"],
+  // `flows/` holds the flow sources themselves. They are *input data* for the
+  // analyzer, not project code: they import `../generated/tools` (an artifact
+  // produced per-registry at analyze time) and the degradation showcase
+  // deliberately calls a tool nobody registered. They are type-checked against
+  // their own generated `tools.d.ts` in `packages/core/test/stress`, which is
+  // the only check that means anything for them.
+  "exclude": ["flows/**"]
+}

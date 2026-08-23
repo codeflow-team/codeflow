@@ -34,19 +34,6 @@ const SEVERITY = {
   info: { Icon: Info, dot: "text-info", tint: "bg-info-soft" },
 } as const;
 
-/** Counts by severity — exported so chrome can badge a trigger with them. */
-export function useDiagnosticCounts(): { error: number; warning: number; info: number; total: number } {
-  const { graph } = useCodeFlow();
-  return useMemo(() => {
-    const out = { error: 0, warning: 0, info: 0, total: 0 };
-    for (const diagnostic of graph?.diagnostics ?? []) {
-      out[diagnostic.severity]++;
-      out.total++;
-    }
-    return out;
-  }, [graph]);
-}
-
 export function DiagnosticsPanel(props: DiagnosticsPanelProps): ReactNode {
   const { graph, index, selectNode, focusRange } = useCodeFlow();
 

@@ -4,23 +4,11 @@
  * set the attribute themselves and skip this component.
  */
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, type ReactNode } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "../ui/button.js";
 import { Hint } from "../ui/tooltip.js";
-
-export type CodeFlowTheme = "light" | "dark";
-
-export function applyTheme(theme: CodeFlowTheme, target?: HTMLElement): void {
-  const element = target ?? (typeof document === "undefined" ? null : document.documentElement);
-  element?.setAttribute("data-cf-theme", theme);
-}
-
-export function useTheme(initial: CodeFlowTheme = "light"): [CodeFlowTheme, (theme: CodeFlowTheme) => void] {
-  const [theme, setTheme] = useState<CodeFlowTheme>(initial);
-  useEffect(() => { applyTheme(theme); }, [theme]);
-  return [theme, setTheme];
-}
+import type { CodeFlowTheme } from "./theme.js";
 
 export function ThemeToggle({
   theme,

@@ -52,12 +52,14 @@ export type { NodePaletteProps, InsertPlacement } from "./palette/NodePalette.js
 export { CodeDiff } from "./diff/CodeDiff.js";
 export type { CodeDiffProps } from "./diff/CodeDiff.js";
 
-export { DiagnosticsPanel, useDiagnosticCounts } from "./diagnostics/DiagnosticsPanel.js";
+export { DiagnosticsPanel } from "./diagnostics/DiagnosticsPanel.js";
+export { useDiagnosticCounts } from "./diagnostics/use-diagnostic-counts.js";
 export type { DiagnosticsPanelProps } from "./diagnostics/DiagnosticsPanel.js";
 
 export { DisclosureToggle } from "./controls/DisclosureToggle.js";
-export { ThemeToggle, applyTheme, useTheme } from "./controls/ThemeToggle.js";
-export type { CodeFlowTheme } from "./controls/ThemeToggle.js";
+export { ThemeToggle } from "./controls/ThemeToggle.js";
+export { applyTheme, useTheme } from "./controls/theme.js";
+export type { CodeFlowTheme } from "./controls/theme.js";
 
 export { CodeFlowNode, CodeFlowContainerNode } from "./flow/nodes.js";
 
@@ -68,15 +70,18 @@ export { CodeFlowNode, CodeFlowContainerNode } from "./flow/nodes.js";
  */
 
 export { cn } from "./ui/cn.js";
-export { Button, buttonVariants } from "./ui/button.js";
+export { Button } from "./ui/button.js";
+export { buttonVariants } from "./ui/button-variants.js";
 export type { ButtonProps } from "./ui/button.js";
-export { Badge, Kbd, badgeVariants } from "./ui/badge.js";
+export { Badge, Kbd } from "./ui/badge.js";
+export { badgeVariants } from "./ui/badge-variants.js";
 export type { BadgeProps } from "./ui/badge.js";
 export { Field, FieldHint, FieldLabel, Input, Textarea } from "./ui/input.js";
 export type { InputProps, TextareaProps } from "./ui/input.js";
 export { Select } from "./ui/select.js";
 export type { SelectOption, SelectProps } from "./ui/select.js";
-export { Modal, Sheet, DialogPrimitive } from "./ui/dialog.js";
+export { Modal, Sheet } from "./ui/dialog.js";
+export { DialogPrimitive } from "./ui/dialog-primitive.js";
 export type { ModalProps, SheetProps } from "./ui/dialog.js";
 export { Popover } from "./ui/popover.js";
 export type { PopoverProps } from "./ui/popover.js";
@@ -86,12 +91,14 @@ export { Hint, TooltipProvider } from "./ui/tooltip.js";
 export type { HintProps } from "./ui/tooltip.js";
 export { Notice, EngineNotice } from "./ui/notice.js";
 export type { NoticeProps, NoticeTone } from "./ui/notice.js";
-export { ToastHost, useToast } from "./ui/toast.js";
+export { ToastHost } from "./ui/toast.js";
+export { useToast } from "./ui/use-toast.js";
 
 export { diagnosticHeadline, errorHeadline, nodeTypeName, splitSpecRefs } from "./copy.js";
 export type { SplitMessage } from "./copy.js";
 
-export { NodeGlyph, RegistryGlyph, nodeVisual, REGISTRY_ICONS } from "./flow/visual.js";
+export { NodeGlyph, RegistryGlyph } from "./flow/glyphs.js";
+export { nodeVisual, REGISTRY_ICONS } from "./flow/visual.js";
 export type { NodeVisual, NodeVisualType } from "./flow/visual.js";
 
 /* --- adapters and pure helpers (also the unit-test surface) --------------- */

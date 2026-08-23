@@ -22,6 +22,10 @@ export interface ModelAnswer {
 export interface AiStatus {
   configured: boolean;
   model: string;
+  /** The proxy forwards tokens as they are written (see `vite.config.ts`). */
+  streaming?: boolean;
+  /** Wall-clock ceiling the proxy enforces, in ms. */
+  timeoutMs?: number;
 }
 
 export async function fetchAiStatus(): Promise<AiStatus> {
@@ -36,14 +40,112 @@ export async function fetchAiStatus(): Promise<AiStatus> {
   }
 }
 
-export async function callModel(messages: ChatMessage[], signal?: AbortSignal): Promise<ModelAnswer> {
+export interface CallModelOptions {
+  signal?: AbortSignal;
+  /**
+   * Called with every fragment the model writes, in order.
+   *
+   * Progress that is actually progress: a reasoning model writing a 60-node
+   * flow takes minutes, and a spinner that says the same sentence for five of
+   * them is indistinguishable from a hang (QA BUG-7). The caller uses this to
+   * show the answer taking shape.
+   */
+  onDelta?: (delta: string, whole: string) => void;
+  /**
+   * Called with how much *reasoning* the model has produced so far.
+   *
+   * A reasoning model writes nothing for minutes and then the whole file at
+   * once; without this the progress line has nothing to report during the part
+   * of the wait that is longest.
+   */
+  onThinking?: (characters: number) => void;
+}
+
+/**
+ * One completion, streamed.
+ *
+ * The proxy answers `text/event-stream` with three frame shapes — `{start}`,
+ * `{delta}`, `{done}` — or `{error}` at any point. A non-streaming JSON body is
+ * still accepted, because a production build has no dev middleware behind this
+ * URL and the failure should read as "not configured", not as a parse error.
+ */
+export async function callModel(
+  messages: ChatMessage[],
+  options: CallModelOptions = {},
+): Promise<ModelAnswer> {
   const response = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
-    ...(signal === undefined ? {} : { signal }),
+    body: JSON.stringify({ messages, stream: true }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
 
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/event-stream") || response.body === null) {
+    return await readWholeBody(response);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+  let finishReason: string | null = null;
+  let model = "";
+  let ms = 0;
+  let done = false;
+
+  for (;;) {
+    const step = await reader.read();
+    if (step.done) break;
+    buffer += decoder.decode(step.value, { stream: true });
+
+    let cut = buffer.indexOf("\n\n");
+    while (cut !== -1) {
+      const frame = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      cut = buffer.indexOf("\n\n");
+
+      for (const line of frame.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const payload = JSON.parse(line.slice(5).trim()) as {
+          start?: boolean;
+          delta?: string;
+          thinking?: number;
+          done?: boolean;
+          error?: string;
+          finishReason?: string | null;
+          model?: string;
+          ms?: number;
+        };
+        if (payload.error !== undefined) throw new Error(payload.error);
+        if (payload.model !== undefined) model = payload.model;
+        if (payload.thinking !== undefined) options.onThinking?.(payload.thinking);
+        if (payload.delta !== undefined) {
+          content += payload.delta;
+          options.onDelta?.(payload.delta, content);
+        }
+        if (payload.done === true) {
+          done = true;
+          finishReason = payload.finishReason ?? null;
+          ms = payload.ms ?? 0;
+        }
+      }
+    }
+  }
+
+  if (!done && content.trim().length === 0) {
+    throw new Error("The connection to the model closed before it wrote anything.");
+  }
+  if (content.trim().length === 0) {
+    throw new Error(
+      `The model returned nothing (finish_reason=${String(finishReason ?? "?")}). This is what a reasoning model does when the token budget runs out.`,
+    );
+  }
+
+  return { content, finishReason, model, ms };
+}
+
+async function readWholeBody(response: Response): Promise<ModelAnswer> {
   const text = await response.text();
   let payload: { content?: string; finishReason?: string | null; model?: string; ms?: number; error?: string };
   try {
@@ -69,15 +171,50 @@ export async function callModel(messages: ChatMessage[], signal?: AbortSignal): 
   };
 }
 
+/** Where a flow file starts, when the model did not fence it. */
+const FILE_STARTS = /^\s*(?:import\b|export\b|\/\*\*|\/\/|type\b|interface\b|const\b|let\b|async\b|function\b|@)/;
+
 /**
- * Models wrap code in fences however they were asked not to; that is a prompt
- * artefact, not a conformance defect, so it is stripped before validation.
- * (Same rule as the conformance eval — 11 §3.6.)
+ * The file, and whatever the model wrote around it.
+ *
+ * QA BUG-13: the node-edit path returns a `why` sentence and the panel shows
+ * it, but the whole-flow path showed nothing except a level badge and a diff.
+ * When the model *refused* to invent a Jira tool and left a `// TODO` instead —
+ * exactly the behaviour worth seeing — the only way to find out was to read a
+ * three-hundred-line diff. So the panel now asks for one sentence in front of
+ * the file and shows it, and this function separates the two.
+ *
+ * Both shapes are handled, because the core prompt (10 §4) asks for a bare file
+ * and the panel asks for a fenced one: a fenced answer splits on the fence, an
+ * unfenced answer splits at the first line that can begin a TypeScript file.
+ * Anything before it is prose, never code, so nothing that belongs in the file
+ * can be lost this way.
  */
-export function extractFlowSource(content: string): string {
-  const fenced = /```(?:ts|typescript|javascript|js)?\s*\n([\s\S]*?)```/.exec(content);
-  const source = fenced === null ? content : (fenced[1] ?? "");
-  return `${source.trim()}\n`;
+export function splitAnswer(content: string): { source: string; prose: string | null } {
+  const fence = /```(?:ts|typescript|javascript|js)?\s*\n([\s\S]*?)```/.exec(content);
+  if (fence !== null) {
+    const before = content.slice(0, fence.index).trim();
+    const after = content.slice(fence.index + fence[0].length).trim();
+    return { source: `${(fence[1] ?? "").trim()}\n`, prose: tidyProse(`${before}\n\n${after}`) };
+  }
+
+  const lines = content.split("\n");
+  const start = lines.findIndex((line) => FILE_STARTS.test(line));
+  if (start > 0) {
+    return {
+      source: `${lines.slice(start).join("\n").trim()}\n`,
+      prose: tidyProse(lines.slice(0, start).join("\n")),
+    };
+  }
+  return { source: `${content.trim()}\n`, prose: null };
+}
+
+function tidyProse(text: string): string | null {
+  const prose = text
+    .replace(/^(?:here(?:'s| is)[^\n]*|the (?:complete|updated|full) file[^\n]*)$/gim, "")
+    .trim();
+  // A stray "Here is the file:" is noise; a real explanation is a sentence.
+  return prose.length < 12 ? null : prose.slice(0, 1200);
 }
 
 /** First JSON object in an answer, or null when there is none. */

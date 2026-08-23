@@ -70,6 +70,27 @@ function argumentsOf(node: WorkflowNode): Record<string, string> | null {
   return out;
 }
 
+/**
+ * Whether the schema says this property must be there.
+ *
+ * Only a JSON Schema can answer: it is the one shape that carries `required`.
+ * A named-fields map (a library function's parameters, 05 §4) and a bare type
+ * ref have no notion of optional, so every field they declare stays required —
+ * which is what a positional parameter list means anyway.
+ *
+ * Without this, an editable field that the call simply does not pass was
+ * labelled "needs a value" and "this has to be filled in before the flow can
+ * run" — said in red, about `head`/`tail` on `fs.readTextFile`, which are
+ * optional. Telling someone a working flow is broken is the same defect class
+ * as telling them a broken one is fine (07 §5).
+ */
+function isRequiredField(schema: Schema | undefined, name: string): boolean {
+  if (schema === undefined || typeof schema !== "object") return true;
+  const required = (schema as Record<string, unknown>)["required"];
+  if (!Array.isArray(required)) return true;
+  return required.includes(name);
+}
+
 function schemaField(schema: Schema | undefined, name: string): Schema | undefined {
   if (schema === undefined || typeof schema === "string") return undefined;
   const value = (schema as Record<string, unknown>)[name];
@@ -136,7 +157,7 @@ function callFields(node: WorkflowNode, registry: RegistryLookup | null): Inspec
       ...(schemaField(inputSchema, name) === undefined ? {} : { schema: schemaField(inputSchema, name) }),
       declaredEditable: editableFields === null ? args !== null : declared !== undefined,
       blockedReason: blocked,
-      missing: raw === null,
+      missing: raw === null && isRequiredField(inputSchema, name),
       patch: blocked === null ? "field" : null,
     };
   });

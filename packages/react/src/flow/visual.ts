@@ -12,9 +12,16 @@
  *    else — an emoji, a single letter — is rendered verbatim, because the core
  *    is deliberately tool-agnostic (00 §6.6b) and this layer must not decide
  *    what a host's tool looks like.
+ *
+ * **Data only, no JSX.** The two components that consume this table live in
+ * `glyphs.tsx`. React Fast Refresh can only take over a module whose every
+ * export is a component; a module that mixes `nodeVisual`/`REGISTRY_ICONS` with
+ * `<NodeGlyph>` is not a boundary, so every rebuild of it escalates to a full
+ * page reload — which in this app throws away the conversation, the flow being
+ * edited and any in-flight request. Same split, same reason, as
+ * `context/provider.tsx` → `context.ts`/`hooks.ts`/`types.ts`.
  */
 
-import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   Ban,
@@ -63,7 +70,6 @@ import {
   Zap,
 } from "lucide-react";
 import type { WorkflowNode } from "@codeflow/core";
-import { stringData } from "../graph/index.js";
 
 /** Node types this UI knows how to draw. */
 export type NodeVisualType =
@@ -162,46 +168,3 @@ export const REGISTRY_ICONS: Record<string, LucideIcon> = {
   wrench: Wrench,
   zap: Zap,
 };
-
-/**
- * The glyph for a node: the registry's icon when it names one this build knows,
- * a host-supplied glyph verbatim when it does not, and the node type's own icon
- * when the registry says nothing.
- */
-export function NodeGlyph({ node, className }: { node: WorkflowNode; className?: string }): ReactNode {
-  const registryIcon = stringData(node, "icon");
-  if (registryIcon !== null && registryIcon.length > 0) {
-    const Named = REGISTRY_ICONS[registryIcon];
-    if (Named !== undefined) return <Named className={className} aria-hidden="true" />;
-    return (
-      <span className="text-[13px] leading-none" aria-hidden="true">
-        {registryIcon}
-      </span>
-    );
-  }
-  const { Icon } = nodeVisual(node);
-  return <Icon className={className} aria-hidden="true" />;
-}
-
-/** Same resolution, for a registry entry that is not (yet) a node. */
-export function RegistryGlyph({
-  icon,
-  fallback,
-  className,
-}: {
-  icon: string | undefined;
-  fallback: LucideIcon;
-  className?: string;
-}): ReactNode {
-  if (icon !== undefined && icon.length > 0) {
-    const Named = REGISTRY_ICONS[icon];
-    if (Named !== undefined) return <Named className={className} aria-hidden="true" />;
-    return (
-      <span className="text-[13px] leading-none" aria-hidden="true">
-        {icon}
-      </span>
-    );
-  }
-  const Icon = fallback;
-  return <Icon className={className} aria-hidden="true" />;
-}

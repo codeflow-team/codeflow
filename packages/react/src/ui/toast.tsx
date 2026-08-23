@@ -11,8 +11,6 @@ import { Toast } from "@base-ui-components/react/toast";
 import { CircleCheck, Info, X } from "lucide-react";
 import { cn } from "./cn.js";
 
-export const useToast = Toast.useToastManager;
-
 export function ToastHost({ children }: { children: ReactNode }): ReactNode {
   return (
     <Toast.Provider timeout={3800} limit={3}>

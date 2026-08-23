@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode
 import { CornerDownLeft, LoaderCircle, Plus, Search, SquareFunction, Wrench } from "lucide-react";
 import { useCodeFlow } from "../context/hooks.js";
 import { CONTAINER_NODE_TYPES } from "../graph/index.js";
-import { RegistryGlyph } from "../flow/visual.js";
+import { RegistryGlyph } from "../flow/glyphs.js";
 import { errorHeadline, splitSpecRefs } from "../copy.js";
 import { cn } from "../ui/cn.js";
 import { Button } from "../ui/button.js";

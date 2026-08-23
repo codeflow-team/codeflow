@@ -16,7 +16,7 @@ import type { Diagnostic, WorkflowNode } from "@codeflow/core";
 import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
 import { useOptionalCodeFlow } from "../context/hooks.js";
 import { cn } from "../ui/cn.js";
-import { NodeGlyph } from "./visual.js";
+import { NodeGlyph } from "./glyphs.js";
 import { developerLines, nodeCaption, nodeSummaryRows } from "./summary.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
 

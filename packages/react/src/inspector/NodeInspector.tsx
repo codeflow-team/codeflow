@@ -33,7 +33,8 @@ import {
 import type { WorkflowNode } from "@codeflow/core";
 import { useCodeFlow } from "../context/hooks.js";
 import { nodeCaption } from "../flow/summary.js";
-import { NodeGlyph, nodeVisual } from "../flow/visual.js";
+import { NodeGlyph } from "../flow/glyphs.js";
+import { nodeVisual } from "../flow/visual.js";
 import { diagnosticHeadline, errorHeadline, splitSpecRefs } from "../copy.js";
 import { cn } from "../ui/cn.js";
 import { Button } from "../ui/button.js";

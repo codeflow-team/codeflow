@@ -67,15 +67,34 @@ import { OutlinePanel } from "./OutlinePanel.js";
 import { ChatPanel } from "./ChatPanel.js";
 import { rememberStats, statsFromGraph } from "./example-stats.js";
 import { fetchAiStatus, type AiStatus } from "./ai.js";
+import { withArgumentTypes } from "./argument-types.js";
+import { loadFlow, saveFlow } from "./persist.js";
 import { useMediaQuery } from "./use-media-query.js";
 
 const FIRST = EXAMPLES[0] as FlowExample;
 
+/**
+ * The flow this tab was last looking at.
+ *
+ * Read once, at module load, before anything renders: a reload — accidental,
+ * or the `full-reload` a broken Fast Refresh boundary used to cause — otherwise
+ * threw away a file the user had just spent minutes generating, with no save
+ * anywhere (QA BUG-1). Restoring it costs nothing and the diagram is redrawn
+ * from the restored text, so what comes back is a real flow, not a snapshot.
+ */
+const RESTORED = (() => {
+  const kept = loadFlow();
+  if (kept === null) return null;
+  const example = EXAMPLES.find((candidate) => candidate.id === kept.exampleId);
+  if (example === undefined) return null;
+  return { example, source: kept.source };
+})();
+
 export function App() {
   const toast = useToast();
 
-  const [example, setExample] = useState<FlowExample>(FIRST);
-  const [source, setSource] = useState(FIRST.source);
+  const [example, setExample] = useState<FlowExample>(RESTORED?.example ?? FIRST);
+  const [source, setSource] = useState(RESTORED?.source ?? FIRST.source);
   const [graph, setGraph] = useState<WorkflowGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState<number | null>(null);
@@ -102,7 +121,23 @@ export function App() {
    * one against the other would be nonsense. The registry comes from the
    * example, so switching also switches which tools exist.
    */
-  const session = useMemo(() => createCodeFlow({ registry: registryInstanceFor(example) }), [example]);
+  const registry = useMemo(() => registryInstanceFor(example), [example]);
+  const session = useMemo(() => createCodeFlow({ registry }), [registry]);
+
+  /**
+   * Every graph this app renders, plus the checks the browser can make.
+   *
+   * The analyzer parses and scopes; it does not type-check, and 07 §7 says so.
+   * That left one honest-looking lie on screen: a flow with `width: "extra-wide"`
+   * against a `number` schema drew fine, applied fine, and the issues button
+   * said **No issues** (QA BUG-3). A host that can check something the engine
+   * cannot is the right place to check it, so the finding is folded in here —
+   * once, on the single path every graph goes through.
+   */
+  const decorate = useCallback(
+    (next: WorkflowGraph): WorkflowGraph => withArgumentTypes(next, registry),
+    [registry],
+  );
 
   useEffect(() => {
     void fetchAiStatus().then(setAi);
@@ -154,7 +189,7 @@ export function App() {
       const started = performance.now();
       setAnalyzing(true);
       try {
-        const next = await session.analyze(text, { trigger: { kind: "webhook", label: "Trigger" } });
+        const next = decorate(await session.analyze(text, { trigger: { kind: "webhook", label: "Trigger" } }));
         const ms = Math.round(performance.now() - started);
         setGraph(next);
         setError(null);
@@ -171,7 +206,7 @@ export function App() {
         setAnalyzing(false);
       }
     },
-    [session],
+    [session, decorate],
   );
 
   // Only show the loading state if the wait is long enough to be one: a small
@@ -183,17 +218,31 @@ export function App() {
   }, [analyzing]);
 
   // Load whichever example is current — including the first one, so the app is
-  // useful on first paint.
+  // useful on first paint. On the very first pass this may be the restored text
+  // rather than the example's own; `rememberStats` is then skipped on purpose,
+  // so a gallery card keeps describing the example that shipped.
   const loadedRef = useRef<string | null>(null);
+  const bootRef = useRef(RESTORED);
   useEffect(() => {
     if (loadedRef.current === example.id) return;
     loadedRef.current = example.id;
-    setSource(example.source);
+    const boot = bootRef.current;
+    bootRef.current = null;
+    const restored = boot !== null && boot.example.id === example.id;
+    const text = restored ? boot.source : example.source;
+    setSource(text);
     setSelectedNodeId(null);
     setGraph(null);
     setElapsed(null);
-    void analyze(example.source, example.id);
+    void analyze(text, restored ? undefined : example.id);
   }, [example, analyze]);
+
+  // Keep the tab's own copy current. Debounced: this fires on every keystroke in
+  // Monaco, and serializing a 300-line file per character is not free.
+  useEffect(() => {
+    const timer = setTimeout(() => { saveFlow({ exampleId: example.id, source }); }, 400);
+    return () => { clearTimeout(timer); };
+  }, [example.id, source]);
 
   // Monaco edits: re-analyze once typing settles. No provenance on this path —
   // identity is resolved heuristically, exactly like an edit made outside the UI.
@@ -211,7 +260,7 @@ export function App() {
     (result: PatchResult) => {
       // One commit: the new source and the graph it was re-analyzed into.
       setSource(result.source);
-      setGraph(result.graph);
+      setGraph(decorate(result.graph));
       setError(null);
       const added = result.changes.some((change) => change.type === "node.added");
       // A refusal is never a toast (07 §5) — this only ever fires on success.
@@ -223,7 +272,7 @@ export function App() {
             : `${String(result.patches.length)} place${result.patches.length === 1 ? "" : "s"} in the code updated.`,
       });
     },
-    [toast],
+    [toast, decorate],
   );
 
   const applyGeneratedSource = useCallback(
@@ -245,7 +294,7 @@ export function App() {
       selectedNodeId={selectedNodeId}
       onSelectNode={setSelectedNodeId}
       onPatched={onPatched}
-      onGraphSync={setGraph}
+      onGraphSync={(next) => { setGraph(decorate(next)); }}
       onReanalyze={() => { void analyze(source); }}
       defaultMode="expanded"
     >

@@ -70,12 +70,27 @@ export function FlowAbout(props: FlowAboutProps): ReactNode {
     };
   }, [graph]);
 
+  // Once the AI (or Monaco) has rewritten the file, the example's own metadata
+  // describes a flow that is no longer on screen — QA found the header still
+  // claiming "17 lines" over a 60-line file, under a "what this one shows off"
+  // list about steps that had been replaced (BUG-14). The measured numbers are
+  // always right; the shipped prose is labelled for what it is.
+  const edited = useMemo(
+    () => graph !== null && graph.source.content.trim() !== props.example.source.trim(),
+    [graph, props.example.source],
+  );
+
   return (
     <aside className="cf-scroll flex h-full min-h-0 flex-col overflow-y-auto bg-surface font-sans" data-testid="flow-about">
       <header className="flex flex-col gap-2 px-4 pb-3 pt-4">
         <div className="flex items-center gap-2">
           <Badge tone="accent">{CATEGORY_LABEL[props.example.category]}</Badge>
-          <span className="text-[11px] text-ink-faint">{props.example.lines} lines</span>
+          <span className="text-[11px] text-ink-faint">{stats?.lines ?? props.example.lines} lines</span>
+          {edited ? (
+            <Badge tone="warn" title="The file on screen is no longer the example that shipped">
+              edited
+            </Badge>
+          ) : null}
           {props.elapsed === null ? null : (
             <span className="text-[11px] text-ink-faint">· read in {props.elapsed} ms</span>
           )}
@@ -90,8 +105,14 @@ export function FlowAbout(props: FlowAboutProps): ReactNode {
         <section className="border-t border-line px-4 py-3">
           <h3 className="m-0 flex items-center gap-1.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-ink-faint">
             <Sparkles className="size-3" />
-            What this one shows off
+            {edited ? "What the original showed off" : "What this one shows off"}
           </h3>
+          {edited ? (
+            <p className="m-0 pb-2 text-[11px] leading-snug text-ink-faint">
+              The file has been changed since it was opened, so this list describes the example as it
+              shipped — not what is on the canvas now.
+            </p>
+          ) : null}
           <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
             {props.example.highlights.map((highlight) => (
               <li key={highlight} className="flex items-start gap-2 text-[12px] leading-snug text-ink">

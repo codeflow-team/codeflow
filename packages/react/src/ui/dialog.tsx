@@ -125,4 +125,3 @@ export function Sheet(props: SheetProps): ReactNode {
   );
 }
 
-export { Dialog as DialogPrimitive };

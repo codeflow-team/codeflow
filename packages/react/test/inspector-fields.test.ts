@@ -100,6 +100,74 @@ describe("resolveInspectorFields", () => {
     expect(message?.raw).toBeNull();
   });
 
+  it("does not call an optional property that the call omits 'needing a value'", () => {
+    // Real shape, from the filesystem MCP server: `path` is required, `head`
+    // and `tail` are not. Marking an optional field red is the same kind of
+    // untruth as passing a wrong one silently (07 §5).
+    const optional = createRegistry({
+      tools: [
+        {
+          name: "fs.readTextFile",
+          label: "Read Text File",
+          inputSchema: {
+            type: "object",
+            properties: { path: { type: "string" }, head: { type: "number" }, tail: { type: "number" } },
+            required: ["path"],
+          },
+          editableFields: ["path", "head", "tail"],
+        },
+      ],
+    });
+    const call = node({
+      id: "n",
+      type: "tool",
+      label: "Read Text File",
+      path: "flow/call:fs.readTextFile[0]",
+      data: {
+        toolName: "fs.readTextFile",
+        arguments: { path: '"a.txt"' },
+        argumentsEditable: true,
+        argumentsHaveSpread: false,
+      },
+    });
+
+    const model = resolveInspectorFields(call, optional);
+    expect(model.fields.find((f) => f.name === "head")?.missing).toBe(false);
+    expect(model.fields.find((f) => f.name === "tail")?.missing).toBe(false);
+    expect(model.fields.find((f) => f.name === "path")?.raw).toBe('"a.txt"');
+  });
+
+  it("still calls a required property that the call omits 'needing a value'", () => {
+    const strict = createRegistry({
+      tools: [
+        {
+          name: "fs.readTextFile",
+          label: "Read Text File",
+          inputSchema: {
+            type: "object",
+            properties: { path: { type: "string" }, head: { type: "number" } },
+            required: ["path", "head"],
+          },
+          editableFields: ["path", "head"],
+        },
+      ],
+    });
+    const call = node({
+      id: "n",
+      type: "tool",
+      label: "Read Text File",
+      path: "flow/call:fs.readTextFile[0]",
+      data: {
+        toolName: "fs.readTextFile",
+        arguments: { path: '"a.txt"' },
+        argumentsEditable: true,
+        argumentsHaveSpread: false,
+      },
+    });
+
+    expect(resolveInspectorFields(call, strict).fields.find((f) => f.name === "head")?.missing).toBe(true);
+  });
+
   it("exposes the one editable expression of a condition and of a for…of loop", () => {
     const graph = canonicalGraph();
     const condition = resolveInspectorFields(graph.nodes.find((n) => n.id === "n_condition")!);

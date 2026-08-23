@@ -84,9 +84,41 @@ describe("toElkGraph — edges", () => {
     expect((root.edges ?? []).map((e) => e.id)).toContain("n_trigger->n_getNewPRs:data:input.repository");
   });
 
-  it("skips edges that cross a container boundary", () => {
-    const { skippedEdgeIds } = toElkGraph(tryGraph(), { mode: "expanded" });
+  it("projects an edge that crosses a container boundary onto the nearest siblings", () => {
+    const { root, skippedEdgeIds } = toElkGraph(tryGraph(), { mode: "expanded" });
+
+    // The edge itself is not laid out: its endpoints sit at different depths.
     expect(skippedEdgeIds).toContain("n_charge->n_out:control:");
+
+    // But ELK is still told that whatever follows the `try` comes *after* it,
+    // via a projection between the two siblings at the root. Without this the
+    // step has no incoming edge in its layer and lands in layer 0 — the top-left
+    // corner — with a long line looping back down to it.
+    const rootEdges = (root.edges ?? []).map((edge) => ({
+      id: edge.id,
+      sources: edge.sources,
+      targets: edge.targets,
+    }));
+    expect(rootEdges).toContainEqual({
+      id: "proxy:n_try->n_out",
+      sources: ["n_try"],
+      targets: ["n_out"],
+    });
+  });
+
+  it("projects many crossing edges onto one edge per sibling pair", () => {
+    const { root } = toElkGraph(tryGraph(), { mode: "expanded" });
+    const proxies = (root.edges ?? []).filter((edge) => edge.id.startsWith("proxy:"));
+    expect(new Set(proxies.map((edge) => edge.id)).size).toBe(proxies.length);
+  });
+
+  it("leaves a same-container graph free of projections", () => {
+    const { root } = toElkGraph(canonicalGraph(), { mode: "expanded" });
+    const walk = (node: { id: string; children?: unknown[]; edges?: { id: string }[] }): string[] => [
+      ...(node.edges ?? []).map((edge) => edge.id),
+      ...((node.children ?? []) as typeof node[]).flatMap(walk),
+    ];
+    expect(walk(root).filter((id) => id.startsWith("proxy:"))).toEqual([]);
   });
 });
 

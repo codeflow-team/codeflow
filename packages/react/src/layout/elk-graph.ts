@@ -33,8 +33,12 @@ export interface ElkGraphOptions {
 export interface ElkGraphResult {
   root: ElkNode;
   /**
-   * Edges left out of the layout because their endpoints sit in different
-   * containers. React Flow still draws them; they just do not steer ELK.
+   * Graph edges that were not handed to ELK **as themselves**: data edges, the
+   * container→child slot edges, and the hierarchy-crossing ones (those are
+   * represented by a proxy between their nearest sibling ancestors instead —
+   * see `proxyEndpoints`). React Flow still draws all of them exactly as the
+   * graph states them; this list only says what did not steer the layout
+   * directly.
    */
   skippedEdgeIds: string[];
   index: GraphIndex;
@@ -96,14 +100,67 @@ function containerOptions(
   };
 }
 
+/** Chain from a node up to the root: `[node, parent, grandparent, …]`. */
+function ancestorChain(nodeId: string, index: GraphIndex): string[] {
+  const chain: string[] = [];
+  const seen = new Set<string>();
+  let current: string | null = nodeId;
+  while (current !== null && !seen.has(current)) {
+    seen.add(current);
+    chain.push(current);
+    current = index.parentOf.get(current) ?? null;
+  }
+  return chain;
+}
+
+/**
+ * Where an edge should be *projected* so ELK can order its endpoints.
+ *
+ * ELK only orders siblings, so an edge whose ends live at different depths —
+ * `return charge` inside a `try` flowing on to the `return null` that follows
+ * the whole `try` — has nothing to say to it. Dropping such an edge is what put
+ * the second `End Flow` in layer 0, top-left of the diagram, with a long
+ * looping line back down to it: nothing told ELK that the step comes *after*
+ * the `try`.
+ *
+ * So the edge is not dropped, it is lifted: walk both ends up their parent
+ * chains until they are siblings, and give ELK an edge between that pair. The
+ * real edge is still drawn between the real endpoints — the projection exists
+ * only to state the ordering the picture depends on.
+ *
+ * Returns `null` when both ends lift to the same node (one contains the other,
+ * e.g. a container's own slot edge): an edge from a node to itself would tell
+ * ELK nothing and risks a self-loop.
+ */
+function proxyEndpoints(
+  source: string,
+  target: string,
+  index: GraphIndex,
+): { container: string | null; source: string; target: string } | null {
+  const parentOf = (id: string): string | null => index.parentOf.get(id) ?? null;
+
+  // Chains are strictly ascending, so a parent identifies at most one entry.
+  const byParent = new Map<string | null, string>();
+  for (const id of ancestorChain(target, index)) byParent.set(parentOf(id), id);
+
+  // Deepest first: the first shared parent is the nearest common container.
+  for (const candidate of ancestorChain(source, index)) {
+    const sibling = byParent.get(parentOf(candidate));
+    if (sibling === undefined) continue;
+    return candidate === sibling ? null : { container: parentOf(candidate), source: candidate, target: sibling };
+  }
+  return null;
+}
+
 /**
  * Build the ELK input tree for `graph`.
  *
- * Edge placement rule: an edge lives in the container that holds *both* of its
- * endpoints. Container→own-child edges (the `body`/`error` slot edges) and any
- * edge crossing a container boundary are reported in `skippedEdgeIds` instead of
- * being handed to ELK — hierarchy-crossing edges need `INCLUDE_CHILDREN` and buy
- * nothing here, since the children are already ordered by their internal edges.
+ * Edge placement rule: an edge is laid out in the container that holds both of
+ * its endpoints. Container→own-child edges (the `body`/`error` slot edges) are
+ * left out — the child is already inside the box. An edge that crosses a
+ * container boundary is projected onto the nearest pair of siblings instead of
+ * being dropped (`proxyEndpoints`), so a step that follows a `for`/`while`/`try`
+ * is laid out after it rather than floating off on its own.
  */
 export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkGraphResult {
   const direction = options.direction ?? "DOWN";
@@ -140,6 +197,9 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
   elkById.set(ROOT_ID, root);
 
   const skippedEdgeIds: string[] = [];
+  /** One projection per sibling pair — many edges can lift onto the same one. */
+  const projected = new Set<string>();
+
   for (const edge of graph.edges) {
     if (!kinds.includes(edge.kind)) {
       skippedEdgeIds.push(edge.id);
@@ -150,18 +210,31 @@ export function toElkGraph(graph: WorkflowGraph, options: ElkGraphOptions): ElkG
       skippedEdgeIds.push(edge.id);
       continue;
     }
-    const sourceParent = index.parentOf.get(edge.source) ?? null;
-    const targetParent = index.parentOf.get(edge.target) ?? null;
-    if (sourceParent !== targetParent) {
+
+    const lifted = proxyEndpoints(edge.source, edge.target, index);
+    if (lifted === null) {
       skippedEdgeIds.push(edge.id);
       continue;
     }
-    const container = elkById.get(sourceParent ?? ROOT_ID);
+    const container = elkById.get(lifted.container ?? ROOT_ID);
     if (container === undefined) {
       skippedEdgeIds.push(edge.id);
       continue;
     }
-    const elkEdge: ElkExtendedEdge = { id: edge.id, sources: [edge.source], targets: [edge.target] };
+
+    const direct = lifted.source === edge.source && lifted.target === edge.target;
+    if (direct) {
+      (container.edges ??= []).push({ id: edge.id, sources: [edge.source], targets: [edge.target] });
+      continue;
+    }
+
+    // Crossed a boundary: ELK gets the projection, and the real edge is
+    // reported as not laid out directly.
+    skippedEdgeIds.push(edge.id);
+    const proxyId = `proxy:${lifted.source}->${lifted.target}`;
+    if (projected.has(proxyId)) continue;
+    projected.add(proxyId);
+    const elkEdge: ElkExtendedEdge = { id: proxyId, sources: [lifted.source], targets: [lifted.target] };
     (container.edges ??= []).push(elkEdge);
   }
 

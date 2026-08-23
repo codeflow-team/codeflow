@@ -1,6 +1,6 @@
-# 02 — Kiến trúc
+# 02 — Architecture
 
-## 1. Pipeline hai chiều
+## 1. The bidirectional pipeline
 
 ```text
                     AI / Developer
@@ -16,7 +16,7 @@
                          │
               ┌──────────▼──────────┐
               │  Semantic Analyzer  │  control flow · data flow ·
-              │                     │  tool resolution (qua type checker) ·
+              │                     │  tool resolution (via the type checker) ·
               │                     │  node mapping · diagnostics
               └──────────┬──────────┘
                          │              ┌──────────────┐
@@ -26,13 +26,13 @@
               └──────────┬──────────┘   └──────────────┘
                          │
               ┌──────────▼──────────┐
-              │    Layout (ELK)     │  chỉ tính x/y, không đổi semantics
+              │    Layout (ELK)     │  computes x/y only, never semantics
               └──────────┬──────────┘
                          │
               ┌──────────▼──────────┐
               │   React Flow UI     │  canvas · inspector · Monaco
               └──────────┬──────────┘
-                         │ user edit node
+                         │ user edits a node
               ┌──────────▼──────────┐
               │    Patch Engine     │  resolve node → verify fingerprint →
               │                     │  transform AST → minimal patch
@@ -42,59 +42,62 @@
                TypeScript Source  ──→  re-analyze → graph diff → UI update
 ```
 
-Execution nằm ngoài pipeline: source được giao cho sandbox runtime (isolate + bindings kiểu Code Mode, hoặc Temporal/Inngest/custom) — xem [09-future.md](09-future.md).
+Execution sits outside the pipeline: the source is handed to a sandbox runtime (isolate + bindings, Code Mode style, or Temporal/Inngest/custom) — see [09-future.md](09-future.md).
 
-## 2. Cấu trúc package (MVP)
+## 2. Package structure (MVP)
 
-Monorepo pnpm + Turborepo, **4 packages**:
+pnpm + Turborepo monorepo. Four published packages, plus an examples package and a demo app used for testing and for the e2e loop:
 
 ```text
 packages/
-├── core/     @codeflow/core   — browser-safe, không Node API
-├── react/    @codeflow/react
-├── mcp/      @codeflow/mcp
-└── cli/      codeflow (bin)   — Node-only: generate, check, watch
+├── core/      @codeflow/core   — browser-safe, no Node APIs
+├── react/     @codeflow/react
+├── mcp/       @codeflow/mcp
+├── cli/       @codeflow/cli    — bin `codeflow`; Node-only: init, generate, check
+└── examples/  @codeflow/examples — example flow corpus used at real scale
+apps/
+└── demo/      the demo app the UI e2e checklist runs against
 ```
 
-`cli` tách riêng vì cần fs/watch (Node API) — không được kéo vào core (core phải chạy được ở browser). CLI gồm: `codeflow generate` (sinh `generated/*.d.ts` từ config/registry), `codeflow check` (quét thư mục `flows/`, analyze từng flow, báo diagnostics toàn workspace — cơ chế bắt break cross-flow khi đổi/xóa tool hay library function), `codeflow generate --agent-md`.
+`cli` is a separate package because it needs fs/watch (Node APIs) — those must not be pulled into core, which has to run in a browser. The CLI provides: `codeflow init` (scaffold a workspace), `codeflow generate` (emit `generated/*.d.ts` from the config/registry, plus `prompts/flow-style.md`; `--agent-md` also prints the `CLAUDE.md`/`AGENTS.md` section that points an agent at them), and `codeflow check` (walk the `flows/` directory, analyze each flow, report diagnostics workspace-wide — this is the mechanism that catches cross-flow breakage when a tool or a library function changes or disappears).
 
 ### `@codeflow/core`
 
-Toàn bộ engine, không phụ thuộc React, chạy được ở Node lẫn browser:
+The whole engine, no React dependency, runs in both Node and the browser:
 
 - domain model: graph, node, edge, source mapping, diagnostics, events;
-- parser layer (ts-morph / TS Compiler API, đằng sau abstraction);
+- parser layer (ts-morph / TS Compiler API, behind an abstraction);
 - semantic analyzer;
 - mapper (stable identity, semantic path, fingerprint);
 - patch engine;
 - registry (tool/function/node definitions, typed API codegen);
 - validation.
 
-Nội bộ chia module theo đúng các phần trên (`core/src/{model,parser,analyzer,mapper,patcher,registry}`), nhưng **không tách package** — các phần này đổi API cùng nhau liên tục trong giai đoạn đầu, tách package chỉ tạo friction. Sau 1.0, khi API ổn định, có thể tách dần (parser, analyzer, patcher...) mà không đổi public API.
+Internally it is split into modules along exactly those lines (`core/src/{model,parser,analyzer,mapper,patcher,registry}`), but **not into separate packages** — these parts change APIs together, constantly, in the early phase, and splitting them would only create friction. After 1.0, once the APIs settle, they can be split off gradually (parser, analyzer, patcher...) without changing the public API.
 
 ### `@codeflow/react`
 
-UI layer:
+The UI layer:
 
 - React Flow canvas, custom nodes/edges, minimap, controls, palette;
-- ELK.js layout (async, chỉ trả về positions);
-- Node inspector (forms từ schema, shadcn/ui);
+- ELK.js layout (async, returns positions only);
+- node inspector (schema-driven forms, shadcn/ui);
 - Monaco code view / custom-code editor / diff view;
-- providers, hooks, state sync với core.
+- providers, hooks, state sync with core.
 
 ### `@codeflow/mcp`
 
-Adapter optional: MCP tool discovery → `ToolDefinition` → registry. Core không phụ thuộc MCP.
+An optional adapter: MCP tool discovery → `ToolDefinition` → registry. Core does not depend on MCP.
 
 ## 3. Parser strategy
 
-**MVP dùng duy nhất TypeScript Compiler API + ts-morph.** Lý do:
+**The MVP uses only the TypeScript Compiler API + ts-morph.** Reasons:
 
-- Flow file theo contract chỉ vài trăm dòng — full re-parse + re-analyze vẫn nằm trong performance target (xem [08-mvp.md](08-mvp.md)); incremental parsing là premature optimization.
-- Dựng graph chỉ cần **parse + scope analysis** (tool resolution là binding-rooted — [04-analyzer.md](04-analyzer.md) §1.2, không cần type checker); TS **type checker** là tầng enrichment/validation tách rời, chạy async ở Node/CI hoặc worker, không nằm trên đường nóng của việc dựng graph — nhờ đó core chạy được ở browser mà không phải nạp lib.d.ts trên đường render.
-- Hai parser song song (Tree-sitter + TSC) là gánh phức tạp lớn nhất của draft v0.1 mà không mua được gì ở scale MVP.
+- A flow file under the contract is a few hundred lines; a full re-parse + re-analyze still fits inside the performance target (see [08-mvp.md](08-mvp.md)). Incremental parsing is premature optimization.
+- Building the graph needs only **parse + scope analysis** (tool resolution is binding-rooted — [04-analyzer.md](04-analyzer.md) §1.2, no type checker required). The TS **type checker** is a separate enrichment/validation layer that runs asynchronously in Node/CI or in a worker; it is not on the hot path for building the graph. That is what lets core run in a browser without loading lib.d.ts on the render path.
+- Running two parsers side by side (Tree-sitter + TSC) was the largest complexity burden of the v0.1 draft and bought nothing at MVP scale.
 
-Parser nằm sau abstraction để giữ cửa cho Tree-sitter (incremental) khi có nhu cầu thật:
+The parser sits behind an abstraction to keep the door open for Tree-sitter (incremental) if a real need appears:
 
 ```ts
 interface Parser {
@@ -103,35 +106,35 @@ interface Parser {
 }
 ```
 
-MVP: `update` = full re-parse. Contract không đổi khi sau này thay implementation.
+In the MVP, `update` is a full re-parse. The contract does not change when the implementation is replaced later.
 
 ## 4. Public API — `CodeFlowSession`
 
-Object `flow` xuất hiện trong các ví dụ xuyên suốt specs (`flow.analyze`, `flow.patchNode`, `flow.validate`, `flow.buildGenerationContext`) là một **session**:
+The `flow` object that appears in examples throughout the specs (`flow.analyze`, `flow.patchNode`, `flow.validate`, `flow.buildGenerationContext`) is a **session**:
 
 ```ts
 import { createCodeFlow } from "@codeflow/core";
 
 const flow = createCodeFlow({
-  registry,                    // bắt buộc — analyzer cần registry (04 §1)
+  registry,                    // required — the analyzer needs the registry (04 §1)
   libraryStore?,               // FunctionLibraryStore
-  parser?,                     // override Parser implementation
+  parser?,                     // override the Parser implementation
 });
 ```
 
-Session giữ state: registry (+ `registryHash`), warm parse tree/Project (phục vụ target <100ms), và **graph gần nhất** — nền cho identity continuity ([03-data-model.md](03-data-model.md) §5.0): re-analyze trong cùng session mang id qua bằng resolution; session mới là cold analyze. UI (`<CodeFlowProvider>`) nhận session (hoặc graph+registry lấy từ session) — một nguồn, không truyền registry rời rạc hai đường.
+The session holds state: the registry (+ `registryHash`), a warm parse tree/Project (which is what makes the <100 ms target reachable), and **the most recent graph** — the basis for identity continuity ([03-data-model.md](03-data-model.md) §5.0): re-analyzing inside the same session carries ids across through resolution, while a new session is a cold analyze. The UI (`<CodeFlowProvider>`) takes the session (or a graph plus the registry obtained from it) — one source, not a registry passed separately down two paths.
 
 ## 5. Technology stack
 
-| Layer | Công nghệ | Ghi chú |
+| Layer | Technology | Notes |
 |---|---|---|
-| Language | TypeScript | toàn bộ SDK |
-| Parser + semantics | TS Compiler API + ts-morph | duy nhất ở MVP |
+| Language | TypeScript | the whole SDK |
+| Parser + semantics | TS Compiler API + ts-morph | the only one in the MVP |
 | Graph model | Custom | semantic representation |
 | Layout | ELK.js | auto layout, async |
 | Canvas | React Flow | workflow editor |
 | Code editor | Monaco | developer / custom-code view |
 | UI primitives | shadcn/ui | inspector forms |
-| MCP | MCP SDK | adapter optional |
-| Test | Vitest + Claude in Chrome | core (unit/fixture/property) + UI e2e agent-driven |
+| MCP | MCP SDK | optional adapter |
+| Test | Vitest + Claude in Chrome | core (unit/fixture/property) + agent-driven UI e2e |
 | Monorepo | pnpm + Turborepo | |

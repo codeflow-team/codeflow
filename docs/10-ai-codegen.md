@@ -1,128 +1,130 @@
-# 10 — AI Code Generation: Context, Nạp cho AI, Validate Output
+# 10 — AI Code Generation: Context, Feeding the AI, Validating the Output
 
-CodeFlow không chỉ là lens đọc code — nó còn là **bên chuẩn bị context để AI generate code đúng chuẩn ngay từ đầu**. Code AI sinh ra càng đúng contract thì graph càng đẹp, nên phần này là first-class, không phải tài liệu phụ.
+CodeFlow is not only a lens for reading code — it is also **the side that prepares the context so the AI generates conforming code in the first place**. The closer the AI's output is to the contract, the better the graph, so this is first-class, not an appendix.
 
-Phân vai rõ: **core không gọi LLM**. CodeFlow build context + validate output; host app sở hữu vòng gọi AI (model nào, transport nào). Tương tự runtime independence — đây là *model independence*.
+The division of roles is explicit: **core never calls an LLM**. CodeFlow builds the context and validates the output; the host app owns the AI call loop (which model, which transport). This is the analogue of runtime independence — call it *model independence*.
 
 ```text
 User intent
     ↓
 CodeFlow: build GenerationContext  ← registry (tools + function library)
     ↓                              ← flow contract + style guide
-Host app: gọi LLM với context
+Host app: call the LLM with the context
     ↓
-AI sinh flow code
+AI produces flow code
     ↓
 CodeFlow: parse + analyze + validate → diagnostics
     ↓                    ↑
-    │  errors? ──── feed diagnostics lại AI (bounded retry) ──┘
+    │  errors? ──── feed the diagnostics back to the AI (bounded retry) ──┘
     ↓
-Graph render cho user
+Graph rendered for the user
 ```
 
-## 1. GenerationContext — CodeFlow build gì cho AI
+## 1. GenerationContext — what CodeFlow builds for the AI
 
 ```ts
 interface GenerationContext {
-  files: GeneratedFile[];       // các file AI cần "nhìn thấy"
-  promptSections: PromptSection[]; // các đoạn text ghép vào system prompt
+  files: GeneratedFile[];       // the files the AI needs to "see"
+  promptSections: PromptSection[]; // the text blocks assembled into the system prompt
   estimatedTokens: number;
 }
 
 const ctx = await flow.buildGenerationContext({
-  namespaces?: string[];        // scope tools — xem §4
+  namespaces?: string[];        // scope the tools — see §4
   includeExamples?: boolean;    // few-shot examples
-  existingSource?: string;      // khi là edit, không phải tạo mới
+  existingSource?: string;      // when editing rather than creating
+  parameterDocs?: boolean;      // also emit an @param line per argument (off by default:
+                                // it trades context tokens for argument accuracy)
 });
 ```
 
-Nội dung bundle, theo thứ tự ưu tiên:
+What goes into the bundle, in priority order:
 
-| Thành phần | Nguồn | Vai trò |
+| Component | Source | Role |
 |---|---|---|
-| `tools.d.ts` | codegen từ registry ([05-registry.md](05-registry.md) §2) | AI biết có tool gì, signature gì, JSDoc mô tả gì — "cả API trong ~1.000 token" đúng tinh thần Code Mode |
-| `lib.d.ts` (module declaration của `@flows/lib`) | codegen từ function library | AI biết có library function nào để import, input/output gì |
-| Flow contract | static, ship kèm lib | 1 file, export default async function, 2 tham số |
-| Style guide | static, ship kèm lib (`prompts/flow-style.md`, [01-flow-contract.md](01-flow-contract.md) §3) | code map được tối đa ra node |
-| Few-shot examples | static + host bổ sung | 1–2 flow mẫu chuẩn |
-| Existing source | host truyền vào | khi AI đang sửa flow có sẵn |
+| `tools.d.ts` | codegen from the registry ([05-registry.md](05-registry.md) §2) | the AI learns which tools exist, with what signatures and what JSDoc — "the whole API in ~1,000 tokens", in the spirit of Code Mode |
+| `lib.d.ts` (the module declaration for `@flows/lib`) | codegen from the function library | the AI learns which library functions it can import and what they take/return |
+| Flow contract | static, shipped with the library | 1 file, `export default async function`, 2 parameters |
+| Style guide | static, shipped with the library (`prompts/flow-style.md`, [01-flow-contract.md](01-flow-contract.md) §3) | so the code maps to as many nodes as possible |
+| Few-shot examples | static + host additions | 1–2 model flows |
+| Existing source | passed in by the host | when the AI is editing an existing flow |
 
-`tools.d.ts` và `lib.d.ts` là **một nguồn duy nhất phục vụ 3 bên** (AI context, analyzer symbol resolution, sandbox binding contract) — không được viết tay bản riêng cho AI, vì lệch nhau là AI sinh code không resolve được.
+`tools.d.ts` and `lib.d.ts` are **one source serving three consumers** (AI context, analyzer symbol resolution, sandbox binding contract) — nobody is allowed to hand-write a separate copy for the AI, because any divergence means the AI writes code that will not resolve.
 
-## 2. Cấu trúc workspace trên disk
+## 2. Workspace layout on disk
 
-Layout chuẩn cho một "flows workspace" — vừa cho AI/agent đọc, vừa cho CodeFlow load:
+The standard layout of a "flows workspace" — readable by an AI/agent and loadable by CodeFlow:
 
 ```text
 my-flows/
-├── codeflow.config.ts        # đăng ký tools, MCP servers, library store
+├── codeflow.config.ts        # registers tools, MCP servers, the library store
 ├── flows/
-│   ├── security-alert.flow.ts    # mỗi flow 1 file, đuôi .flow.ts
+│   ├── security-alert.flow.ts    # one flow per file, .flow.ts extension
 │   └── daily-report.flow.ts
-├── lib/                      # function library — source do user sở hữu
-│   ├── index.ts              # re-export mọi function
+├── lib/                      # function library — source owned by the user
+│   ├── index.ts              # re-exports every function
 │   └── is-auth-change.ts
-├── generated/                # CodeFlow sinh ra, không sửa tay
+├── generated/                # produced by CodeFlow, never hand-edited
 │   ├── tools.d.ts
 │   └── lib.d.ts
 └── prompts/
-    └── flow-style.md         # style guide (copy từ lib, host tùy biến được)
+    └── flow-style.md         # the style guide (copied from the library, host-customizable)
 ```
 
-- `generated/` được re-generate mỗi khi registry/library đổi (watch hoặc CLI `codeflow generate`); commit vào repo để agent harness đọc được mà không cần chạy gì.
-- `.flow.ts` import từ `../generated/tools` (types) và `@flows/lib` (alias trỏ `lib/`) — tsconfig paths do config sinh.
-- Host app không bắt buộc dùng layout này (mọi thứ đi qua API đều được), nhưng đây là convention mặc định để mọi tooling — AI, CLI, UI — cùng hiểu.
+- `generated/` is regenerated whenever the registry/library changes (`codeflow generate`); it is committed to the repo so an agent harness can read it without running anything.
+- `.flow.ts` files import from `../generated/tools` (types) and `@flows/lib` (an alias pointing at `lib/`) — the tsconfig paths are produced by the config.
+- A host app is not required to use this layout (everything is reachable through the API), but this is the default convention so that all tooling — AI, CLI, UI — agrees on the same thing.
 
-## 3. Cách nạp vào AI — 3 delivery modes
+## 3. Feeding it to the AI — 3 delivery modes
 
-CodeFlow cung cấp context; nạp bằng đường nào tùy host:
+CodeFlow supplies the context; how it is delivered is up to the host:
 
-1. **Direct prompt assembly** — host app gọi LLM API trực tiếp: ghép `ctx.promptSections` vào system prompt, đính `ctx.files` dạng fenced code blocks. Dùng cho product có vòng chat riêng.
-2. **File-based cho agent harness** (Claude Code, Cursor, …) — workspace layout ở §2 chính là context: agent đọc `generated/*.d.ts` + `prompts/flow-style.md` như file thường; một đoạn trong `CLAUDE.md`/`AGENTS.md` của workspace trỏ agent tới đó. CLI `codeflow generate --agent-md` sinh sẵn đoạn này.
-3. **MCP** — `@codeflow/mcp` expose ngược CodeFlow như một MCP server: resource `codeflow://context` (trả về GenerationContext), tool `codeflow.validate(source)` (trả về diagnostics). Agent bất kỳ có MCP đều generate + tự validate được flow code mà không cần host app riêng.
+1. **Direct prompt assembly** — the host app calls the LLM API itself: concatenate `ctx.promptSections` into the system prompt and attach `ctx.files` as fenced code blocks. This is for products with their own chat loop.
+2. **File-based, for an agent harness** (Claude Code, Cursor, …) — the workspace layout in §2 *is* the context: the agent reads `generated/*.d.ts` and `prompts/flow-style.md` as ordinary files, and a section in the workspace's `CLAUDE.md`/`AGENTS.md` points the agent at them. `codeflow generate --agent-md` emits that section.
+3. **MCP** — `@codeflow/mcp` exposes CodeFlow itself as an MCP server: a `codeflow://context` resource (returning the GenerationContext) and a `codeflow.validate(source)` tool (returning diagnostics). Any MCP-capable agent can then generate and self-validate flow code without a dedicated host app.
 
-## 4. Scope context — giữ nhỏ để AI chính xác
+## 4. Scoping the context — keep it small so the AI stays accurate
 
-Registry lớn (hàng trăm tool) → không nhét hết vào context. Chiến lược theo tầng:
+A large registry (hundreds of tools) cannot all go into the context. The strategy has tiers:
 
-1. host app biết trước domain → truyền `namespaces: ["github", "slack"]`;
-2. không biết trước → two-stage: stage 1 đưa AI **danh mục ngắn** (namespace + mô tả 1 dòng mỗi tool) để nó chọn, stage 2 build context đầy đủ chỉ với phần đã chọn;
-3. function library scope tương tự theo tag/category trong `FunctionDefinition`.
+1. the host app knows the domain up front → pass `namespaces: ["github", "slack"]`;
+2. it does not → two-stage: stage 1 gives the AI a **short catalogue** (namespaces + a one-line description per tool) to choose from, stage 2 builds the full context for the chosen subset only;
+3. the function library would be scoped the same way, by tag/category on `FunctionDefinition` (no such field exists in the MVP shape — this belongs with the post-MVP items in §8).
 
-Mục tiêu: context điển hình dưới ~2.000 token cho phần tools/lib (tham chiếu Code Mode: cả API trong ~1.000 token).
+The target: a typical context under ~2,000 tokens for the tools/lib portion (the Code Mode reference point: the whole API in ~1,000 tokens).
 
-## 5. Validate output — định nghĩa "code chuẩn"
+## 5. Validating the output — what "conforming code" means
 
-AI trả code về, CodeFlow chấm theo 3 mức conformance:
+When the AI returns code, CodeFlow scores it at 3 conformance levels (plus `invalid` for code that does not parse or does not follow the flow contract at all — no default export, not `async`, wrong parameter count):
 
-| Mức | Điều kiện | Xử lý khi fail |
+| Level | Condition | What happens on failure |
 |---|---|---|
-| **L0 — hợp lệ** (bắt buộc) | parse được; đúng flow contract (1 default export, đúng signature); value-imports thuộc allowlist (mặc định: `generated/tools`, `@flows/lib`; host mở rộng được — vd cho phép `zod`); **type-only imports được phép từ mọi nơi trong workspace**; type-check pass (khi môi trường validate có type checker) | diagnostics dạng `error` → **feed lại AI sửa**, tối đa N lần (mặc định 2); vẫn fail → trả lỗi cho host. Import ngoài allowlist nhưng resolve được → **warning + code node** (degradation, khớp [01-flow-contract.md](01-flow-contract.md) §4), không phải hard fail |
-| **L1 — resolve đủ** | mọi tool/library call resolve ra node; không call tới thứ không tồn tại | như trên — thường là AI bịa tool name; diagnostic ghi rõ "tool `x.y` không có trong registry, các tool gần nhất: …" |
-| **L2 — map đẹp** (mục tiêu chất lượng) | hidden-call diagnostics = 0, và không có **code node chứa call** (`inline-logic-in-code-node` — một call bị giấu trong code node là một bước vắng mặt khỏi graph). Code node **không chứa call** (vd `let attempt = 0`, `attempt += 1` của while-counter) là plumbing được phép — "zero code node" tuyệt đối sẽ làm L2 bất khả thi vì chính style guide yêu cầu counter | không chặn — code vẫn chạy đúng; đo bằng **conformance rate** trong eval suite ([11-testing.md](11-testing.md) §3.6) để cải thiện style guide/context builder |
+| **L0 — valid** (required) | parses; follows the flow contract (1 default export, right signature); value imports are in the allowlist (default: `@flows/lib` plus every registered library module path; the host can extend it — e.g. to allow `zod`); **type-only imports are allowed from anywhere in the workspace**; type-check passes (when the validating environment has a type checker) | `error` diagnostics → **feed them back to the AI**, at most N times (default 2); still failing → return the error to the host. An import outside the allowlist that still resolves → **warning + code node** (degradation, matching [01-flow-contract.md](01-flow-contract.md) §4), not a hard fail. The one hard fail is a **value import from `generated/*`**: those artifacts are `.d.ts`, so such an import cannot resolve by construction in any workspace, and it is a mistake models do make |
+| **L1 — everything resolves** | every tool/library call resolves to a node; nothing is called that does not exist | as above — usually the AI invented a tool name; the diagnostic spells it out: "tool `x.y` is not in the registry, closest matches: …". `unresolved-tool`, `unresolved-library-function` and any `unknown` node in the graph all drop the result back to L0 |
+| **L2 — maps well** (the quality target) | zero hidden-call diagnostics (`hidden-call-in-expression`, `unsupported-optional-chaining`) and no **code node containing a call** (`inline-logic-in-code-node` — a call hidden inside a code node is a step missing from the graph). A code node with **no call** (e.g. `let attempt = 0`, `attempt += 1` for a while-counter) is permitted plumbing — an absolute "zero code nodes" rule would make L2 unreachable, because the style guide itself requires that counter. `unbounded-loop-risk` and `multiple-exports` stay warnings that do **not** block L2 | not blocking — the code still runs correctly; it is measured as a **conformance rate** in the eval suite ([11-testing.md](11-testing.md) §3.6) and used to improve the style guide / context builder |
 
-Vòng retry dùng chính `Diagnostic[]` của analyzer làm feedback — không có hệ thống lỗi riêng cho AI. Diagnostics vì vậy phải viết **cho AI đọc được và sửa được**: có code, vị trí, gợi ý cụ thể.
+The retry loop uses the analyzer's own `Diagnostic[]` as feedback — there is no separate error system for the AI. Diagnostics therefore have to be written so **an AI can read and act on them**: a code, a position, a concrete suggestion.
 
-## 6. AI sửa flow đang có
+## 6. AI editing an existing flow
 
-Hai đường, cả hai đều đi qua cơ chế chuẩn:
+Two paths, both going through the standard machinery:
 
-1. **Node-level** (khuyến khích): user mô tả thay đổi trên một node → AI sinh giá trị mới cho editable fields → apply qua patch engine như user edit tay ([06-patch-engine.md](06-patch-engine.md)). Minimal, an toàn, identity giữ nguyên.
-2. **Source-level**: AI sửa/regenerate cả file (thay đổi lớn, structural) → CodeFlow xử lý như "source đổi từ bên ngoài": re-analyze, identity best-effort ([03-data-model.md](03-data-model.md) §5.3), conflict detection nếu UI đang mở.
+1. **Node-level** (preferred): the user describes a change to one node → the AI produces new values for the editable fields → they are applied through the patch engine exactly like a manual edit ([06-patch-engine.md](06-patch-engine.md)). Minimal, safe, identity preserved.
+2. **Source-level**: the AI edits/regenerates the whole file (large, structural changes) → CodeFlow treats it as "the source changed externally": re-analyze, best-effort identity ([03-data-model.md](03-data-model.md) §5.3), conflict detection if the UI is open.
 
 ## 7. API sketch
 
 ```ts
 const ctx = await flow.buildGenerationContext({ namespaces: ["github", "slack"] });
 
-// host app tự gọi LLM với ctx …
+// the host app calls the LLM with ctx …
 
 const check = await flow.validate(generatedSource);
 // { level: "L0" | "L1" | "L2" | "invalid", diagnostics: Diagnostic[] }
 
-const graph = await flow.analyze(generatedSource); // khi đã hợp lệ
+const graph = await flow.analyze(generatedSource); // once it is valid
 ```
 
-## 8. Phạm vi MVP
+## 8. MVP scope
 
-Trong MVP: `buildGenerationContext` (direct + file-based delivery), workspace layout + CLI `codeflow generate` và `codeflow check` (quét toàn workspace — cần cho vòng đổi/xóa tool và library function, [05-registry.md](05-registry.md) §4), `validate` với L0/L1, retry loop là trách nhiệm host (CodeFlow chỉ cung cấp diagnostics đủ tốt). Sau MVP: MCP server mode, two-stage tool selection, conformance eval harness tự động.
+In the MVP: `buildGenerationContext` (direct + file-based delivery), the workspace layout, the CLI `codeflow generate` and `codeflow check` (workspace-wide scanning — needed for the change/remove loop on tools and library functions, [05-registry.md](05-registry.md) §4), and `validate` with L0/L1; the retry loop is the host's responsibility (CodeFlow only supplies good enough diagnostics). After the MVP: MCP server mode, two-stage tool selection, an automated conformance eval harness.

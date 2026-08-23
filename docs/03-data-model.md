@@ -5,10 +5,11 @@
 ```ts
 interface WorkflowGraph {
   id: string;
-  version: number;            // tăng mỗi lần re-analyze
+  version: number;            // incremented on every re-analyze
   source: SourceDocument;     // file path + content + content hash
-  registryHash: string;       // fingerprint của registry lúc analyze — graph là hàm
-                              // của (source, registry), nên staleness phải soi CẢ HAI
+  registryHash: string;       // fingerprint of the registry at analyze time — the graph
+                              // is a function of (source, registry), so staleness has to
+                              // be checked against BOTH
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   diagnostics: Diagnostic[];
@@ -19,16 +20,16 @@ interface WorkflowGraph {
 
 ```ts
 interface WorkflowNode {
-  id: string;                 // stable identity — xem §5
+  id: string;                 // stable identity — see §5
   type: NodeType;
   label: string;
 
-  source: SourceMapping;      // node nào cũng map về source — xem §4
+  source: SourceMapping;      // every node maps back to source — see §4
 
   inputs: NodePort[];
   outputs: NodePort[];
 
-  // dữ liệu riêng theo node type: tool name, editable field values,
+  // node-type-specific data: tool name, editable field values,
   // condition expression, loop variable, code snippet...
   data: Record<string, unknown>;
 
@@ -38,7 +39,7 @@ interface WorkflowNode {
 interface NodePort {
   id: string;
   label: string;
-  schema?: Schema;            // từ registry hoặc TS type
+  schema?: Schema;            // from the registry or from the TS type
 }
 ```
 
@@ -46,95 +47,95 @@ interface NodePort {
 
 ```ts
 type CoreNodeType =
-  | "trigger"      // synthetic — từ signature flow function + TriggerMetadata (§9)
+  | "trigger"      // synthetic — from the flow function signature + TriggerMetadata (§9)
   | "tool"         // await tools.<ns>.<fn>(...)
-  | "function"     // library function HOẶC local function — gọi dạng statement
+  | "function"     // library function OR local function — called as a statement
   | "condition"    // if / else
-  | "loop"         // for...of HOẶC while — body là subgraph; data.kind: "forOf" | "while"
-  | "try"          // try/catch(/finally) — body/catch/finally là subgraph;
-                   //   control edge "error" từ body sang catch
-  | "jump"         // break | continue — terminal node trong loop subgraph;
+  | "loop"         // for...of OR while — body is a subgraph; data.kind: "forOf" | "while"
+  | "try"          // try/catch(/finally) — body/catch/finally are subgraphs;
+                   //   control edge "error" from body to catch
+  | "jump"         // break | continue — terminal node in the loop subgraph;
                    //   data.kind: "break" | "continue"; data.label?: string (labeled jump)
   | "parallel"     // Promise.all
-  | "merge"        // synthetic — điểm hội tụ sau parallel/condition
-  | "code"         // fallback: construct KHÔNG được hỗ trợ — giữ nguyên source
-  | "output"       // return của flow — cả return cuối lẫn early return
-                   //   (mỗi return statement → một output node riêng, 1:1 với source)
-  | "unknown";     // construct NHẬN DIỆN ĐƯỢC nhưng resolve THẤT BẠI
-                   // (vd call dạng tools.x.y nhưng tool không có trong registry)
+  | "merge"        // synthetic — the join point after a parallel/condition
+  | "code"         // fallback: an UNSUPPORTED construct — source kept verbatim
+  | "output"       // the flow's return — both the final return and early returns
+                   //   (one output node per return statement, 1:1 with the source)
+  | "unknown";     // a RECOGNIZED construct whose resolution FAILED
+                   // (e.g. a call shaped like tools.x.y where the tool is not in the registry)
 
-// Mở cho plugin: node type mới đăng ký qua registry, không sửa core
+// Open to plugins: new node types are registered through the registry, no core changes
 type NodeType = CoreNodeType | (string & {});
 ```
 
-Phân biệt `code` vs `unknown`: `code` = "CodeFlow không cố hiểu, đây là vùng opaque hợp lệ" (info); `unknown` = "trông như thứ được hỗ trợ nhưng resolve thất bại — có thể là lỗi" (kèm diagnostic error/warning).
+`code` vs `unknown`: `code` means "CodeFlow is not trying to understand this; it is a legitimate opaque region" (info). `unknown` means "this looks like something supported but resolution failed — it may be a bug" (accompanied by an error/warning diagnostic).
 
 ## 4. Source Mapping
 
-Mọi node phải map về một vùng source:
+Every node maps back to a source region:
 
 ```ts
 interface SourceMapping {
   file: string;
   start: SourcePosition;      // line, column, offset
   end: SourcePosition;
-  semanticPath: string;       // xem §5
-  fingerprint: string;        // hash chuẩn hóa của AST subtree (bỏ trivia/formatting)
+  semanticPath: string;       // see §5
+  fingerprint: string;        // normalized hash of the AST subtree (trivia/formatting dropped)
 }
 ```
 
-Source mapping không bao giờ chỉ dựa vào line number — line là thứ vỡ đầu tiên khi code đổi.
+Source mapping never relies on line numbers alone — the line number is the first thing to break when code changes.
 
-**Node tổng hợp (synthetic)**: `merge`, `trigger` — và `output` khi flow không có `return` tường minh — không có construct riêng trong source. Quy tắc: chúng map về source range của construct **sinh ra chúng** (merge của `if/else` → cả if statement; merge của `Promise.all` → statement đó; trigger → signature của flow function; output ẩn → cuối thân function), với semantic path mang role qualifier: `flow/if[0]#merge`, `flow#trigger`. Nhiều node được phép chia sẻ một source range, nhưng mỗi range chỉ có **một owner node** cho việc edit (capabilities của synthetic node: không editable trực tiếp). `output` từ `return` statement thật và `jump` (`break`/`continue`) map thẳng về statement của chúng — không phải synthetic.
+**Synthetic nodes**: `merge`, `trigger` — and `output` when the flow has no explicit `return` — have no construct of their own in the source. The rule: they map to the source range of the construct **that produced them** (the merge of an `if/else` → the whole if statement; the merge of a `Promise.all` → that statement; the trigger → the flow function's signature; the implicit output → the end of the function body), with a role qualifier in the semantic path: `flow/if[0]#merge`, `flow#trigger`. Several nodes may share one source range, but each range has exactly **one owner node** for editing purposes (synthetic nodes are not directly editable). An `output` from a real `return` statement and a `jump` (`break`/`continue`) map straight to their own statement — they are not synthetic.
 
 ## 5. Stable Node Identity
 
-### 5.0 Sinh id, và hai chế độ identity
+### 5.0 Generating ids, and the two identity modes
 
-`node.id` là **opaque handle**, sinh lúc node xuất hiện lần đầu, **không encode nội dung** (không dẫn xuất từ tool name — nhờ đó đổi tool không đổi id):
+`node.id` is an **opaque handle**, created the first time a node appears, and it **does not encode content** (it is not derived from the tool name — which is why changing the tool does not change the id):
 
-- **Cold analyze** (không có graph trước): id = hash deterministic của semantic path tại thời điểm sinh → cùng (source, registry) luôn cho cùng graph, cùng ids (invariant I2). Fixture `expected-graph.json` so sánh trên đường này.
-- **Session re-analyze** (một `CodeFlowSession` đang giữ graph trước — xem [02-architecture.md](02-architecture.md) §5): id được **mang qua** bằng cơ chế resolve §5.2 — node cũ giữ id cũ, node mới nhận id mới. Id trong session vì vậy có thể khác với id nếu cold-analyze cùng source — đây là chủ đích: I2 cam kết determinism cho cold analyze; session cam kết **continuity**. View state, selection, `GraphChange` đều là khái niệm trong phạm vi session.
+- **Cold analyze** (no previous graph): the id is a deterministic hash of the semantic path at creation time → the same (source, registry) always yields the same graph with the same ids (invariant I2). Fixture `expected-graph.json` comparisons run on this path.
+- **Session re-analyze** (a `CodeFlowSession` holding a previous graph — see [02-architecture.md](02-architecture.md) §5): ids are **carried across** by the resolution mechanism in §5.2 — an old node keeps its old id, a new node gets a new one. An id inside a session may therefore differ from the id a cold analyze of the same source would produce. That is deliberate: I2 promises determinism for cold analyze; a session promises **continuity**. View state, selection and `GraphChange` are all session-scoped concepts.
 
-`edge.id` = hash deterministic của (source node id, target node id, kind, port) — không cần resolve riêng.
+`edge.id` = a deterministic hash of (source node id, target node id, kind, ports) — edges never need resolution of their own.
 
 ### 5.1 Semantic path
 
-Đường dẫn cấu trúc từ gốc flow tới construct, **kèm sibling index** để phân biệt hai construct giống nhau cùng scope:
+The structural path from the flow root to the construct, **including a sibling index** so that two identical constructs in the same scope stay distinct:
 
 ```text
 flow/for[0]/if[0]/call:slack.send[0]
-flow/for[0]/if[0]/call:slack.send[1]   // lần gọi thứ hai của cùng tool trong cùng block
+flow/for[0]/if[0]/call:slack.send[1]   // second call to the same tool in the same block
 ```
 
-### 5.2 Thứ tự resolve identity
+### 5.2 Identity resolution order
 
-Khi source đổi, resolve node cũ → node mới:
+When the source changes, old nodes are resolved onto new nodes:
 
-0. **Patch provenance** — patch do **patch engine** sinh ra ([06-patch-engine.md](06-patch-engine.md)) biết trước nó chèn/sửa/xóa gì, nên kèm sẵn mapping `oldNodeId → newRange` chính xác. Đường này **không dùng heuristic** — mọi edit qua inspector/palette giữ identity tuyệt đối, kể cả chèn một call trùng hệt trước call đang có. **Lưu ý**: edit source trực tiếp trong Monaco (dù là UI của CodeFlow) KHÔNG có provenance — nó đi đường heuristic 1–4 như mọi source change bên ngoài.
-1. **Sibling-group alignment** — với thay đổi không có provenance: các node cùng cha được match theo **alignment bảo toàn thứ tự** (kiểu LCS/diff), trong đó "bằng nhau" so theo thứ tự ưu tiên: fingerprint trùng → call signature trùng. Nhờ so fingerprint trước, hoán vị hai call cùng tool nhưng khác argument vẫn match đúng từng cái (không gán chéo). Chèn một `slack.send` mới trước `slack.send` cũ → alignment nhận ra phần tử cũ trượt xuống, giữ nguyên id. Sibling index trong semantic path (§5.1) chỉ là **cách đặt tên ổn định sau khi đã resolve**, không phải chìa khóa match. **Giới hạn thừa nhận**: hai sibling giống nhau *đến từng byte* thì về nguyên lý không phân biệt được từ source diff — xóa một trong hai có thể báo removed "nhầm cái" (hệ quả chỉ ở tầng cosmetic: view state/selection); đường provenance (xóa qua UI) không dính giới hạn này.
-2. **Fingerprint** khớp (node bị di chuyển trong cây, nội dung không đổi).
-3. **Source range** gần đúng + node type khớp.
-4. **Structural context** xung quanh (best-effort).
+0. **Patch provenance** — a patch produced by the **patch engine** ([06-patch-engine.md](06-patch-engine.md)) knows in advance what it inserts/edits/deletes, so it carries an exact `oldNodeId → newRange` mapping with it. This path uses **no heuristics** — every edit through the inspector or the palette preserves identity absolutely, even when inserting a call identical to the one already there. **Note**: editing the source directly in Monaco (even though that is CodeFlow's own UI) has **no** provenance — it goes through heuristics 1–4 like any external source change.
+1. **Sibling-group alignment** — for changes without provenance, nodes under the same parent are matched by an **order-preserving alignment** (LCS/diff style) in which "equal" is decided in priority order: matching fingerprint → matching call signature. Comparing fingerprints first means that swapping two calls to the same tool with different arguments still matches each to the right counterpart (no cross-assignment). Inserting a new `slack.send` before an existing one → alignment sees the old element shift down and keeps its id. The sibling index in the semantic path (§5.1) is only a **stable naming scheme applied after resolution**, never the matching key. **Acknowledged limitation**: two siblings that are identical *down to the byte* are in principle indistinguishable from a source diff — deleting one of them may report the "wrong one" as removed (the consequence is purely cosmetic: view state/selection). The provenance path (deleting through the UI) is not subject to this.
+2. **Fingerprint** match (the node moved within the tree, its content unchanged).
+3. **Approximate source range** + matching node type.
+4. Surrounding **structural context** (best-effort).
 
-Không match được → node cũ coi như removed, node mới coi như added (graph diff phản ánh đúng như vậy). **Quy tắc an toàn**: thà báo removed+added còn hơn gán nhầm id cũ cho node khác — mis-binding là lỗi nghiêm trọng hơn mất identity (test bắt buộc: [11-testing.md](11-testing.md) I5).
+No match → the old node counts as removed and the new node as added (and the graph diff says exactly that). **Safety rule**: reporting removed+added is better than assigning an old id to the wrong node — mis-binding is a more serious failure than losing identity (mandatory test: [11-testing.md](11-testing.md) I5).
 
-### 5.3 Phạm vi cam kết
+### 5.3 What is guaranteed
 
-Identity **được cam kết** tồn tại qua:
+Identity **is guaranteed** to survive:
 
-- formatting, thêm/xóa dòng không liên quan;
-- edit nội dung node khác;
-- patch do patch engine sinh ra (kể cả đổi tool — id là opaque handle, §5.0).
+- formatting, and adding/removing unrelated lines;
+- editing the contents of another node;
+- patches produced by the patch engine (including changing the tool — the id is an opaque handle, §5.0).
 
-(Thao tác thuần visual như pan/zoom/select không đụng source nên hiển nhiên không ảnh hưởng identity; MVP không persist vị trí manual — §8.)
+(Purely visual operations such as pan/zoom/select do not touch the source, so they obviously do not affect identity; the MVP does not persist manual positions — §8.)
 
-Identity **chỉ best-effort** (mất là chấp nhận được) khi:
+Identity is **best-effort only** (losing it is acceptable) when:
 
-- AI regenerate toàn bộ file — fingerprint matching cứu được phần nào, phần còn lại là graph mới thay graph cũ;
-- refactor lớn làm đổi cả cấu trúc lẫn nội dung node.
+- the AI regenerates the whole file — fingerprint matching salvages part of it, the rest is a new graph replacing the old one;
+- a large refactor changes both structure and node content.
 
-Draft v0.1 hứa identity tồn tại qua "source regeneration" — v0.2 rút cam kết này vì không giữ được và không cần giữ.
+The v0.1 draft promised that identity survives "source regeneration"; v0.2 withdraws that promise, because it cannot be kept and does not need to be.
 
 ## 6. WorkflowEdge
 
@@ -146,61 +147,61 @@ interface WorkflowEdge {
   kind: "control" | "data";
   sourcePort?: string;
   targetPort?: string;
-  label?: string;             // vd: "true" / "false" trên nhánh condition,
-                              // tên biến trên data edge
+  label?: string;             // e.g. "true"/"false" on a condition branch,
+                              // or the variable name on a data edge
 }
 ```
 
-- **Control edge**: thứ tự thực thi (sequential, nhánh condition, vòng loop).
-- **Data edge**: track qua **identifier bindings, resolve theo symbol** (không phải theo tên — shadowing trong scope lồng resolve về đúng binding gần nhất). Bindings gồm: `const`/`let` declarations, tham số flow function (`input`), biến loop (`pr`), destructured names (`const { data, error } = await tools.x.y()` → tool node có output ports `data`, `error`). Dùng một binding (kể cả property access, như `input.repository`) → data edge từ node sản sinh: một binding dùng ở N node → N edge từ cùng port. `let` được **reassign** trong nhiều nhánh → edge từ **mỗi** node ghi giá trị (union các writer). Chỉ trong cùng file, không alias analysis.
-- **Giới hạn thừa nhận (mutation)**: data edge biểu diễn quan hệ def-use, không phải mutation ordering — `files.push(x)` trong một code node không làm đổi hướng edge `files` đang có; code node tham chiếu binding vẫn nhận reader edge nên nó hiện diện trong chuỗi, và control edge giữ đúng thứ tự thực thi, nhưng graph không tuyên bố "giá trị đã bị B sửa trước khi tới C". Đây là trade-off có chủ đích của MVP.
+- **Control edge**: execution order (sequential, condition branches, loop iteration).
+- **Data edge**: tracked through **identifier bindings, resolved by symbol** (not by name — shadowing in a nested scope resolves to the nearest binding). Bindings include: `const`/`let` declarations, the flow function's parameters (`input`), the loop variable (`pr`), and destructured names (`const { data, error } = await tools.x.y()` → the tool node gets output ports `data`, `error`). Using a binding (including a property access such as `input.repository`) → a data edge from the producing node: one binding used in N nodes → N edges from the same port. A `let` that is **reassigned** in several branches → an edge from **each** node that writes it (the union of writers). Same file only; no alias analysis.
+- **Acknowledged limitation (mutation)**: a data edge represents a def-use relationship, not mutation ordering. `files.push(x)` inside a code node does not reverse an existing `files` edge; the code node that references the binding still gets a reader edge, so it is present in the chain, and control edges keep the execution order correct — but the graph does not claim "the value was modified by B before it reached C". This is a deliberate MVP trade-off.
 
 ## 7. Diagnostics
 
 ```ts
 interface Diagnostic {
   severity: "info" | "warning" | "error";
-  code: string;               // vd: "unsupported-construct", "unresolved-tool"
+  code: string;               // e.g. "unsupported-construct", "unresolved-tool"
   message: string;
   source?: SourceMapping;
 }
 ```
 
-Ví dụ:
+Examples:
 
-- `info` — "Custom code được giữ nguyên, không có semantic projection."
-- `warning` — "`hidden-call-in-expression`: tool call nằm trong expression — tách ra `const` riêng để hiện thành node." ([04-analyzer.md](04-analyzer.md) §1.4)
-- `warning` — "`unbounded-loop-risk`: không nhận diện được điều kiện dừng của `while`."
-- `error` — "Không resolve được tool `github.getFiles` — không có trong registry." (node → `unknown`)
-- `error` — "`stale-generated-artifacts`: generated/tools.d.ts không khớp registry hiện tại — chạy `codeflow generate`."
+- `info` — "Custom code kept verbatim; no semantic projection."
+- `warning` — "`hidden-call-in-expression`: a tool call sits inside an expression — hoist it into its own `const` to make it a node." ([04-analyzer.md](04-analyzer.md) §1.4)
+- `warning` — "`unbounded-loop-risk`: could not recognise a stopping condition for this `while`."
+- `error` — "Cannot resolve tool `github.getFiles` — not in the registry." (node → `unknown`)
+- `error` — "`stale-generated-artifacts`: generated/tools.d.ts does not match the current registry — run `codeflow generate`."
 
-## 8. View state — vị trí node KHÔNG phải semantic state
+## 8. View state — node positions are NOT semantic state
 
-Vị trí node trên canvas do ELK auto-layout tính ra ([07-ui.md](07-ui.md)) — **derive được từ graph, không lưu trong graph**. User kéo node = thao tác thuần visual, không đụng source, identity hiển nhiên giữ nguyên.
+Node positions on the canvas are computed by ELK auto-layout ([07-ui.md](07-ui.md)) — **derived from the graph, never stored in it**. Dragging a node is a purely visual operation: it does not touch the source, so identity obviously stays intact.
 
-Nếu host app muốn nhớ vị trí user tự đặt: đó là **view state của UI layer**, lưu ngoài `WorkflowGraph` (vd `Record<nodeId, {x, y}>` keyed theo stable node id), mất là chấp nhận được (cosmetic). Quy tắc này giữ nguyên tắc "không có representation thứ hai cần sync": graph semantic không bao giờ chứa thông tin không derive được từ code. MVP: auto-layout luôn, không persist vị trí manual.
+If a host app wants to remember user-placed positions, that is **UI-layer view state**, stored outside `WorkflowGraph` (e.g. `Record<nodeId, {x, y}>` keyed by stable node id) and acceptable to lose (cosmetic). This rule is what upholds "no second representation to keep in sync": the semantic graph never carries information that cannot be derived from the code. MVP: always auto-layout, no persisted manual positions.
 
-## 9. AnalyzeOptions và TriggerMetadata
+## 9. AnalyzeOptions and TriggerMetadata
 
 ```ts
 interface AnalyzeOptions {
-  trigger?: TriggerMetadata;    // do host/runtime cung cấp — không nằm trong code
+  trigger?: TriggerMetadata;    // supplied by the host/runtime — it is not in the code
 }
 
 interface TriggerMetadata {
   kind: "webhook" | "cron" | "manual" | (string & {});
   label?: string;
-  config?: Record<string, unknown>;   // vd cron expression
+  config?: Record<string, unknown>;   // e.g. a cron expression
 }
 
 flow.analyze(source, options?: AnalyzeOptions): Promise<WorkflowGraph>;
 ```
 
-Trigger node dựng từ type của tham số `input` (luôn có) + `TriggerMetadata` (nếu host cung cấp — làm label/icon cụ thể hơn: "⏰ Every day 9am" thay vì "⚡ Trigger").
+The trigger node is built from the type of the `input` parameter (always present) plus `TriggerMetadata` when the host supplies it (which makes the label/icon more specific: "⏰ Every day 9am" instead of "⚡ Trigger").
 
 ## 10. GraphChange (graph diff)
 
-Sau mỗi lần re-analyze, core phát ra diff thay vì graph mới toàn phần — cho UI update incremental và cho debugging:
+After each re-analyze, core emits a diff rather than a whole new graph — for incremental UI updates and for debugging:
 
 ```ts
 interface GraphChange {
@@ -212,23 +213,23 @@ interface GraphChange {
 }
 ```
 
-## 11. Phụ lục — các type phụ trợ
+## 11. Appendix — supporting types
 
-Định nghĩa tối thiểu của các type được tham chiếu trong specs:
+Minimal definitions of the types referenced throughout the specs:
 
 ```ts
-// Schema — dùng cho port/input/output. Ba dạng, cùng một union:
-// - JSON Schema object (nguồn MCP; inspector render form + validate được)
-// - TS type reference string ("File[]", "boolean") — nguồn codegen/TS;
-//   inspector KHÔNG dựng form từ dạng này → field dùng expression editor
-// - Named-fields map ({ files: "File[]" }) — shorthand cho object input,
-//   key là tên tham số/property; đây là dạng dùng trong các ví dụ của docs
-// Quy tắc chuyển đổi: MCP JSON Schema → TS types khi codegen tools.d.ts
-// (json-schema-to-typescript); TS ref dùng nguyên văn trong d.ts;
-// named-map → object type / danh sách tham số khi codegen.
+// Schema — used for ports/inputs/outputs. Three shapes, one union:
+// - JSON Schema object (the MCP source; the inspector can render a form and validate)
+// - TS type reference string ("File[]", "boolean") — from codegen/TS;
+//   the inspector CANNOT build a form from this → such fields use the expression editor
+// - Named-fields map ({ files: "File[]" }) — shorthand for an object input,
+//   keys are parameter/property names; this is the shape used in the examples in these docs
+// Conversion rules: MCP JSON Schema → TS types when generating tools.d.ts
+// (json-schema-to-typescript); a TS ref is used verbatim in the .d.ts;
+// a named map → an object type / parameter list at codegen time.
 type Schema = JsonSchema | TsTypeRef | Record<string, JsonSchema | TsTypeRef>;
 type TsTypeRef = string;
-type JsonSchema = Record<string, unknown>;  // JSON Schema draft chuẩn — không định nghĩa lại
+type JsonSchema = Record<string, unknown>;  // standard JSON Schema draft — not redefined here
 
 interface SourceDocument {
   file: string;
@@ -239,65 +240,69 @@ interface SourceDocument {
 interface SourcePosition {
   line: number;      // 1-based
   column: number;    // 1-based
-  offset: number;    // 0-based, đơn vị chuẩn cho mọi tính toán patch
+  offset: number;    // 0-based, the canonical unit for every patch computation
 }
-// TextChange dùng offset; TextPatch dùng SourcePosition (có offset bên trong)
-// → quy đổi qua offset, line/column chỉ để hiển thị. NodePatcher trả về
-// nhiều TextPatch thì các range KHÔNG được overlap — patcher validate trước khi apply.
+// TextChange uses offsets; TextPatch uses SourcePosition (which contains an offset)
+// → conversion goes through the offset, line/column exist only for display. When a
+// NodePatcher returns several TextPatch values, their ranges MUST NOT overlap — the
+// patcher validates this before applying.
 
 interface NodeCapabilities {
-  editable: boolean;        // có editable fields không
+  editable: boolean;        // does it have editable fields
   deletable: boolean;
-  expandable: boolean;      // có subgraph (loop) / code view không
+  expandable: boolean;      // does it have a subgraph (loop) or a code view
 }
 
-// Thay đổi text — input của Parser.update
+// A text change — the input of Parser.update
 interface TextChange {
   start: number;            // offset
   end: number;
   newText: string;
 }
 
-// Output của patch engine — một vùng source bị thay
+// The output of the patch engine — one replaced source region
 interface TextPatch {
   range: { start: SourcePosition; end: SourcePosition };
   oldText: string;
   newText: string;
 }
 
-// Storage của function library — host app implement.
-// MVP: default impl file-based trên thư mục lib/ của workspace (10-ai-codegen.md §2)
+// Function library storage — implemented by the host app.
+// MVP: the default implementation is file-based over the workspace lib/ directory
+// (10-ai-codegen.md §2)
 interface FunctionLibraryStore {
   list(): Promise<FunctionDefinition[]>;
   get(name: string): Promise<FunctionDefinition | null>;
   save(def: FunctionDefinition, opts?: { overwrite?: boolean }): Promise<void>;
-  // name đã tồn tại + không có overwrite:true → reject (UI hiện conflict prompt)
+  // an existing name without overwrite:true → reject (the UI shows a conflict prompt)
   remove(name: string, opts?: { force?: boolean }): Promise<void>;
-  // remove/rename một function đang được dùng: UI/CLI phải chạy usage check
-  // (codeflow check hoặc scan flows đang mở) và cảnh báo trước — cùng chuẩn
-  // an toàn với delete-node của patch engine; force chỉ sau khi user xác nhận.
+  // removing/renaming a function that is in use: the UI/CLI must run a usage check
+  // (codeflow check, or a scan of the open flows) and warn first — the same safety
+  // bar as delete-node in the patch engine; force only after the user confirms.
   rename(oldName: string, newName: string): Promise<void>;
-  // rename KHÔNG tự sửa các flow đang import tên cũ — việc đó là một patch
-  // trên từng flow (codeflow check liệt kê; host/user quyết định chạy)
+  // rename does NOT rewrite flows importing the old name — that is one patch per
+  // flow (codeflow check lists them; the host/user decides whether to run it)
 }
 
-// Extension points của registry (05-registry.md) — chữ ký tối giản.
-// AstNode: node của syntax tree (MVP: ts-morph Node — opaque với plugin ổn định qua interface).
+// Registry extension points (05-registry.md) — minimal signatures.
+// AstNode: a syntax tree node (MVP: a ts-morph Node — opaque to plugins, stable
+// behind the interface).
 // AnalyzeContext: { source, registry, resolveBinding(...), addDiagnostic(...) }
 // PatchContext:   { source, resolveRange(nodeId), addDiagnostic(...) }
-// Hai context này là bề mặt plugin API — chi tiết chốt khi implement, nguyên tắc:
-// plugin không bao giờ nhận quyền ghi source trực tiếp, chỉ trả về TextPatch[].
+// These two contexts are the plugin API surface — details are settled at implementation
+// time; the principle is that a plugin never gets write access to the source, it only
+// returns TextPatch[].
 type SemanticAnalyzer = (ctx: AnalyzeContext, node: AstNode) => WorkflowNode | null;
 type NodePatcher = (ctx: PatchContext, node: WorkflowNode,
                     changes: Record<string, unknown>) => TextPatch[];
-type NodeRenderer = unknown;  // React component type — định nghĩa ở @codeflow/react,
-                              // core chỉ giữ opaque reference
+type NodeRenderer = unknown;  // React component type — defined in @codeflow/react,
+                              // core only holds an opaque reference
 
-// Capabilities mặc định theo node type:
+// Default capabilities per node type:
 // tool/function/condition/loop-config: editable
-// synthetic (merge, trigger*, output ẩn): editable=false, deletable=false
-// unknown: editable=false, deletable=true (qua dependency check),
-//          expandable=false; output binding của nó VẪN được track data edge;
-//          được phép "replace & reconfigure" sang tool khác (06 §2)
-// code: editable qua Monaco, deletable (qua dependency check)
+// synthetic (merge, trigger*, implicit output): editable=false, deletable=false
+// unknown: editable=false, deletable=true (through the dependency check),
+//          expandable=false; its output binding IS still tracked for data edges;
+//          "replace & reconfigure" to a different tool is allowed (06 §2)
+// code: editable through Monaco, deletable (through the dependency check)
 ```

@@ -2,21 +2,21 @@
 
 ## 1. Editable fields
 
-Mỗi node/tool definition khai báo phần source cho phép edit an toàn:
+Every node/tool definition declares which part of the source may be edited safely:
 
 ```ts
 interface EditableField {
-  name: string;               // "channel" — property trong argument object
+  name: string;               // "channel" — a property in the argument object
   label?: string;
   editor?: "text" | "expression" | "select" | "code";
   options?: unknown[];
 }
 
-// Shorthand: chuỗi "channel" ≡ { name: "channel" } — normalize khi load definition
+// Shorthand: the string "channel" ≡ { name: "channel" } — normalized when the definition loads
 type EditableFieldInput = EditableField | string;
 ```
 
-Ví dụ:
+Example:
 
 ```ts
 await tools.slack.send({
@@ -25,65 +25,66 @@ await tools.slack.send({
 });
 ```
 
-với `editableFields: ["channel", "message"]` → inspector render:
+with `editableFields: ["channel", "message"]` the inspector renders:
 
 ```text
 Channel   [#security            ]
 Message   [Security PR: {{ pr.title }}]
 ```
 
-Đổi `channel` chỉ được patch đúng property đó.
+Changing `channel` may patch only that one property.
 
-**Điều kiện editable — argument phải là object literal "nhìn thấy được":**
+**Precondition for editability — the argument must be a "visible" object literal:**
 
-- argument là biến (`send(payload)`) → node hiển thị nhưng fields **không editable** + diagnostic info ("argument là biến — edit qua code view"); không đoán;
-- object literal có spread (`{ ...defaults, channel: "#a" }`) → chỉ field đứng **sau** spread và thấy được là editable; field nằm trong spread → không editable; **không bao giờ** chèn property mới sau spread để override giá trị user không nhìn thấy (âm thầm đổi hành vi = vi phạm I6);
-- shorthand property (`{ channel }`) → edit giá trị sẽ viết lại thành longhand (`channel: "#eng"`) — đây là hành vi **được định nghĩa là đúng** (diff kỳ vọng trong fixture), hệ quả data edge từ biến `channel` biến mất là chính xác về semantics;
-- field có schema dạng TS ref (không phải JSON Schema) → inspector không dựng được form có validate, dùng **expression editor** ([03-data-model.md](03-data-model.md) §11).
+- the argument is a variable (`send(payload)`) → the node still shows, but the fields are **not editable**, plus an info diagnostic ("the argument is a variable — edit it in the code view"); nothing is guessed;
+- an object literal with a spread (`{ ...defaults, channel: "#a" }`) → only fields written **after** the spread, and therefore visible, are editable; a field coming from inside the spread is not. **Never** insert a new property after a spread in order to override a value the user cannot see (silently changing behaviour violates I6);
+- a shorthand property (`{ channel }`) → editing the value rewrites it to longhand (`channel: "#eng"`) — this is **defined as correct behaviour** (it is the expected diff in the fixture), and the resulting disappearance of the data edge from the `channel` variable is semantically accurate;
+- a field whose schema is a TS ref (not JSON Schema) → the inspector cannot build a validating form, so it uses the **expression editor** ([03-data-model.md](03-data-model.md) §11).
 
-## 2. Phạm vi edit được hỗ trợ (MVP)
+## 2. Supported edits (MVP)
 
-- primitive arguments (string/number/boolean literal);
-- object properties trong argument object (thêm/sửa/xóa property thuộc `inputSchema`);
-- expressions (xem §3);
-- condition expression của `if` và của `while`;
-- iterable expression của `for...of`;
-- xóa `jump` node (`break`/`continue`) và `output` node của early return (xóa statement — cũng qua dependency check như mọi delete);
-- **đổi tool** của một tool node sang tool khác tương thích — định nghĩa tương thích: các input field user đã cấu hình map được sang tool mới (trùng tên + type), và output type của tool mới gán được cho biến hiện tại xét theo các chỗ dùng downstream (kiểm bằng type check sau patch). Không tương thích → UI vẫn cho đổi nhưng ở dạng "replace & reconfigure" (node về trạng thái needs-configuration). Identity của node giữ nguyên qua patch provenance ([03-data-model.md](03-data-model.md) §5.2 bước 0) dù semantic path/fingerprint đổi;
-- **thêm node mới** từ palette — tool hoặc library function. Luồng đầy đủ:
-  1. user chọn **điểm chèn** trên canvas (affordance "+" trên control edge giữa hai node, hoặc cuối một nhánh);
-  2. patcher chèn statement `const <var> = await tools.x.y({...});` — tên biến sinh tự động từ tên tool (camelCase, thêm hậu tố số nếu trùng: `files`, `files2`); với library function, tự thêm `import` từ `modulePath` nếu chưa có;
-  3. required input fields chưa có giá trị → điền placeholder từ schema default nếu có, không thì node vào trạng thái **needs-configuration** (diagnostic warning + badge trên node, inspector tự mở) — code vẫn parse được, user điền nốt qua inspector;
-- tạo/promote library function ("Save to library" — ghi vào `FunctionLibraryStore`, thay local function bằng import);
-- **xóa node** — có dependency check: nếu output binding của statement đang được node phía sau dùng (data edge — core đã track), từ chối xóa và chỉ rõ node nào đang phụ thuộc ("Slack Send đang dùng `files` — xóa/sửa node đó trước"). Không bao giờ âm thầm sinh code không compile;
-- edit thân custom function qua Monaco (thay nguyên thân function — vùng opaque nên "patch tối thiểu" = thay cả vùng);
-- edit **inline code node** qua Monaco (thay vùng statement opaque, cùng cơ chế trên).
+- primitive arguments (string/number/boolean literals);
+- object properties inside the argument object (add/change/remove a property belonging to `inputSchema`);
+- expressions (see §3);
+- the condition expression of an `if` and of a `while`;
+- the iterable expression of a `for...of`;
+- deleting a `jump` node (`break`/`continue`) and the `output` node of an early return (deleting the statement — also through the dependency check, like every delete);
+- **changing the tool** of a tool node to a compatible one — compatible means: the input fields the user has configured map onto the new tool (same name + type), and the new tool's output type is assignable to the current variable given its downstream uses (verified by a type check after the patch). Not compatible → the UI still allows the change, but as a "replace & reconfigure" (the node returns to needs-configuration). The node's identity survives through patch provenance ([03-data-model.md](03-data-model.md) §5.2 step 0) even though its semantic path/fingerprint change;
+- **adding a new node** from the palette — a tool or a library function. The full flow:
+  1. the user picks an **insertion point** on the canvas (a "+" affordance on the control edge between two nodes, or at the end of a branch);
+  2. the patcher inserts the statement `const <var> = await tools.x.y({...});` — the variable name is generated from the tool name (camelCase, with a numeric suffix on collision: `files`, `files2`); for a library function it also adds the `import` from `modulePath` if it is not there yet;
+  3. required input fields with no value → filled with the schema default if there is one, otherwise the node comes up in the **needs-configuration** state (warning diagnostic + a badge on the node, and the inspector opens itself) — the code still parses, and the user completes it in the inspector;
+- creating/promoting a library function ("Save to library" — writes to `FunctionLibraryStore` and replaces the local function with an import);
+- **deleting a node** — with a dependency check: if the statement's output binding is still used by a downstream node (a data edge, which core already tracks), the delete is refused and the blocking node is named ("Slack Send is using `files` — delete or edit that node first"). Never silently emit code that does not compile;
+- editing the body of a custom function through Monaco (replacing the whole body — the region is opaque, so the "minimal patch" is the whole region);
+- editing an **inline code node** through Monaco (replacing the opaque statement region, same mechanism).
 
-**Chưa hỗ trợ ở MVP** (UI phải nói rõ "không hỗ trợ", không âm thầm làm sai): kéo node từ trong `if`/`for`/`try` ra ngoài hoặc ngược lại, bọc/bỏ wrapper `try` quanh node đang có, đổi thứ tự node có data dependency, mọi structural edit khác. Đây là ranh giới quan trọng — structural editing là phần khó nhất của bài toán và không cần cho vòng value đầu tiên.
+**Not supported in the MVP** (and the UI must say "not supported" rather than quietly doing the wrong thing): dragging a node out of an `if`/`for`/`try` or into one, wrapping/unwrapping a `try` around an existing node, reordering nodes that have a data dependency, and every other structural edit. This is an important boundary — structural editing is the hardest part of the problem and is not needed for the first loop of value.
 
-## 3. Expressions — display syntax, không phải ngôn ngữ
+## 3. Expressions — display syntax, not a language
 
-Quy tắc hiển thị giá trị của một editable field: giá trị là **literal** → hiển thị nguyên văn; giá trị là **TypeScript expression** → bọc trong `{{ }}`:
+How the value of an editable field is displayed: a **literal** is shown verbatim; a **TypeScript expression** is wrapped in `{{ }}`:
 
 ```text
 "#security"                    →  #security                        (string literal)
 `Security PR: ${pr.title}`     →  Security PR: {{ pr.title }}      (template literal:
-                                                                    từng interpolation bọc riêng)
+                                                                    each interpolation wrapped
+                                                                    on its own)
 pr                             →  {{ pr }}                          (identifier expression)
-files.length                   →  {{ files.length }}               (expression bất kỳ)
+files.length                   →  {{ files.length }}               (any expression)
 ```
 
-**Ràng buộc cứng:** `{{ }}` chỉ là cách *hiển thị* TypeScript expression — mapping hai chiều 1-1, không thêm semantics. Không bao giờ phát triển thành expression language riêng (không filter/pipe kiểu `{{ x | upper }}`) — vì đó chính là "representation thứ hai" mà nguyên tắc cốt lõi cấm. Power user cần hơn thế → advanced mode viết TypeScript expression trực tiếp.
+**Hard constraint:** `{{ }}` is only a way of *displaying* a TypeScript expression — a 1-1 bidirectional mapping that adds no semantics. It must never grow into an expression language of its own (no filters/pipes like `{{ x | upper }}`) — that would be exactly the "second representation" the core principle forbids. A power user who needs more switches to advanced mode and writes the TypeScript expression directly.
 
-**Display không phải là encoding — chiều ngược đi qua AST, không parse display text.** Mỗi field giữ tham chiếu tới AST form gốc (string literal / template literal / expression). Edit được áp **tương đối với form gốc**:
+**Display is not an encoding — the reverse direction goes through the AST, it never parses the display text.** Each field holds a reference to its original AST form (string literal / template literal / expression). Edits are applied **relative to that original form**:
 
-- string literal sửa text → vẫn là string literal (kể cả khi text chứa `${` — không bao giờ tự "nâng cấp" thành template literal, vì đó là đổi semantics);
-- template literal sửa phần text quanh interpolation → vẫn template literal; gõ thêm `{{ expr }}` trong friendly editor → thêm một interpolation;
-- string literal thường + user gõ `{{ expr }}` → UI hỏi/chuyển tường minh sang expression mode (chuyển thành template literal là một edit có chủ đích, không ngầm định);
-- field đang là bare expression (`{{ pr }}`) → edit trong expression editor, kết quả vẫn là expression; template một-interpolation (`` `${pr.title}` ``) và bare expression (`pr.title`) hiển thị giống nhau nhưng **không bao giờ lẫn khi patch** vì mỗi bên patch về đúng form gốc của mình;
-- field kiểu boolean/number (biết từ JSON Schema) → typed editor, giá trị ghi thành literal đúng kiểu; xóa trắng field required → property bị xóa + node vào needs-configuration.
+- editing the text of a string literal → still a string literal (even if the text contains `${` — never silently "upgrade" it to a template literal, because that changes semantics);
+- editing the text around an interpolation in a template literal → still a template literal; typing another `{{ expr }}` in the friendly editor adds an interpolation;
+- a plain string literal where the user types `{{ expr }}` → the UI asks and converts explicitly to expression mode (turning it into a template literal is a deliberate edit, never implicit);
+- a field that is already a bare expression (`{{ pr }}`) → edited in the expression editor, and the result is still an expression; a single-interpolation template (`` `${pr.title}` ``) and a bare expression (`pr.title`) look identical on screen but are **never confused when patching**, because each patches back into its own original form;
+- a boolean/number field (known from the JSON Schema) → a typed editor, and the value is written as a literal of the right type; clearing a required field removes the property and puts the node into needs-configuration.
 
-**Escaping/nhập nhằng:** trường hợp display không còn 1-1 (string literal chứa sẵn `{{`/`}}`; expression chứa `}` như `${ {a: 1} }` hay chứa `{{` trong string con) → UI **từ chối chế độ friendly cho field đó** và fallback sang hiển thị/edit dạng code (Monaco inline). Không phát minh escape syntax riêng — fallback là cơ chế degradation chuẩn, hiếm gặp trong flow code thực tế.
+**Escaping/ambiguity:** where the display would stop being 1-1 (a string literal that already contains `{{`/`}}`; an expression containing `}` such as `${ {a: 1} }`, or containing `{{` inside a nested string), the UI **refuses friendly mode for that field** and falls back to code display/editing (inline Monaco). No custom escape syntax is invented — falling back is the standard degradation mechanism, and the case is rare in real flow code.
 
 ## 4. Patch pipeline
 
@@ -92,27 +93,28 @@ patchNode(nodeId, changes)
   ↓
 Resolve node → source mapping
   ↓
-Verify vùng source chưa đổi từ lúc load graph
+Verify the source region has not changed since the graph was loaded
   ↓
-Resolve AST node (ts-morph)
+Resolve the AST node (ts-morph)
   ↓
-Validate edit (schema của editable field)
+Validate the edit (against the editable field's schema)
   ↓
-Tính patch trên CANDIDATE source (bản in-memory)
+Compute the patch against a CANDIDATE source (an in-memory copy)
   ↓
-Validate candidate (parse lại; type check khi có điều kiện —
-  fail → HỦY, source thật không đổi một byte, trả diagnostics)
+Validate the candidate (re-parse; type-check where available —
+  on failure → ABORT, the real source does not change by one byte,
+  and diagnostics are returned)
   ↓
-Commit atomic: apply patch vào source thật
+Commit atomically: apply the patch to the real source
   ↓
 Re-analyze → graph diff → UI update
 ```
 
-**Ràng buộc byte-for-byte (I3)**: patch được tính bằng cách **thay text range của đúng node AST nhỏ nhất bị ảnh hưởng** — không bao giờ reprint node cha (reprint kéo theo quote style/indentation/trailing comma của printer, phá formatting xung quanh). Quote style, indentation, trailing comma của phần chèn mới đọc từ **chính source hiện tại** (file dùng nháy đơn → chèn nháy đơn), không lấy từ manipulation settings mặc định. Xóa property → xóa cả dòng của nó kèm comment cùng dòng; dấu phẩy còn thừa/thiếu của property kề chỉnh theo đúng style đang có. Mọi hành vi này có fixture diff kỳ vọng ([11-testing.md](11-testing.md) §3.2).
+**Byte-for-byte constraint (I3)**: the patch is computed by **replacing the text range of the smallest affected AST node** — never by reprinting the parent node (reprinting drags in the printer's quote style/indentation/trailing commas and destroys the surrounding formatting). Quote style, indentation and trailing-comma style for newly inserted text are read from **the current source itself** (a file using single quotes gets single quotes), not from default manipulation settings. Removing a property removes its whole line together with any same-line comment, and adjusts the leftover/missing comma on the neighbouring property to match the existing style. Every one of these behaviours has a fixture with an expected diff ([11-testing.md](11-testing.md) §3.2).
 
-**Transactionality**: mọi edit — kể cả "đổi tool" cần type check downstream — đều validate trên candidate rồi mới commit; không tồn tại trạng thái "đã ghi source rồi mới phát hiện hỏng". Composite operation (promote local function → library: ghi store + xóa declaration + thêm import) chạy theo thứ tự an toàn: ghi store trước (fail → dừng, source nguyên vẹn), rồi patch flow một lần (hai vùng trong một commit); patch fail → entry trong store vẫn còn nhưng vô hại (chưa flow nào tham chiếu).
+**Transactionality**: every edit — including a "change tool" that needs a downstream type check — is validated on the candidate before it is committed; there is no state in which the source has been written and only then found to be broken. A composite operation (promoting a local function to the library: write the store + delete the declaration + add the import) runs in a safe order: write the store first (a failure stops there, with the source untouched), then patch the flow once (two regions, one commit); if the patch fails, the store entry remains but is harmless (no flow references it yet).
 
-Ví dụ:
+Example:
 
 ```ts
 const result = await flow.patchNode("node_slack_01", {
@@ -128,25 +130,25 @@ const result = await flow.patchNode("node_slack_01", {
  });
 ```
 
-Kết quả trả về:
+The returned result:
 
 ```ts
 {
-  source: string;          // source mới
-  patches: TextPatch[];    // các vùng đã đổi
-  graph: WorkflowGraph;    // graph sau re-analyze
+  source: string;          // the new source
+  patches: TextPatch[];    // the changed regions
+  graph: WorkflowGraph;    // the graph after re-analysis
   diagnostics: Diagnostic[];
 }
 ```
 
 ## 5. Conflict detection
 
-MVP giả định **single-user, single-editor tại một thời điểm** (một UI instance + có thể AI/dev sửa file bên ngoài). Trước khi patch:
+The MVP assumes **a single user with a single editor at a time** (one UI instance, with an AI/developer possibly editing the file externally). Before patching:
 
-0. so `registryHash` của graph với registry hiện tại — registry đã đổi (tool gỡ/đổi schema) → yêu cầu re-analyze trước khi cho edit;
-1. so content hash của file với hash lúc load graph;
-2. nếu file đã đổi → **re-analyze trước**, resolve lại node qua identity ([03-data-model.md](03-data-model.md) §5.2);
-3. resolve được node + **raw text** của vùng đó không đổi (so text gốc, KHÔNG so fingerprint chuẩn hóa — fingerprint bỏ trivia nên sẽ bỏ sót thay đổi comment/formatting mà một edit-thay-cả-vùng có thể đè mất) → apply patch bình thường;
-4. vùng đó đã đổi → từ chối patch, báo UI: "Node này đã thay đổi từ lúc load — reload workflow trước khi sửa."
+0. compare the graph's `registryHash` against the current registry — if the registry has changed (a tool removed or its schema changed) require a re-analyze before allowing edits;
+1. compare the file's content hash against the hash taken when the graph was loaded;
+2. if the file has changed → **re-analyze first**, and resolve the node again through identity ([03-data-model.md](03-data-model.md) §5.2);
+3. if the node resolves and the **raw text** of its region is unchanged (compared as original text, **not** as a normalized fingerprint — a fingerprint drops trivia and would therefore miss the comment/formatting changes that a whole-region replacement could wipe out) → apply the patch normally;
+4. if that region has changed → refuse the patch and tell the UI: "This node has changed since it was loaded — reload the workflow before editing."
 
-Không bao giờ âm thầm overwrite thay đổi của user/AI. UI conflict resolution phức tạp hơn (review/merge) để sau MVP.
+Never silently overwrite a change made by the user or the AI. Richer conflict resolution in the UI (review/merge) comes after the MVP.

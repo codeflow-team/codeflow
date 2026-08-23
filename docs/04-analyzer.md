@@ -1,16 +1,16 @@
 # 04 — Semantic Analyzer
 
-Analyzer là lớp intelligence chính: nhận syntax tree + type information + registry, trả về `WorkflowGraph`. Toàn bộ quy tắc dưới đây áp dụng cho **thân function flow** theo [contract](01-flow-contract.md).
+The analyzer is the main intelligence layer: it takes a syntax tree + type information + the registry and returns a `WorkflowGraph`. Every rule below applies to the **body of the flow function** as defined by the [contract](01-flow-contract.md).
 
-## 1. Nguyên tắc
+## 1. Principles
 
-1. **Projection gần 1:1**: mỗi construct được hỗ trợ → đúng một node. Không gộp nhiều statement thành node "thông minh" ở MVP (gộp làm mờ source mapping, khó patch, dễ vỡ round-trip). Smart merging để sau MVP.
-2. **Resolve bằng binding, không bằng tên**: một call là tool call khi property-access chain của nó **bắt rễ ở binding của tham số `tools`** (tham số thứ hai của flow function — scope analysis, không phải string matching: alias `const t = tools` vẫn resolve, biến khác tên `tools` không bị nhận nhầm). Path còn lại (`github.getFiles`) tra vào registry: có entry → `tool` node; **không có entry → `unknown` node + diagnostic** (đây là quy tắc sinh `unknown`). Library function resolve tương tự qua binding của import từ `modulePath`. Cách này chỉ cần parse + scope analysis — **không cần full type check** — nên chạy nhanh cả ở browser; TS type checker là tầng **enrichment** (type cho ports, type-check khi validate) chạy khi có điều kiện (Node/CI), không phải điều kiện tiên quyết để dựng graph.
-3. **Không chắc thì fallback**: construct ngoài danh sách hỗ trợ → custom code node + diagnostic, không đoán.
-4. **Không nuốt side-effect call** (bảo vệ I1 — [11-testing.md](11-testing.md)): mọi **`await` expression** và mọi **tool call (bắt rễ ở `tools`)** nằm **bên trong expression** (condition của if/while, argument của call khác, phần tử tính toán, callback của `.map(...)`) — thay vì đứng thành statement riêng — làm **cả statement chứa nó** degrade thành `code` node + diagnostic `hidden-call-in-expression` ("tách ra `const` riêng để hiện thành node"). Mỗi hidden call = một diagnostic (không nhân đôi cho `await tools.x.y()`). Ví dụ: `if (await tools.github.hasLabel({pr}))`, `await Promise.all(prs.map(pr => tools.github.getFiles({pr})))` → code node, KHÔNG BAO GIỜ thành condition/parallel node "đẹp" mà giấu mất tool call bên trong.
-   **Phạm vi có chủ đích — sync library/local function call KHÔNG kích hoạt rule này**: `if (isAdmin(user) && pr.draft)` vẫn là condition node với expression thô. Lý do: (a) mục đích của rule là side-effect visibility — sync predicate không mang side-effect quan sát được ở tầng flow (side-effect thật nằm ở await/tools, và thân function vốn đã opaque theo 01 §4); (b) áp nguyên văn sẽ mâu thuẫn §2.2b (condition phủ định/tổ hợp chứa registered function được giữ là condition node) và §2.6 (phần tử `Promise.all` được phép là một function call). Ngoại lệ reference: function *reference* làm callback (§2.2b) không phải call nên càng không kích hoạt. Style guide dạy AI hoist await/tool call ra `const` nên case này hiếm trong code chuẩn; quy tắc này là lưới an toàn để graph không bao giờ nói dối về side effect.
+1. **Near-1:1 projection**: each supported construct → exactly one node. No "smart" merging of several statements into one node in the MVP (merging blurs source mapping, makes patching hard, and breaks round-trips easily). Smart merging comes after the MVP.
+2. **Resolve by binding, not by name**: a call is a tool call when its property-access chain is **rooted in the binding of the `tools` parameter** (the flow function's second parameter — scope analysis, not string matching: an alias `const t = tools` still resolves, and an unrelated variable that happens to be named `tools` is not mistaken for it). The remaining path (`github.getFiles`) is looked up in the registry: an entry exists → `tool` node; **no entry → `unknown` node + diagnostic** (this is the rule that produces `unknown`). Library functions resolve the same way, through the binding of the import from `modulePath`. This needs only parse + scope analysis — **no full type check** — so it runs fast in the browser too. The TS type checker is an **enrichment** layer (types for ports, type-checking during validation) that runs where conditions allow (Node/CI); it is not a prerequisite for building the graph.
+3. **When unsure, fall back**: a construct outside the supported list → custom code node + diagnostic. Never guess.
+4. **Never swallow a side-effecting call** (this protects I1 — [11-testing.md](11-testing.md)): every **`await` expression** and every **tool call (rooted in `tools`)** that sits **inside an expression** (the condition of an if/while, an argument to another call, a computed element, a `.map(...)` callback) instead of standing as its own statement degrades **the whole containing statement** to a `code` node plus a `hidden-call-in-expression` diagnostic ("hoist it into its own `const` to make it a node"). One hidden call = one diagnostic (not doubled for `await tools.x.y()`). Examples: `if (await tools.github.hasLabel({pr}))`, `await Promise.all(prs.map(pr => tools.github.getFiles({pr})))` → code node, **never** a pretty condition/parallel node that hides a tool call inside it.
+   **Deliberate scope — a synchronous library/local function call does NOT trigger this rule**: `if (isAdmin(user) && pr.draft)` is still a condition node with a raw expression. Reasons: (a) the point of the rule is side-effect visibility, and a synchronous predicate carries no side effect observable at the flow level (the real side effects live behind await/tools, and a function body is already opaque per 01 §4); (b) applying it literally would contradict §2.2b (a negated/compound condition containing a registered function is kept as a condition node) and §2.6 (a `Promise.all` element is allowed to be a single function call). Reference exception: a function *reference* used as a callback (§2.2b) is not a call at all, so it triggers even less. The style guide teaches the AI to hoist await/tool calls into a `const`, so this case is rare in conforming code; the rule is the safety net that keeps the graph from ever lying about side effects.
 
-## 2. Quy tắc mapping
+## 2. Mapping rules
 
 ### 2.1 Tool call
 
@@ -18,23 +18,23 @@ Analyzer là lớp intelligence chính: nhận syntax tree + type information + 
 const prs = await tools.github.getNewPRs({ repo: input.repository });
 ```
 
-→ `tool` node `github.getNewPRs`, label/icon/schema lấy từ registry; output port `prs` (schema từ `outputSchema` hoặc TS return type); argument object → editable fields theo definition.
+→ a `tool` node for `github.getNewPRs`, with label/icon/schema from the registry; output port `prs` (schema from `outputSchema` or from the TS return type); the argument object becomes editable fields according to the definition.
 
 ### 2.2 Function call (library / local)
 
-Function call **dạng statement riêng** → `function` node:
+A function call **standing as its own statement** → `function` node:
 
 ```ts
 const flagged = filterAuthChanges(files);   // library function → function node
 ```
 
-### 2.2b Function reference trong expression — KHÔNG phải node riêng
+### 2.2b A function reference inside an expression is NOT its own node
 
 ```ts
 if (files.some(isAuthChange)) { ... }
 ```
 
-`isAuthChange` ở đây là callback truyền vào `Array.some` — nó **không sinh node riêng**. Cả `files.some(isAuthChange)` là condition expression của `condition` node (§2.4). Sugar label: chỉ áp dụng khi **toàn bộ** condition expression đúng dạng `fn(args)`, `xs.some(fn)` hoặc `xs.every(fn)` với `fn` resolve bằng **symbol** về một registered function — khi đó label node dùng label từ registry ("Is Auth Change?"). Có phủ định (`!files.some(...)`), tổ hợp (`&&`/`||`), hay bất kỳ dạng nào khác → hiển thị expression thô, KHÔNG dùng label (label sai nghĩa là failure mode I6 — thà thô còn hơn sai). Thuần display, không đổi cấu trúc graph, source mapping vẫn là cả `if`.
+Here `isAuthChange` is a callback passed to `Array.some` — it produces **no node of its own**. The whole of `files.some(isAuthChange)` is the condition expression of a `condition` node (§2.4). Label sugar applies only when the **entire** condition expression has the shape `fn(args)`, `xs.some(fn)` or `xs.every(fn)` and `fn` resolves **by symbol** to a registered function — then the node uses the label from the registry ("Is Auth Change?"). Any negation (`!files.some(...)`), any combination (`&&`/`||`), or any other shape → show the raw expression and do **not** use the label (a wrong label is failure mode I6 — raw beats wrong). This is purely a display concern; it does not change the graph structure, and the source mapping is still the whole `if`.
 
 ### 2.3 Sequential + data flow
 
@@ -43,7 +43,7 @@ const a = await foo();
 const b = await bar(a);
 ```
 
-→ hai node nối control edge `foo → bar`, kèm data edge `a`. Data dependency track qua binding/symbol ([03-data-model.md](03-data-model.md) §6 — shadowing resolve đúng, `let` nhiều writer có edge từ mỗi writer).
+→ two nodes joined by a control edge `foo → bar`, plus a data edge `a`. Data dependencies are tracked through bindings/symbols ([03-data-model.md](03-data-model.md) §6 — shadowing resolves correctly, and a `let` with several writers gets an edge from each writer).
 
 ### 2.4 Condition
 
@@ -51,9 +51,9 @@ const b = await bar(a);
 if (cond) { A } else { B }
 ```
 
-→ `condition` node, hai control edge label `true`/`false` (if không có else → nhánh `false` đi thẳng tới điểm hội tụ), hội tụ ở `merge` node. Quy tắc merge là **của analyzer, thuần cấu trúc** (không liên quan layout): merge node được sinh **khi và chỉ khi** sau chỗ rẽ nhánh còn statement tiếp theo trong cùng block; nhánh là điểm kết thúc block (cuối thân loop, cuối thân flow) → KHÔNG sinh merge node — hai nhánh cùng trỏ tới ranh giới block (loop node/output). `cond` là editable expression trên inspector.
+→ a `condition` node with two control edges labeled `true`/`false` (an `if` without an `else` sends the `false` branch straight to the join point), converging at a `merge` node. The merge rule belongs to **the analyzer and is purely structural** (nothing to do with layout): a merge node is produced **if and only if** there is a further statement in the same block after the branch point. If the branch point is the end of the block (end of a loop body, end of the flow body) → **no** merge node is produced, and both branches point at the block boundary (the loop node / the output). `cond` is an editable expression in the inspector.
 
-Chuỗi `else if`: là `IfStatement` lồng trong nhánh else → chiếu 1:1 thành condition node lồng nhau (semantic path `flow/if[0]/else/if[0]`), tất cả chung một merge ở điểm hội tụ ngoài cùng. Không có node "multi-branch" ở MVP.
+An `else if` chain is an `IfStatement` nested in the else branch → projected 1:1 as nested condition nodes (semantic path `flow/if[0]/else/if[0]`), all sharing one merge at the outermost join point. There is no "multi-branch" node in the MVP.
 
 ### 2.5 Loop
 
@@ -61,9 +61,9 @@ Chuỗi `else if`: là `IfStatement` lồng trong nhánh else → chiếu 1:1 th
 for (const item of items) { ...body... }
 ```
 
-→ `loop` node ("For Each `item` in `items`"); body là **subgraph lồng trong node** (nested layout), không phải edge vòng ngược — dễ đọc với non-dev hơn.
+→ a `loop` node ("For Each `item` in `items`"); the body is a **subgraph nested inside the node** (nested layout), not a back edge — easier for non-developers to read.
 
-`for await...of` được xử lý như `for...of` (data.kind ghi nhận để patcher giữ nguyên `await`). `for (;;)` cổ điển và `do...while` KHÔNG được hỗ trợ → code node; nếu thân chứa tool call thì quy tắc hidden-call (§1.4) đảm bảo có diagnostic chứ không im lặng.
+`for await...of` is handled like `for...of` (`data.kind` records it so the patcher preserves the `await`). Classic `for (;;)` and `do...while` are **not** supported → code node; if the body contains a tool call, the hidden-call rule (§1.4) guarantees a diagnostic rather than silence.
 
 ### 2.6 Parallel
 
@@ -75,11 +75,11 @@ const [a, b, c] = await Promise.all([
 ]);
 ```
 
-→ `parallel` node fan-out, hội tụ ở `merge`. Quy tắc:
+→ a `parallel` fan-out node converging at a `merge`. Rules:
 
-- chỉ nhận **array literal**; mỗi phần tử là **một call duy nhất** (tool/library/local function — không có `await` trong phần tử, await là của `Promise.all`) → phần tử đó thành node trong nhánh tương ứng;
-- phần tử phức tạp hơn một call (expression tổ hợp, `.map(...)`, ternary...) → cả statement degrade theo quy tắc hidden-call (§1.4). `Promise.all(prs.map(...))` — dạng dynamic phổ biến — nằm ngoài MVP: code node + diagnostic, style guide hướng AI dùng `for...of` thay thế;
-- destructuring `[a, b, c]` → output ports đặt trên `merge` node, mỗi port ghi metadata nhánh gốc (port `a` ← nhánh 1) để data edge downstream truy về đúng nguồn.
+- only an **array literal** is accepted; each element must be **exactly one call** (tool/library/local function — no `await` inside an element, the `await` belongs to `Promise.all`) → that element becomes the node in the corresponding branch;
+- an element more complex than a single call (a compound expression, `.map(...)`, a ternary...) → the whole statement degrades under the hidden-call rule (§1.4). `Promise.all(prs.map(...))` — the common dynamic form — is out of MVP scope: code node + diagnostic, and the style guide steers the AI toward `for...of` instead;
+- the destructuring `[a, b, c]` → output ports placed on the `merge` node, each port recording which branch it came from (port `a` ← branch 1) so downstream data edges trace back to the right source.
 
 ### 2.7 Try / Catch
 
@@ -91,7 +91,7 @@ try {
 }
 ```
 
-→ `try` node: body là subgraph chính, catch là subgraph thứ hai, nối bằng control edge label **`error`** (biến lỗi `err` làm data edge vào catch body; `catch {}` không có binding — hợp lệ, chỉ không có data edge). `finally` (nếu có) là subgraph thứ ba, control edge từ cả hai nhánh — **và từ mọi `jump`/`output` node bên trong body/catch** (break/return vẫn chạy finally trước khi thoát; thiếu edge này là graph nói dối về side effect trong finally). Sau try node, flow hội tụ như merge của condition. Thêm/bỏ wrapper try quanh node đang có là structural edit — chưa hỗ trợ ở MVP ([06-patch-engine.md](06-patch-engine.md) §2).
+→ a `try` node: the body is the main subgraph, the catch is a second subgraph, joined by a control edge labeled **`error`** (the error binding `err` becomes a data edge into the catch body; `catch {}` has no binding — legal, it just has no data edge). A `finally` (if present) is a third subgraph, with a control edge from both branches — **and from every `jump`/`output` node inside the body/catch** (a break/return still runs `finally` before leaving; without those edges the graph would lie about side effects in `finally`). After the try node, the flow converges the same way a condition's merge does. Adding or removing a `try` wrapper around an existing node is a structural edit — not supported in the MVP ([06-patch-engine.md](06-patch-engine.md) §2).
 
 ### 2.8 While
 
@@ -103,28 +103,28 @@ while (attempts < 3) {
 }
 ```
 
-→ `loop` node với `data.kind: "while"`, condition là editable expression. **Bound check** (best-effort, không phải chứng minh termination): analyzer nhận diện các idiom bounded phổ biến — condition so sánh số học với biến được cập nhật trong body, hoặc điều kiện trên biến được gán trong body. Không nhận diện được → diagnostic `warning: "unbounded-loop-risk"` trên node (flow vẫn hợp lệ; việc chặn hay không là chuyện của runtime, không phải CodeFlow).
+→ a `loop` node with `data.kind: "while"`, with the condition as an editable expression. **Bound check** (best-effort, not a termination proof): the analyzer recognises the common bounded idioms — a condition comparing a number against a variable updated in the body, or a condition on a variable assigned in the body. When it cannot recognise one → a `warning: "unbounded-loop-risk"` diagnostic on the node (the flow is still valid; whether to block it is the runtime's business, not CodeFlow's).
 
 ### 2.9 Return / Break / Continue
 
-- `return` (cuối flow hoặc early return trong if/loop) → `output` node ("End Flow"), mỗi return statement một node, 1:1 với source; return value hiển thị như expression.
-- `break` / `continue` trong loop body → `jump` node (terminal chip trong loop subgraph, `data.kind` tương ứng): `break` cắt sang điểm sau loop, `continue` sang iteration kế — hiển thị bằng label trên node, không vẽ edge vòng ngược (giữ graph phẳng, dễ đọc). Labeled jump (`continue outer;`) → `data.label` lưu tên label, node hiển thị "continue → outer" chỉ rõ loop đích — không hiển thị giống continue thường.
-- Guard pattern phổ biến (`if (!x) continue;`) nhờ đó hiển thị tự nhiên: condition node → nhánh `true` → jump node.
+- `return` (at the end of the flow, or an early return inside an if/loop) → an `output` node ("End Flow"), one node per return statement, 1:1 with the source; the returned value is shown as an expression.
+- `break` / `continue` inside a loop body → a `jump` node (a terminal chip inside the loop subgraph, with the matching `data.kind`): `break` cuts to the point after the loop, `continue` to the next iteration — shown as a label on the node, without drawing a back edge (which keeps the graph flat and readable). A labeled jump (`continue outer;`) → `data.label` holds the label name and the node shows "continue → outer", naming the target loop, so it never looks like a plain `continue`.
+- The common guard pattern (`if (!x) continue;`) therefore displays naturally: condition node → `true` branch → jump node.
 
-### 2.10 Trigger và Output
+### 2.10 Trigger and Output
 
-- `trigger` node dựng từ type tham số `input` + `TriggerMetadata` nếu được cung cấp ([03-data-model.md](03-data-model.md) §9).
-- Flow không có `return` tường minh → synthetic `output` node ở cuối thân function.
+- The `trigger` node is built from the type of the `input` parameter plus `TriggerMetadata` when supplied ([03-data-model.md](03-data-model.md) §9).
+- A flow with no explicit `return` → a synthetic `output` node at the end of the function body.
 
 ### 2.11 Fallback
 
-Mọi statement/expression ngoài các quy tắc trên:
+Any statement/expression outside the rules above:
 
 ```ts
 const result = extremelyComplexAlgorithm(data);
 ```
 
-→ `code` node giữ nguyên source, hiển thị:
+→ a `code` node that keeps the source verbatim, displayed as:
 
 ```text
 ┌─────────────────────┐
@@ -134,16 +134,16 @@ const result = extremelyComplexAlgorithm(data);
 └─────────────────────┘
 ```
 
-Các statement liên tiếp cùng không được hỗ trợ được gộp thành **một** code node (đây là kiểu gộp duy nhất ở MVP — gộp vùng opaque không ảnh hưởng mapping vì cả vùng là một source range). Semantic path của code node: `stmt[i..j]` theo vị trí trong block. **Identity của code node gộp**: node lưu fingerprint **từng statement** bên trong; khi re-analyze, code node mới match code node cũ nếu chia sẻ ≥1 statement fingerprint → `node.updated` (mở rộng/thu hẹp vùng), không phải removed+added — nhờ đó thêm một statement unsupported cạnh code node đang có không làm mất identity (invariant I5).
+Consecutive unsupported statements are merged into **one** code node (this is the only merging in the MVP — merging an opaque region does not affect mapping, because the whole region is a single source range). The semantic path of a code node is `stmt[i..j]`, by position in the block. **Identity of a merged code node**: the node stores a fingerprint **per statement** inside it; on re-analyze, a new code node matches an old one if they share ≥1 statement fingerprint → `node.updated` (the region grew or shrank), not removed+added. That is what keeps identity when a new unsupported statement is added next to an existing code node (invariant I5).
 
-## 3. Function calls ngoài `tools`
+## 3. Function calls outside `tools`
 
-Ba trường hợp, resolve đều qua symbol:
+Three cases, all resolved by symbol:
 
-- **Library function** (import từ function library, [05-registry.md](05-registry.md) §4) → function node với schema/label/icon từ `FunctionDefinition`; analyzer không nhìn vào thân function;
-- **Local function** (khai báo trong file flow) → function node dựng từ TS signature (tên, params, return type); thân function không được project thành graph ở MVP;
-- **Import lạ / call không resolve được** → opaque code node + diagnostic.
+- **Library function** (imported from the function library, [05-registry.md](05-registry.md) §4) → a function node with schema/label/icon from the `FunctionDefinition`; the analyzer never looks inside the function body;
+- **Local function** (declared in the flow file) → a function node built from the TS signature (name, params, return type); the body is not projected into the graph in the MVP;
+- **Unfamiliar import / unresolvable call** → opaque code node + diagnostic.
 
 ## 4. Re-analysis
 
-MVP: mỗi source change → full re-parse + re-analyze + **graph diff** so với graph trước (dựa trên identity resolution, [03-data-model.md](03-data-model.md) §5.2) → phát `GraphChange[]` cho UI. Incremental analysis thật (chỉ vùng ảnh hưởng) để sau, đằng sau cùng interface.
+MVP: each source change → full re-parse + re-analyze + a **graph diff** against the previous graph (based on identity resolution, [03-data-model.md](03-data-model.md) §5.2) → emit `GraphChange[]` for the UI. Real incremental analysis (only the affected region) comes later, behind the same interface.

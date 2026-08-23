@@ -1,23 +1,24 @@
 # 05 — Registry, Typed Tools API, MCP, Function Library, Custom Code
 
-Registry là nơi khai báo mọi thứ có thể trở thành node. Toàn bộ visual semantics mở rộng qua registry, không sửa core.
+The registry is where everything that can become a node is declared. All visual semantics are extended through the registry, never by changing core.
 
-Node đến từ **3 nguồn**, đều ngang hàng trong palette:
+Nodes come from **3 sources**, all equal citizens in the palette:
 
 ```text
 ┌────────────────────────────────────────────────┐
 │                    Registry                    │
 │                                                │
 │  Tools/MCP          Function Library   Node    │
-│  (integration       (user-defined,     types   │
-│   có sẵn)            lưu độc lập,      (plugin)│
+│  (existing          (user-defined,     types   │
+│   integrations)      stored            (plugin)│
+│                      independently,            │
 │                      input/output,             │
-│                      tái sử dụng)              │
+│                      reusable)                 │
 └───────────┬──────────────┬─────────────────────┘
             ▼              ▼
         tool node     function node        code node
                                            (inline, fallback,
-                                            không cần registry)
+                                            no registry needed)
 ```
 
 ## 1. ToolDefinition
@@ -29,50 +30,52 @@ interface ToolDefinition {
   description?: string;
   icon?: string;
 
-  // Schema = JSON Schema object HOẶC TS type ref string — định nghĩa và
-  // quy tắc chuyển đổi ở 03-data-model.md §11. MCP tools mang JSON Schema;
-  // ví dụ trong docs dùng TS ref cho gọn.
+  // Schema = a JSON Schema object OR a TS type ref string — the definition and the
+  // conversion rules are in 03-data-model.md §11. MCP tools carry JSON Schema;
+  // the examples in these docs use TS refs for brevity.
   inputSchema: Schema;
   outputSchema?: Schema;
 
-  editableFields?: EditableFieldInput[];  // xem 06-patch-engine.md §1
+  editableFields?: EditableFieldInput[];  // see 06-patch-engine.md §1
 
-  analyzer?: SemanticAnalyzer;        // override cách phân tích call này
-  patcher?: NodePatcher;              // override cách patch call này
+  analyzer?: SemanticAnalyzer;        // override how this call is analyzed
+  patcher?: NodePatcher;              // override how this call is patched
 }
 ```
 
-## 2. Typed Tools API codegen — điểm khớp với Code Mode
+## 2. Typed Tools API codegen — the seam with Code Mode
 
-Registry không chỉ là metadata thụ động. Từ danh sách `ToolDefinition`, CodeFlow **sinh ra typed TypeScript API**:
+The registry is not just passive metadata. From the list of `ToolDefinition`s, CodeFlow **generates a typed TypeScript API**:
 
 ```ts
 // tools.d.ts — generated
 export interface Tools {
   github: {
-    /** Get new pull requests */
-    getNewPRs(input: { repo: string }): Promise<PullRequest[]>;
     /** Get files changed in a PR */
     getFiles(input: { pr: PullRequest }): Promise<File[]>;
+    /** Get new pull requests */
+    getNewPRs(input: { repo: string }): Promise<PullRequest[]>;
   };
   slack: {
     /** Send a Slack message */
-    send(input: { channel: string; message: string }): Promise<void>;
+    send(input: { channel: string; message: string }): Promise<unknown>;
   };
 }
 ```
 
-Interface này phục vụ **ba** bên cùng lúc:
+Namespaces and methods are emitted in alphabetical order, not registration order, so the generated file is byte-stable across runs (it is committed to the repo — [10-ai-codegen.md](10-ai-codegen.md) §2). A tool that declares no `outputSchema` produces `Promise<unknown>`, not `Promise<void>`: no declared output means "we were not told", not "there is no result" — an MCP tool with no output schema still answers with something, and code written against `void` either drops that value or misreports it.
 
-1. **AI** — được đưa vào context khi generate flow code (đúng mô hình Code Mode: "cả API trong ~1.000 token"); AI viết code có type, có autocomplete-quality.
-2. **Analyzer** — resolve tool call bằng symbol: một call expression là tool node khi và chỉ khi symbol của nó thuộc interface `Tools`. Không string matching, không vỡ khi alias/rename/destructure.
-3. **Sandbox runtime (tương lai)** — `tools` chính là binding object được inject khi execute; interface là contract giữa code và runtime.
+This interface serves **three** consumers at once:
 
-Codegen áp dụng cho cả **function library**: từ các `FunctionDefinition`, sinh ra module declaration cho `modulePath` (vd `@flows/lib.d.ts`) — AI biết import gì khi generate flow.
+1. **The AI** — it goes into the context when generating flow code (exactly the Code Mode model: "the whole API in ~1,000 tokens"); the AI writes typed code with autocomplete-grade accuracy.
+2. **The analyzer** — tool calls are resolved by symbol: a call expression is a tool node if and only if its symbol belongs to the `Tools` interface. No string matching, nothing that breaks under aliasing/renaming/destructuring.
+3. **The sandbox runtime (future)** — `tools` is exactly the binding object injected at execution time; the interface is the contract between the code and the runtime.
 
-**Một nguồn sự thật duy nhất — registry.** Generated files (`tools.d.ts`, `lib.d.ts`) là **derived artifacts**, không bao giờ là nguồn: mỗi file sinh ra mang header comment chứa `registryHash` (fingerprint của registry lúc codegen). Khi analyze, CodeFlow so hash trong generated files với registry hiện tại — lệch → diagnostic `stale-generated-artifacts` ("chạy `codeflow generate`") thay vì âm thầm cho ra graph sai. `WorkflowGraph.registryHash` cho phép UI phát hiện graph stale khi registry đổi lúc đang mở ([06-patch-engine.md](06-patch-engine.md) §5). Đây là cách giữ nguyên tắc "không có representation thứ hai cần sync": có hai bản thể vật lý (in-memory + on-disk) nhưng chỉ một nguồn, một chiều sinh, và lệch thì phát hiện được.
+The same codegen applies to the **function library**: from the `FunctionDefinition`s, a module declaration is generated for `modulePath` (e.g. `@flows/lib.d.ts`) so the AI knows what to import when generating a flow.
 
-**Tool đổi/xóa khi flow đang dùng** — cùng cơ chế: tool bị xóa → call thành `unknown` node (capabilities của unknown: [03-data-model.md](03-data-model.md) §11); tool đổi schema → analyze validate `editableFields` với `inputSchema` mới (field không còn tồn tại → bỏ khỏi inspector + diagnostic), argument cũ lệch schema mới → diagnostic trên node; quét toàn workspace bằng `codeflow check`.
+**One source of truth — the registry.** Generated files (`tools.d.ts`, `lib.d.ts`) are **derived artifacts**, never a source: each generated file carries a header comment containing the `registryHash` (a fingerprint of the registry at codegen time). `codeflow check` compares the hash in the generated files against the current registry — a mismatch produces a `stale-generated-artifacts` diagnostic ("run `codeflow generate`") instead of quietly yielding a wrong graph. (Core exposes the comparison; the CLI performs it, because core never touches a file system.) `WorkflowGraph.registryHash` lets the UI detect a stale graph when the registry changes while a flow is open ([06-patch-engine.md](06-patch-engine.md) §5). This is how the "no second representation to keep in sync" principle survives: there are two physical copies (in memory + on disk), but only one source, one generation direction, and any divergence is detectable.
+
+**A tool changed or removed while a flow uses it** — same mechanism: a deleted tool turns the call into an `unknown` node (capabilities of `unknown`: [03-data-model.md](03-data-model.md) §11); a tool whose schema changed makes analysis validate `editableFields` against the new `inputSchema` (a field that no longer exists is dropped from the inspector + a diagnostic), and old arguments that no longer fit the new schema produce a diagnostic on the node; scan the whole workspace with `codeflow check`.
 
 ## 3. MCP Adapter (`@codeflow/mcp`)
 
@@ -80,43 +83,43 @@ Codegen áp dụng cho cả **function library**: từ các `FunctionDefinition`
 MCP Server → tool discovery → MCP schema → ToolDefinition → registry → codegen
 ```
 
-MCP tool có sẵn name/description/JSON Schema — map sang `ToolDefinition` gần như 1-1. Với analyzer, tool đến từ MCP hay local function hay REST SDK là **không phân biệt được và không cần phân biệt** — tất cả đều là entry trong `Tools`.
+MCP tools already carry a name/description/JSON Schema, so mapping them to a `ToolDefinition` is nearly 1-1. To the analyzer, whether a tool comes from MCP, a local function or a REST SDK is **indistinguishable and does not need to be distinguished** — they are all entries in `Tools`.
 
-Core không phụ thuộc MCP; adapter là optional package.
+Core does not depend on MCP; the adapter is an optional package.
 
-## 4. Function Library — user-defined functions lưu độc lập
+## 4. Function Library — user-defined functions, stored independently
 
-**First-class concept ngang hàng với tool.** User (hoặc AI) viết một function, khai báo input/output, lưu vào library — từ đó function tồn tại **độc lập với mọi flow**, xuất hiện trong node palette, và tái sử dụng được ở flow bất kỳ.
+**A first-class concept, on a par with a tool.** The user (or an AI) writes a function, declares its input/output and saves it to the library — from then on the function exists **independently of any flow**, appears in the node palette, and can be reused in any flow.
 
 ```ts
 interface FunctionDefinition {
-  name: string;               // unique trong library; PHẢI là TS identifier hợp lệ
-                              // (không dấu chấm — registry validate khi save; tên có
-                              //  namespace kiểu "github.getFiles" là của TOOL, không phải function)
+  name: string;               // unique in the library; MUST be a valid TS identifier
+                              // (no dots — the registry validates on save; a namespaced
+                              //  name like "github.getFiles" belongs to a TOOL, not a function)
   label: string;              // "Is Auth Change"
   description?: string;
   icon?: string;
 
-  inputSchema: Schema;        // named-fields map { files: "File[]" } (dạng thứ 3 của
-                              // union Schema — 03-data-model.md §11); key PHẢI trùng tên
-                              // tham số trong `code` (validate khi save) — đây là cầu nối
-                              // named-schema ↔ positional args: editable field "files"
-                              // ↔ tham số cùng tên ở vị trí tương ứng
+  inputSchema: Schema;        // a named-fields map { files: "File[]" } (the third shape of
+                              // the Schema union — 03-data-model.md §11); the keys MUST match
+                              // the parameter names in `code` (validated on save) — this is the
+                              // bridge between a named schema and positional args: the editable
+                              // field "files" ↔ the parameter of the same name at that position
   outputSchema: Schema;       // "boolean"
 
-  code: string;               // source TypeScript — với default store (file-based),
-                              // đây CHÍNH LÀ nội dung file trong lib/ của workspace:
-                              // file là storage duy nhất, không có bản sao thứ hai
-  modulePath: string;         // MVP: một module duy nhất "@flows/lib";
-                              // đa module (@flows/lib/http, ...) sau MVP
+  code: string;               // TypeScript source — with the default (file-based) store this
+                              // IS the content of the file in the workspace lib/ directory:
+                              // the file is the only storage, there is no second copy
+  modulePath: string;         // MVP: a single module, "@flows/lib";
+                              // multiple modules (@flows/lib/http, ...) come after the MVP
 
   editableFields?: EditableFieldInput[];
 }
 ```
 
 ```ts
-// Predicate trên MỘT file — nhờ đó dùng được trực tiếp làm callback:
-// `files.some(isAuthChange)` (ví dụ canonical 01 §1, sugar 04 §2.2b)
+// A predicate over ONE file — which is what lets it be used directly as a callback:
+// `files.some(isAuthChange)` (canonical example 01 §1, label sugar 04 §2.2b)
 registry.registerFunction({
   name: "isAuthChange",
   label: "Is Auth Change",
@@ -137,39 +140,39 @@ registry.registerFunction({
 └───────────────────────┘
 ```
 
-Vòng đời:
+Lifecycle:
 
-1. **Tạo**: viết trên UI (Monaco) hoặc AI generate, hoặc "promote" một local function / custom code node đang có trong flow thành library function;
-2. **Lưu**: qua `FunctionLibraryStore` ([03-data-model.md](03-data-model.md) §11 — save có conflict check theo tên, remove/rename có usage-check guard). Default store là **file-based trên `lib/` của workspace** — source thật trong `lib/` là storage duy nhất, `code` field chỉ là nội dung file đó; host app có thể thay store khác (DB) nhưng luôn một nguồn. Type resolution của flow trỏ về source thật qua tsconfig paths (`@flows/lib` → `lib/`); `generated/lib.d.ts` chỉ phục vụ AI context ([10-ai-codegen.md](10-ai-codegen.md) §1), không tham gia compile. Analyzer vẫn không phân tích thân library function (lựa chọn của analyzer); type checker thì thấy source thật — hai tầng, hai vai;
-3. **Dùng**: kéo từ palette vào flow → patcher chèn `import { isAuthChange } from "@flows/lib"` + call statement;
-4. **Sửa**: "Edit Code" mở Monaco với source của function. Đổi signature → signature-mismatch diagnostics, với phạm vi thực tế: flow **đang mở** hiện diagnostic ngay (re-analyze); các flow khác hiện khi được load/analyze lần sau (data model là per-flow, core không giữ index "flow nào dùng function nào"); kiểm tra toàn workspace một lượt là việc của CLI `codeflow check` quét thư mục `flows/` ([10-ai-codegen.md](10-ai-codegen.md) §2);
-5. **Trong graph**: là `function` node với schema từ definition — analyzer không cần nhìn vào thân function.
+1. **Create**: write it in the UI (Monaco), have the AI generate it, or "promote" an existing local function / custom code node from a flow into a library function;
+2. **Save**: through `FunctionLibraryStore` ([03-data-model.md](03-data-model.md) §11 — save has a name conflict check, remove/rename have a usage-check guard). The default store is **file-based over the workspace `lib/` directory** — the real source in `lib/` is the only storage, and the `code` field is just that file's content; a host app can swap in a different store (a DB), but there is always one source. Type resolution for a flow points at the real source through tsconfig paths (`@flows/lib` → `lib/`); `generated/lib.d.ts` exists only to serve AI context ([10-ai-codegen.md](10-ai-codegen.md) §1) and takes no part in compilation. The analyzer still does not analyze the body of a library function (an analyzer choice), while the type checker does see the real source — two layers, two roles;
+3. **Use**: drag it from the palette into a flow → the patcher inserts `import { isAuthChange } from "@flows/lib"` plus the call statement;
+4. **Edit**: "Edit Code" opens Monaco with the function's source. Changing the signature produces signature-mismatch diagnostics, with a realistic scope: the **currently open** flow shows them immediately (it re-analyzes); other flows show them the next time they are loaded/analyzed (the data model is per-flow, and core keeps no index of "which flow uses which function"); checking the whole workspace in one pass is the job of the CLI `codeflow check`, which walks the `flows/` directory ([10-ai-codegen.md](10-ai-codegen.md) §2);
+5. **In the graph**: it is a `function` node with the schema from the definition — the analyzer never has to look inside the function body.
 
-Giống tool ở chỗ có schema và ở trong palette; khác tool ở chỗ implementation là code TypeScript do user sở hữu và sửa được, không phải integration bên ngoài. Khi execute, code library được bundle cùng flow vào sandbox (runtime concern — [09-future.md](09-future.md)).
+It is like a tool in that it has a schema and lives in the palette; it differs from a tool in that its implementation is TypeScript owned and editable by the user, not an external integration. At execution time the library code is bundled with the flow into the sandbox (a runtime concern — [09-future.md](09-future.md)).
 
-## 4b. Local functions và inline code
+## 4b. Local functions and inline code
 
-- **Local function** (named function trong file flow, chưa lưu vào library): node dựng từ TS signature ([04-analyzer.md](04-analyzer.md) §3); UI cho phép "Save to library" để promote. Trùng tên với một library function đang được import trong cùng file → TS duplicate-identifier error, bị chặn từ L0/type check; label sugar và mọi resolve đều theo **symbol** nên local function trùng tên với một registered function KHÔNG bị gán nhầm metadata của registry.
-- **Inline custom code** (statement không map được): `code` node, không cần registry, giữ nguyên source, edit qua Monaco.
+- **Local function** (a named function in the flow file, not yet saved to the library): the node is built from the TS signature ([04-analyzer.md](04-analyzer.md) §3); the UI offers "Save to library" to promote it. Naming it the same as a library function already imported in the same file is a TS duplicate-identifier error, caught at L0/type check; label sugar and every resolution go **by symbol**, so a local function that happens to share a name with a registered function is never given the registry's metadata by mistake.
+- **Inline custom code** (a statement that does not map): a `code` node — no registry entry needed, source kept verbatim, edited through Monaco.
 
-Escape hatch nhiều tầng: inline code → local function → library function — logic càng ổn định càng được kéo lên tầng tái sử dụng cao hơn, và không tầng nào bắt buộc.
+The escape hatch has several tiers: inline code → local function → library function. The more stable a piece of logic gets, the further up the reuse ladder it can move — and no tier is mandatory.
 
 ## 5. NodeDefinition (plugin system)
 
 ```ts
 interface NodeDefinition {
-  type: string;                       // NodeType mới — union mở, 03-data-model.md §3
+  type: string;                       // a new NodeType — the union is open, 03-data-model.md §3
   label: string;
   description?: string;
   inputSchema?: Schema;
   outputSchema?: Schema;
   editableFields?: EditableFieldInput[];
-  renderer?: NodeRenderer;            // custom React component (đăng ký phía @codeflow/react)
+  renderer?: NodeRenderer;            // custom React component (registered on the @codeflow/react side)
   analyzer?: SemanticAnalyzer;
   patcher?: NodePatcher;
 }
 
-// Mỗi register nhận đúng definition type của nó:
+// Each register call takes exactly its own definition type:
 registry.registerTool(def: ToolDefinition);
 registry.registerFunction(def: FunctionDefinition);
 registry.registerNode(def: NodeDefinition);
@@ -178,6 +181,6 @@ registry.registerAnalyzer(fn: SemanticAnalyzer);
 
 ## 6. Security
 
-Core **không bao giờ execute** user/AI code — chỉ parse, analyze, display, patch. Execution thuộc về sandbox runtime bên ngoài với isolation phù hợp (isolate + bindings, không network access chung, API key giấu sau binding — mô hình Code Mode). Xem [09-future.md](09-future.md).
+Core **never executes** user/AI code — it only parses, analyzes, displays and patches. Execution belongs to an external sandbox runtime with appropriate isolation (isolate + bindings, no general network access, API keys hidden behind the binding — the Code Mode model). See [09-future.md](09-future.md).
 
-Ranh giới "code nào được chạy" nói tường minh: `codeflow.config.ts` là **cấu hình do chủ workspace viết**, được CLI thực thi như một build script (ngang hàng `vite.config.ts`) — đây không phải flow/user source. Flow code, library function `code`, và mọi thứ AI generate thì **không bao giờ** được core/CLI execute.
+The line between "code that gets run" and "code that does not" is drawn explicitly: `codeflow.config.ts` is **configuration written by the workspace owner** and is executed by the CLI as a build script (like `vite.config.ts`) — it is not flow/user source. Flow code, the `code` of a library function, and anything an AI generates are **never** executed by core or the CLI.

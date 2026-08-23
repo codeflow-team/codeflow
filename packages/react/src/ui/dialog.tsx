@@ -84,7 +84,7 @@ export function Modal(props: ModalProps): ReactNode {
 export interface SheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  side?: "right" | "bottom";
+  side?: "right" | "left" | "bottom";
   children: ReactNode;
   className?: string;
   "aria-label": string;
@@ -105,6 +105,11 @@ export function Sheet(props: SheetProps): ReactNode {
               ? [
                   "inset-y-0 right-0 w-[min(26rem,100vw)] border-l border-line",
                   "data-[starting-style]:translate-x-full data-[ending-style]:translate-x-full",
+                ]
+              : side === "left"
+              ? [
+                  "inset-y-0 left-0 w-[min(20rem,100vw)] border-r border-line",
+                  "data-[starting-style]:-translate-x-full data-[ending-style]:-translate-x-full",
                 ]
               : [
                   "inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl border-t border-line",

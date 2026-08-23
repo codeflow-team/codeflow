@@ -44,6 +44,17 @@ const defaultEdgeOptions = {
   pathOptions: { borderRadius: 14 },
 };
 
+/**
+ * Fitting a flow is not the same as making it readable.
+ *
+ * A 200-line flow lays out tall and narrow, and fitting *all* of it into a
+ * window means a scale at which every node is a grey smudge — technically the
+ * whole graph, practically nothing. So the fit is floored: past that point it
+ * shows the start of the flow at a size that can still be read, and the minimap,
+ * the outline and the scroll wheel take over from there.
+ */
+const FIT = { minZoom: 0.42 } as const;
+
 const MINIMAP_TYPES = new Set([
   "trigger",
   "tool",
@@ -68,6 +79,28 @@ function minimapColor(type: string): string {
   return MINIMAP_TYPES.has(type) ? `var(--cf-${type})` : "var(--cf-merge)";
 }
 
+
+/** Outer bounds of the top-level nodes — children live inside their container. */
+function rootBounds(
+  nodes: readonly CodeFlowRFNode[],
+): { x: number; y: number; width: number; height: number } | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    if (node.parentId !== undefined) continue;
+    const width = node.width ?? 200;
+    const height = node.height ?? 60;
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + width);
+    maxY = Math.max(maxY, node.position.y + height);
+  }
+  if (!Number.isFinite(minX)) return null;
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
 export interface WorkflowCanvasProps {
   /** Overrides the provider-wide disclosure level for this canvas only. */
   mode?: DisclosureMode;
@@ -76,6 +109,13 @@ export interface WorkflowCanvasProps {
   controls?: boolean;
   background?: boolean;
   fitView?: boolean;
+  /**
+   * Pan to the selected step when it is off-screen. On by default: on a long
+   * flow, selection usually arrives from somewhere that is not the canvas (the
+   * outline, the diagnostics list, the code panel), and a selection the user
+   * cannot see is not a selection.
+   */
+  focusSelection?: boolean;
   className?: string;
   style?: CSSProperties;
 }
@@ -113,16 +153,38 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
   const [nodes, setNodes, onNodesChange] = useNodesState<CodeFlowRFNode>(mapped.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CodeFlowRFEdge>(mapped.edges);
 
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter, getViewport, getInternalNode } = useReactFlow();
+
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setNodes(mapped.nodes);
     setEdges(mapped.edges);
     if (mapped.nodes.length === 0 || props.fitView === false) return;
     // ELK just moved everything; refit once the new positions are committed.
-    const frame = requestAnimationFrame(() => { void fitView({ padding: 0.12, duration: 200 }); });
+    const frame = requestAnimationFrame(() => {
+      void fitView({ ...FIT, padding: 0.12, duration: 200 });
+      /**
+       * When the fit hit its floor the diagram is taller than the window, and
+       * centring it would open the flow somewhere in the middle of itself. A
+       * flow is read from the start, so the view is nudged to the top instead.
+       */
+      window.setTimeout(() => {
+        const element = wrapperRef.current;
+        const bounds = rootBounds(mapped.nodes);
+        if (element === null || bounds === null) return;
+        const rect = element.getBoundingClientRect();
+        const { zoom } = getViewport();
+        if (bounds.height * zoom <= rect.height) return;
+        setCenter(
+          bounds.x + bounds.width / 2,
+          bounds.y + rect.height / (2 * zoom) - 24 / zoom,
+          { zoom, duration: 220 },
+        );
+      }, 260);
+    });
     return () => { cancelAnimationFrame(frame); };
-  }, [mapped, setNodes, setEdges, fitView, props.fitView]);
+  }, [mapped, setNodes, setEdges, fitView, getViewport, setCenter, props.fitView]);
 
   useEffect(() => {
     setNodes((current) =>
@@ -131,13 +193,48 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
   }, [selectedNodeId, setNodes]);
 
   /**
+   * Bring the selected step into view — but only when it is not already there.
+   *
+   * Clicking a node on the canvas must never move the canvas under the cursor,
+   * so the pan is conditional on the node being outside the visible area (with a
+   * margin, so a node half-off the edge still counts as hidden). The zoom is
+   * kept: the user chose it, and a jump that also rescales loses the reading.
+   */
+  useEffect(() => {
+    if (selectedNodeId === null || props.focusSelection === false) return;
+    const element = wrapperRef.current;
+    if (element === null) return;
+    const internal = getInternalNode(selectedNodeId);
+    if (internal === undefined) return;
+
+    const position = internal.internals.positionAbsolute;
+    const width = internal.measured.width ?? 200;
+    const height = internal.measured.height ?? 60;
+    const centerX = position.x + width / 2;
+    const centerY = position.y + height / 2;
+
+    const { x, y, zoom } = getViewport();
+    const screenX = centerX * zoom + x;
+    const screenY = centerY * zoom + y;
+    const rect = element.getBoundingClientRect();
+    const margin = 48;
+    const visible =
+      screenX > margin &&
+      screenX < rect.width - margin &&
+      screenY > margin &&
+      screenY < rect.height - margin;
+    if (visible) return;
+
+    setCenter(centerX, centerY, { zoom, duration: 320 });
+  }, [selectedNodeId, props.focusSelection, getInternalNode, getViewport, setCenter]);
+
+  /**
    * Refit when the canvas itself changes size.
    *
    * The diagram is the window's main object, so a narrower window should show
    * the same flow smaller rather than the same flow half off-screen. React Flow
    * only fits on mount, so the observer supplies the rest.
    */
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const element = wrapperRef.current;
     if (element === null || typeof ResizeObserver === "undefined") return;
@@ -146,7 +243,7 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
     const observer = new ResizeObserver(() => {
       if (first) { first = false; return; }
       clearTimeout(timer);
-      timer = setTimeout(() => { void fitView({ padding: 0.14, duration: 200 }); }, 140);
+      timer = setTimeout(() => { void fitView({ ...FIT, padding: 0.14, duration: 200 }); }, 140);
     });
     observer.observe(element);
     return () => { observer.disconnect(); clearTimeout(timer); };
@@ -196,7 +293,7 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
           fitView={props.fitView ?? true}
-          fitViewOptions={{ padding: 0.15 }}
+          fitViewOptions={{ ...FIT, padding: 0.15 }}
           minZoom={0.15}
           maxZoom={2}
           proOptions={{ hideAttribution: false }}
@@ -207,13 +304,16 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
           ) : null}
           {/* A minimap earns its space once the flow stops fitting on screen;
               below that it is decoration over a diagram the user can already
-              see all of. */}
+              see all of. Past that threshold it is not optional at any width —
+              a 250-line flow is exactly where a narrow window needs it most —
+              so it sits bottom-left, clear of the controls and of whatever
+              chrome the host floats over the top of the canvas. */}
           {(props.minimap ?? graph.nodes.length > 12) ? (
             <MiniMap
               pannable
               zoomable
-              position="top-right"
-              className="!m-3 hidden !h-20 !w-32 opacity-80 transition-opacity hover:opacity-100 xl:!block"
+              position="bottom-left"
+              className="!m-3 !h-24 !w-36 opacity-80 transition-opacity hover:opacity-100 sm:!w-44"
               maskStrokeWidth={2}
               nodeColor={(node) => minimapColor(String((node.data as { node?: { type?: string } }).node?.type ?? ""))}
               nodeStrokeWidth={0}

@@ -1,67 +1,38 @@
 /**
- * Demo registry — the example tools and the library function used throughout
- * the specs (01 §1, 05 §4). Core ships no tool of its own (00 §6.6b); every name
- * here belongs to the host app.
+ * Registry instances for the gallery.
  *
- * `icon` names an entry in the UI layer's icon set (`REGISTRY_ICONS`); anything
- * it does not know — an emoji, a letter — is rendered verbatim instead, so a
- * host is never forced into this one set.
+ * An example names its registry by id (`FlowExample.registryId`); the registry
+ * itself is a plain list of tool and function definitions (`ExampleRegistry`).
+ * Turning one into a live `Registry` is this file's whole job, and the result is
+ * cached: a registry's hash is what a graph is analyzed against (05 §2), so
+ * rebuilding it per render would invalidate every patch.
+ *
+ * Core ships no tool of its own (00 §6.6b) — every name here belongs to the
+ * examples package (or, until it lands, to the local fallback).
  */
 
-import { createRegistry } from "@codeflow/core";
+import { createRegistry, type RegistryLookup } from "@codeflow/core";
+import { REGISTRIES, registryFor, type ExampleRegistry, type FlowExample } from "./examples-source.js";
 
-export const demoRegistry = createRegistry({
-  tools: [
-    {
-      name: "github.getNewPRs",
-      label: "Get New PRs",
-      description: "Get new pull requests",
-      icon: "git-pull-request",
-      inputSchema: { repo: "string" },
-      outputSchema: "PullRequest[]",
-      editableFields: ["repo"],
-    },
-    {
-      name: "github.getFiles",
-      label: "Get PR Files",
-      description: "Get files changed in a PR",
-      icon: "file-diff",
-      inputSchema: { pr: "PullRequest" },
-      outputSchema: "File[]",
-      editableFields: ["pr"],
-    },
-    {
-      name: "slack.send",
-      label: "Slack Send",
-      description: "Send a Slack message",
-      icon: "message-square",
-      inputSchema: { channel: "string", message: "string" },
-      editableFields: ["channel", { name: "message", editor: "expression" }],
-    },
-    {
-      name: "payment.charge",
-      label: "Charge Card",
-      description: "Charge a card",
-      icon: "credit-card",
-      inputSchema: { amount: "number" },
-      outputSchema: "Charge",
-      editableFields: ["amount"],
-    },
-  ],
-  functions: [
-    {
-      // Per-file predicate, so it can be used directly as a callback:
-      // `files.some(isAuthChange)` — 05 §4, sugar rule 04 §2.2b.
-      name: "isAuthChange",
-      label: "Is Auth Change",
-      description: "True when a changed file touches auth-related code",
-      icon: "shield-check",
-      inputSchema: { file: "File" },
-      outputSchema: "boolean",
-      code: `export function isAuthChange(file: File) {
-  return /auth|login|oauth|permission/i.test(file.path);
-}`,
-      modulePath: "@flows/lib",
-    },
-  ],
-});
+const cache = new Map<string, RegistryLookup>();
+
+export function registryInstance(definition: ExampleRegistry): RegistryLookup {
+  const cached = cache.get(definition.id);
+  if (cached !== undefined) return cached;
+  const built = createRegistry({ tools: definition.tools, functions: definition.functions });
+  cache.set(definition.id, built);
+  return built;
+}
+
+export function registryInstanceFor(example: FlowExample): RegistryLookup {
+  return registryInstance(registryFor(example));
+}
+
+/**
+ * The specs' canonical registry — GitHub + Slack, the one 01 §1 and 05 §4 are
+ * written against. Kept as a named export for tests and scripts that want a
+ * session without picking an example first.
+ */
+export const demoRegistry: RegistryLookup = registryInstance(
+  REGISTRIES["sample"] ?? (Object.values(REGISTRIES)[0] as ExampleRegistry),
+);

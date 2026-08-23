@@ -1,0 +1,226 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel a superseded run on the same ref — only the newest push's result is read.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ["20", "22"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        # Version comes from `packageManager` in the root package.json.
+
+      - name: Install Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        # The AI conformance suite (packages/core/test/ai) and the live-MCP evals
+        # skip themselves unless OPENROUTER_API_KEY is set. It is deliberately not
+        # set here: those runs are non-deterministic and cost money, so they are
+        # not a CI gate — see docs/11-testing.md §3, layer 6. Run them manually
+        # with `node packages/core/scripts/ai-eval.mjs` before a release.
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm -r exec tsc --noEmit
+
+  # `pnpm build` cannot see a wrong `files` or `exports` field — only a real
+  # install of a real tarball can. This job is the publish gate.
+  consumer-smoke:
+    name: consumer smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      - name: Pack every publishable package
+        # `pnpm pack`, never `npm pack`: only pnpm rewrites the `workspace:`
+        # protocol into a real version range in the packed manifest.
+        run: |
+          mkdir -p "$RUNNER_TEMP/tarballs"
+          for p in core react cli mcp examples; do
+            (cd "packages/$p" && pnpm pack --pack-destination "$RUNNER_TEMP/tarballs")
+          done
+          ls -la "$RUNNER_TEMP/tarballs"
+
+      - name: "No workspace: specifier survived into a tarball"
+        run: |
+          fail=0
+          for t in "$RUNNER_TEMP"/tarballs/*.tgz; do
+            if tar -xzOf "$t" package/package.json | grep -q '"workspace:'; then
+              echo "::error::$(basename "$t") still contains a workspace: specifier"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Scaffold a fresh consumer project and install the tarballs
+        run: |
+          mkdir -p "$RUNNER_TEMP/consumer"
+          cp "$RUNNER_TEMP"/tarballs/*.tgz "$RUNNER_TEMP/consumer/"
+          cat > "$RUNNER_TEMP/make-consumer.mjs" <<'JS'
+          // Derive the file: specifiers from whatever was packed, so a version
+          // bump never breaks this job. `overrides` forces the nested
+          // @codeflow/core dependency of the other packages onto the local
+          // tarball instead of the registry.
+          import { readdirSync, writeFileSync } from "node:fs";
+          import { join } from "node:path";
+          const dir = process.argv[2];
+          const deps = {};
+          for (const f of readdirSync(dir).filter((f) => f.endsWith(".tgz"))) {
+            const name = "@codeflow/" + f.replace(/^codeflow-/, "").replace(/-\d.*$/, "");
+            deps[name] = `file:./${f}`;
+          }
+          writeFileSync(
+            join(dir, "package.json"),
+            JSON.stringify(
+              {
+                name: "codeflow-consumer-smoke",
+                private: true,
+                type: "module",
+                dependencies: { ...deps, react: "^19.2.0", "react-dom": "^19.2.0" },
+                devDependencies: { typescript: "^5.7.2", "@types/react": "^19", "@types/react-dom": "^19" },
+                overrides: { "@codeflow/core": deps["@codeflow/core"] },
+              },
+              null,
+              2,
+            ) + "\n",
+          );
+          JS
+          node "$RUNNER_TEMP/make-consumer.mjs" "$RUNNER_TEMP/consumer"
+          cd "$RUNNER_TEMP/consumer" && npm install --no-audit --no-fund
+
+      - name: Import @codeflow/core and analyze a flow (ESM)
+        working-directory: ${{ runner.temp }}/consumer
+        run: |
+          cat > smoke.mjs <<'JS'
+          import { createCodeFlow, createRegistry } from "@codeflow/core";
+          import { EXAMPLES, registryFor } from "@codeflow/examples";
+          import { mcpToolsToDefinitions } from "@codeflow/mcp";
+
+          const example = EXAMPLES[0];
+          const { tools, functions } = registryFor(example);
+          const session = createCodeFlow({ registry: createRegistry({ tools, functions }) });
+          const graph = await session.analyze(example.source, { file: `${example.id}.flow.ts` });
+          console.log(`${example.id}: ${graph.nodes.length} nodes, ${graph.edges.length} edges`);
+          if (graph.nodes.length === 0) throw new Error("analyze produced no nodes");
+
+          const defs = mcpToolsToDefinitions(
+            [{ name: "read_file", description: "read", inputSchema: { type: "object", properties: {} } }],
+            { namespace: "fs" },
+          );
+          if (defs[0].name !== "fs.readFile") throw new Error(`unexpected slug: ${defs[0].name}`);
+
+          // The documented subpath exports must resolve from a consumer's position.
+          for (const spec of ["@codeflow/react", "@codeflow/react/styles.css", "@codeflow/react/tokens.css"]) {
+            console.log(spec, "->", import.meta.resolve(spec));
+          }
+          JS
+          node smoke.mjs
+
+      - name: Typecheck a consumer file (moduleResolution bundler AND node16)
+        working-directory: ${{ runner.temp }}/consumer
+        run: |
+          mkdir -p src
+          cat > src/consumer.ts <<'TS'
+          import { createCodeFlow, createRegistry, type CodeFlowSession, type ToolDefinition, type WorkflowGraph } from "@codeflow/core";
+          import { mcpToolsToDefinitions, type McpTool } from "@codeflow/mcp";
+          import { EXAMPLES, registryFor, type FlowExample } from "@codeflow/examples";
+
+          const raw: McpTool[] = [{ name: "read_file", inputSchema: { type: "object", properties: {} } }];
+          const tools: ToolDefinition[] = mcpToolsToDefinitions(raw, { namespace: "fs" });
+          const session: CodeFlowSession = createCodeFlow({ registry: createRegistry({ tools }) });
+
+          export async function analyze(src: string): Promise<number> {
+            const graph: WorkflowGraph = await session.analyze(src, { file: "x.flow.ts" });
+            return graph.nodes.length;
+          }
+          export function first(): FlowExample { const e = EXAMPLES[0]!; void registryFor(e); return e; }
+          TS
+          cat > src/consumer-react.tsx <<'TSX'
+          import * as cfr from "@codeflow/react";
+          export const exportCount: number = Object.keys(cfr).length;
+          TSX
+          write_tsconfig() {
+            cat > "tsconfig.$1.json" <<JSON
+          {
+            "compilerOptions": {
+              "target": "ES2022",
+              "lib": ["ES2022", "DOM"],
+              "module": "$2",
+              "moduleResolution": "$1",
+              "jsx": "react-jsx",
+              "strict": true,
+              "noEmit": true,
+              "skipLibCheck": true
+            },
+            "include": ["src"]
+          }
+          JSON
+          }
+          write_tsconfig bundler ESNext
+          write_tsconfig node16 node16
+          echo "--- moduleResolution: bundler ---" && npx tsc --noEmit -p tsconfig.bundler.json
+          echo "--- moduleResolution: node16  ---" && npx tsc --noEmit -p tsconfig.node16.json
+
+      - name: Run the codeflow binary end to end
+        working-directory: ${{ runner.temp }}/consumer
+        run: |
+          mkdir -p ws && cd ws
+          ../node_modules/.bin/codeflow --help
+          ../node_modules/.bin/codeflow init .
+          ../node_modules/.bin/codeflow generate
+          cat > flows/notify.flow.ts <<'TS'
+          import type { Tools } from "../generated/tools";
+          import { isAuthChange } from "@flows/lib";
+
+          export default async function flow(input: { repository: string }, tools: Tools) {
+            const prs = await tools.github.getNewPRs({ repo: input.repository });
+            for (const pr of prs) {
+              const files = await tools.github.getFiles({ pr });
+              if (files.some(isAuthChange)) {
+                await tools.slack.send({ channel: "#security", message: pr.title });
+              }
+            }
+          }
+          TS
+          ../node_modules/.bin/codeflow check
+          # The scaffolded workspace must type-check with its own tsconfig — that
+          # is what proves the flow contract's extensionless `../generated/tools`
+          # import still resolves.
+          ../node_modules/.bin/tsc --noEmit -p tsconfig.json

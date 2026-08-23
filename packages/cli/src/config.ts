@@ -7,8 +7,9 @@
  * explicitly). Flow code, library `code` and anything AI generated are never
  * executed.
  *
- * It is loaded with a plain dynamic `import()`: Node ≥22.6 strips TypeScript
- * types natively, so a `.ts` config needs no build step and no extra dependency.
+ * It is loaded with a plain dynamic `import()`: Node strips TypeScript types
+ * natively (unflagged from 22.18 and 23.6), so a `.ts` config needs no build step
+ * and no extra dependency. Older Node gets a readable error, not a raw TypeError.
  */
 
 import { stat } from "node:fs/promises";
@@ -144,7 +145,20 @@ export async function findConfig(from: string): Promise<string | null> {
  * not before.
  */
 async function importConfig(file: string): Promise<Record<string, unknown>> {
-  return (await import(pathToFileURL(file).href)) as Record<string, unknown>;
+  try {
+    return (await import(pathToFileURL(file).href)) as Record<string, unknown>;
+  } catch (cause) {
+    // Unflagged type stripping landed in 22.18 and 23.6. On anything older a
+    // `.ts` config fails with a raw ERR_UNKNOWN_FILE_EXTENSION and a stack
+    // trace, which tells a first-time user nothing about what to do.
+    if (file.endsWith(".ts") && (cause as { code?: string }).code === "ERR_UNKNOWN_FILE_EXTENSION") {
+      throw new CliError(
+        "config-load-failed",
+        `Node ${process.version} cannot load a TypeScript config. ${CONFIG_FILENAMES[0]} is read with Node's own type stripping, which needs Node 22.18+ or 23.6+ (24 is fine). Upgrade Node, or rename the config to .mjs and drop its type annotations.`,
+      );
+    }
+    throw cause;
+  }
 }
 
 function normalize(value: unknown, configPath: string): CodeflowConfig {

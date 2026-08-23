@@ -16,7 +16,7 @@ n8n, Zapier and friends make the **graph** the truth and generate code from it. 
 
 ## Quick start
 
-The packages are prepared to publish as `@codeflow/core`, `@codeflow/react`, `@codeflow/cli` and `@codeflow/mcp` (v0.1.0, AGPL-3.0-or-later). Until that first release lands, work in the repository:
+The packages are prepared to publish as `@codeflow/core`, `@codeflow/react`, `@codeflow/cli`, `@codeflow/mcp` and `@codeflow/examples` (v0.1.0, AGPL-3.0-or-later). Until that first release lands, work in the repository:
 
 ```bash
 pnpm install
@@ -25,7 +25,7 @@ pnpm test           # 1,640 tests
 pnpm dev            # the demo at http://localhost:5173
 ```
 
-Requires Node 20+ (the CLI needs 22.6+ for config type-stripping) and pnpm 9.
+Requires Node 20+ (the CLI needs 22.18+ or 23.6+, where Node strips TypeScript types from `codeflow.config.ts` without a flag) and pnpm 9.
 
 Analyzing a flow takes three calls — a registry of the tools that exist, a session, and `analyze`:
 

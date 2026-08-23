@@ -1,19 +1,50 @@
 {
   "name": "@codeflow/examples",
-  "version": "0.0.0",
-  "description": "CodeFlow example flows + the registries they run against — real MCP tool schemas, converted to ToolDefinitions at authoring time.",
+  "version": "0.1.0",
+  "description": "Ready-to-analyze CodeFlow example flows (11, up to 345 lines) plus the registries they run against — 65 tool definitions converted from real MCP server schemas at authoring time.",
+  "keywords": [
+    "codeflow",
+    "examples",
+    "flows",
+    "fixtures",
+    "mcp",
+    "workflow",
+    "agent",
+    "gallery"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "author": "Lucas",
+  "homepage": "https://github.com/codeflow-team/codeflow/tree/main/packages/examples#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeflow-team/codeflow.git",
+    "directory": "packages/examples"
+  },
+  "bugs": {
+    "url": "https://github.com/codeflow-team/codeflow/issues"
+  },
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "LICENSE"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -21,7 +52,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@codeflow/core": "workspace:*"
+    "@codeflow/core": "workspace:^"
   },
   "devDependencies": {
     "@codeflow/mcp": "workspace:*",

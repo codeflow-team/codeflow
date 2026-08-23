@@ -1,8 +1,30 @@
 {
   "name": "@codeflow/cli",
-  "version": "0.0.0",
-  "description": "CodeFlow CLI — generate, check, init. Node-only (fs/watch), so core stays browser-safe.",
+  "version": "0.1.0",
+  "description": "The `codeflow` command — scaffold a flow workspace, generate typed tool/library declarations from codeflow.config.ts, and check flows against the contract.",
+  "keywords": [
+    "codeflow",
+    "cli",
+    "codegen",
+    "scaffold",
+    "workflow",
+    "agent",
+    "typescript",
+    "mcp"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "author": "Lucas",
+  "homepage": "https://github.com/codeflow-team/codeflow/tree/main/packages/cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeflow-team/codeflow.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/codeflow-team/codeflow/issues"
+  },
   "type": "module",
+  "sideEffects": false,
   "bin": {
     "codeflow": "./dist/cli.js"
   },
@@ -12,22 +34,30 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "src",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.18.0 || >=23.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@codeflow/core": "workspace:*"
+    "@codeflow/core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2"
-  },
-  "engines": {
-    "node": ">=22.6"
   }
 }

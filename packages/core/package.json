@@ -1,17 +1,52 @@
 {
   "name": "@codeflow/core",
-  "version": "0.0.0",
-  "description": "CodeFlow core — domain model, registry, typed API codegen. Browser-safe, no Node APIs.",
+  "version": "0.1.0",
+  "description": "Analyze a TypeScript agent flow into a workflow graph and patch it back byte-for-byte — domain model, tool registry, typed API codegen. Browser-safe, never executes the code it reads.",
+  "keywords": [
+    "codeflow",
+    "workflow",
+    "agent",
+    "typescript",
+    "ast",
+    "static-analysis",
+    "codegen",
+    "json-schema",
+    "visual-programming",
+    "ts-morph"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "author": "Lucas",
+  "homepage": "https://github.com/codeflow-team/codeflow/tree/main/packages/core#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeflow-team/codeflow.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/codeflow-team/codeflow/issues"
+  },
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
-  "files": ["dist"],
+  "files": [
+    "dist",
+    "src",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",

@@ -1,0 +1,96 @@
+name: Release
+
+# Runs on every push to main, but publishes *nothing* unless a version in
+# packages/*/package.json is not yet on the registry. So a normal commit is a
+# no-op; bumping a version and merging is the release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Required for npm provenance: the workflow exchanges this for a Sigstore
+  # certificate so a consumer can verify the tarball was built from this repo.
+  id-token: write
+
+jobs:
+  publish:
+    # A fork must never try to publish with its own secrets or fail loudly on a
+    # missing one. Change this if the repository is renamed or moved.
+    if: github.repository == 'codeflow-team/codeflow'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm -r exec tsc --noEmit
+
+      - name: Publish packages whose version is not on the registry yet
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "::error::NPM_TOKEN repository secret is not set — nothing can be published."
+            exit 1
+          fi
+
+          published=0
+          for p in core react cli mcp examples; do
+            dir="packages/$p"
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "skip  $name@$version — already on the registry"
+              continue
+            fi
+
+            echo "publish  $name@$version"
+            # `pnpm pack` (not `npm pack`) rewrites the `workspace:` protocol in
+            # the packed manifest into a real version range. `npm publish` then
+            # uploads that finished tarball — which is also the only way to get
+            # `--provenance`, since pnpm 9's own `publish` has no such flag.
+            (cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP/dist")
+            tarball=$(ls "$RUNNER_TEMP"/dist/*.tgz | tail -1)
+            npm publish "$tarball" --access public --provenance
+            rm -f "$tarball"
+            published=$((published + 1))
+          done
+
+          echo "published $published package(s)"
+          echo "PUBLISHED=$published" >> "$GITHUB_ENV"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Release"
+            echo ""
+            echo "Published **${PUBLISHED:-0}** package(s) from \`${GITHUB_SHA:0:7}\`."
+            echo ""
+            echo "A run that publishes 0 packages is the expected outcome for a commit"
+            echo "that did not bump a version."
+          } >> "$GITHUB_STEP_SUMMARY"

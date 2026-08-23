@@ -14,7 +14,7 @@ Prepared for npm as v0.1.0. Until the first release lands, the binary is `packag
 "dependencies": { "@codeflow/cli": "workspace:*" }
 ```
 
-Needs Node 22.6+ — `codeflow.config.ts` is loaded with Node's own type-stripping rather than a bundler, so the CLI adds no build dependency to your project.
+Needs Node 22.18+ or 23.6+ — `codeflow.config.ts` is loaded with Node's own type-stripping rather than a bundler, so the CLI adds no build dependency to your project.
 
 ## Commands
 

@@ -11,6 +11,7 @@
 export type CliErrorCode =
   | "config-not-found"
   | "invalid-config"
+  | "config-load-failed"
   | "invalid-library-file"
   | "workspace-exists"
   | "usage"

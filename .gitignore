@@ -1,15 +1,31 @@
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build output
 dist/
+build/
 .turbo/
 coverage/
 *.tsbuildinfo
 
+# Packing artifacts
+*.tgz
+
+# Secrets — never commit a real key. `.env.example` is the template.
 .env
 .env.*
 !.env.example
 
+# Local scratch / verification output
+.codeflow-verify/
+.design/
+e2e/screenshots/
+e2e/test-results/
+
+# Editor / OS
 .DS_Store
 *.log
-.codeflow-verify/
-e2e/screenshots/
-.design/
+.idea/
+.vscode/*
+!.vscode/extensions.json

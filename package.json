@@ -1,14 +1,26 @@
 {
   "name": "codeflow-monorepo",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
+  "description": "CodeFlow — a visual, bidirectional editor for TypeScript agent flows. Monorepo root; the published packages live in packages/*.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Lucas",
+  "homepage": "https://github.com/codeflow-team/codeflow#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeflow-team/codeflow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/codeflow-team/codeflow/issues"
+  },
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "dev": "pnpm --filter demo dev"
+    "dev": "pnpm --filter demo dev",
+    "release": "pnpm build && pnpm test && pnpm -r --filter \"./packages/*\" publish --access public --no-git-checks"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

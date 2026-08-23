@@ -1,26 +1,56 @@
 {
   "name": "@codeflow/mcp",
-  "version": "0.0.0",
-  "description": "Optional MCP adapter — MCP tool discovery to ToolDefinition (05-registry.md §3).",
+  "version": "0.1.0",
+  "description": "Turn MCP tool schemas into CodeFlow ToolDefinitions — safe name slugging, cursor paging, inline $ref resolution. Zero runtime dependency on the MCP SDK.",
+  "keywords": [
+    "codeflow",
+    "mcp",
+    "model-context-protocol",
+    "tools",
+    "json-schema",
+    "adapter",
+    "agent"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "author": "Lucas",
+  "homepage": "https://github.com/codeflow-team/codeflow/tree/main/packages/mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/codeflow-team/codeflow.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/codeflow-team/codeflow/issues"
+  },
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "src",
+    "LICENSE"
   ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@codeflow/core": "workspace:*"
+    "@codeflow/core": "workspace:^"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

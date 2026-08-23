@@ -28,9 +28,19 @@ function emptyNamespace(): Namespace {
   return { namespaces: new Map(), tools: new Map() };
 }
 
+// A description is server-authored prose, and prose contains a comment
+// terminator more often than one would hope — the official filesystem server
+// documents its glob patterns as '**' + '/*.ext'. Left as is, that closes the
+// JSDoc block early and the whole .d.ts stops parsing. Escaping the star with a
+// backslash is the standard fix: it renders the same and does not terminate.
+function escapeComment(text: string): string {
+  return text.replace(/\*\//g, "*\\/");
+}
+
 export function jsDoc(text: string | undefined, indent: string): string[] {
   if (text === undefined || text.trim().length === 0) return [];
-  const lines = text.trim().split("\n");
+  // `\r` would leave a stray carriage return inside the comment; normalize first.
+  const lines = escapeComment(text.trim()).split(/\r?\n/);
   if (lines.length === 1) return [`${indent}/** ${lines[0]!.trim()} */`];
   return [
     `${indent}/**`,

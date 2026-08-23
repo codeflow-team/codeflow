@@ -117,6 +117,56 @@ export interface Tools {}
   });
 });
 
+describe("JSDoc from server-authored prose", () => {
+  const TERMINATOR = `*${"/"}`;
+
+  function toolsWithDescription(description: string): string {
+    const registry = createRegistry();
+    registry.registerTool({
+      name: "srv.doIt",
+      label: "Do It",
+      description,
+      inputSchema: { type: "object" },
+    });
+    return generateToolsDts(registry);
+  }
+
+  /** Everything inside the JSDoc block that precedes the signature. */
+  function commentBody(output: string): string {
+    const start = output.indexOf("/**", output.indexOf("srv: {"));
+    return output.slice(start, output.indexOf("doIt(")).replace(/\s*\*\/\s*$/, "");
+  }
+
+  it("escapes a comment terminator inside a description", () => {
+    // Regression: `@modelcontextprotocol/server-filesystem`'s `search_files`
+    // documents its glob syntax as `'**` + `/*.ext'`. Emitted verbatim, that
+    // closes the JSDoc block and the rest of the file stops parsing.
+    const glob = `**${"/"}*.ext`; // the real one: '**' + '/' + '*.ext'
+    const output = toolsWithDescription(`Use '${glob}' to match nested files.`);
+    expect(commentBody(output)).not.toContain(TERMINATOR);
+    expect(output).toContain(`Use '**\\${"/"}*.ext' to match nested files.`);
+  });
+
+  it("escapes a terminator on every line of a multi-line description", () => {
+    const output = toolsWithDescription(`first ${TERMINATOR} line\nsecond ${TERMINATOR} line`);
+    expect(commentBody(output)).not.toContain(TERMINATOR);
+    expect(output).toContain("* first *\\/ line");
+    expect(output).toContain("* second *\\/ line");
+  });
+
+  it("leaves ordinary prose untouched", () => {
+    const output = toolsWithDescription("Reads a file. Supports `backticks` and <html>.");
+    expect(output).toContain("/** Reads a file. Supports `backticks` and <html>. */");
+  });
+
+  it("normalizes CRLF so no stray carriage return lands inside the comment", () => {
+    const output = toolsWithDescription("line one\r\nline two");
+    expect(output).not.toContain("\r");
+    expect(output).toContain(" * line one");
+    expect(output).toContain(" * line two");
+  });
+});
+
 describe("header — stale detection (05 §2)", () => {
   it("carries the registryHash of the registry it was generated from", () => {
     const registry = createSampleRegistry();

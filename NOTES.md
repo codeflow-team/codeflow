@@ -35,6 +35,13 @@ Demo preload ví dụ canonical: xem graph → click node → sửa channel tron
 | `@codeflow/mcp` | MCP JSON Schema → ToolDefinition (slugging tên an toàn, cursor paging, zero runtime dep) | 05 §3 |
 | `apps/demo` | app demo đầy đủ vòng xem + sửa | — |
 
+## 🔨 Đang chạy (sau khi m dậy, ~06:30)
+
+1. **E2E qua đúng Claude in Chrome: PASS** (commit `7ac48ff`) — acceptance/delete-blocked/degradation + console sạch, screenshots `e2e/claude-in-chrome/`. Việc treo duy nhất từ đêm qua đã đóng.
+2. **Agent MCP thật**: kết nối stdio tới các MCP server không cần OAuth (filesystem/memory/sequential-thinking/everything/context7...), dump **schema thật** vào repo, ném vào adapter + codegen (verify bằng TS compiler thật) + analyzer + AI eval. Mọi thứ tìm được phải thành test vĩnh viễn chạy offline.
+3. **Agent hardening**: gom mọi bug đã gặp trong cả quá trình build thành regression test, rồi săn case khó mới (CRLF/BOM/emoji, computed key, comment giữa key-value, try-trong-loop-trong-try, continue-trong-try-có-finally, shadowing 3 tầng, patch-rồi-undo phải byte-identical...). Catalog ở `packages/core/test/hardening/README.md`.
+4. **`ox-alpha` 131k + free** (m nhắc): eval cũ để max_tokens 8000 hơi chật cho reasoning model → agent mới dùng 32000; sẽ nâng cả eval suite chính sau.
+
 ## ⚠️ Cần m để mắt / quyết sau
 
 1. **Claude in Chrome cho e2e**: extension bắt chọn browser tương tác (3 browser đang connect) nên subagent phải fallback chrome-devtools (vẫn Chrome thật, evidence đủ). Muốn chạy đúng qua extension → bảo t chạy lại lúc m thức.

@@ -1,0 +1,38 @@
+{
+  "capturedAt": "2026-08-23T02:04:57.359Z",
+  "ok": [
+    {
+      "name": "filesystem",
+      "toolCount": 14
+    },
+    {
+      "name": "memory",
+      "toolCount": 9
+    },
+    {
+      "name": "sequential-thinking",
+      "toolCount": 1
+    },
+    {
+      "name": "everything",
+      "toolCount": 13
+    },
+    {
+      "name": "context7",
+      "toolCount": 2
+    },
+    {
+      "name": "deepwiki",
+      "toolCount": 1
+    },
+    {
+      "name": "playwright",
+      "toolCount": 24
+    },
+    {
+      "name": "duckduckgo",
+      "toolCount": 1
+    }
+  ],
+  "failed": []
+}

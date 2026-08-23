@@ -106,8 +106,54 @@ describe("shape 1 — JSON Schema", () => {
     );
   });
 
-  it("uses the last segment of a $ref as the type name", () => {
-    expect(schemaToTs({ $ref: "#/$defs/PullRequest" })).toBe("PullRequest");
+  it("expands a $ref inline against $defs", () => {
+    // A bare `PullRequest` would be a name the generated .d.ts never declares —
+    // a file that does not compile. The definition is inlined instead.
+    expect(
+      schemaToTs({
+        $ref: "#/$defs/PullRequest",
+        $defs: { PullRequest: { type: "object", properties: { id: { type: "number" } }, required: ["id"] } },
+      }),
+    ).toBe("{ id: number }");
+  });
+
+  it("expands a $ref against draft-07 `definitions` too", () => {
+    expect(
+      schemaToTs({ $ref: "#/definitions/Name", definitions: { Name: { type: "string" } } }),
+    ).toBe("string");
+  });
+
+  it("resolves $defs declared at the root from a nested position", () => {
+    expect(
+      schemaToTs({
+        type: "object",
+        properties: { labels: { type: "array", items: { $ref: "#/$defs/Label" } } },
+        required: ["labels"],
+        $defs: { Label: { type: "string" } },
+      }),
+    ).toBe("{ labels: string[] }");
+  });
+
+  it("widens an unresolvable $ref to unknown rather than emitting a dangling name", () => {
+    expect(schemaToTs({ $ref: "#/$defs/PullRequest" })).toBe("unknown");
+    expect(schemaToTs({ $ref: "https://example.com/schema.json#/$defs/X" })).toBe("unknown");
+    expect(schemaToTs({ $ref: "#/components/schemas/X" })).toBe("unknown");
+  });
+
+  it("breaks a $ref cycle instead of recursing forever", () => {
+    // An inline expansion of a self-referential type has no fixed point.
+    expect(
+      schemaToTs({
+        $ref: "#/$defs/Node",
+        $defs: {
+          Node: {
+            type: "object",
+            properties: { value: { type: "string" }, next: { $ref: "#/$defs/Node" } },
+            required: ["value"],
+          },
+        },
+      }),
+    ).toBe("{ value: string; next?: unknown }");
   });
 
   it("falls back to unknown for an unrecognised type", () => {

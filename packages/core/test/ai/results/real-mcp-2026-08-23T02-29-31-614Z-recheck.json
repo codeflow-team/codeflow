@@ -1,0 +1,161 @@
+{
+  "kind": "real-mcp",
+  "evalVersion": 1,
+  "servers": [
+    "filesystem",
+    "memory",
+    "sequential-thinking"
+  ],
+  "toolCount": 24,
+  "model": "stealth/ox-alpha",
+  "maxTokens": 32000,
+  "maxRetries": 2,
+  "includeExamples": true,
+  "systemPromptTokens": 4567,
+  "ranAt": "2026-08-23T02:29:31.615Z",
+  "rates": {
+    "total": 2,
+    "l0": 2,
+    "l1": 2,
+    "l2": 1
+  },
+  "results": [
+    {
+      "intent": "index-directory-into-memory",
+      "covers": [
+        "for...of",
+        "tool call",
+        "nested object argument",
+        "two namespaces"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nexport default async function flow(\n  input: { directory: string },\n  tools: Tools\n) {\n  const listing = await tools.filesystem.listDirectory({ path: input.directory });\n\n  const fileNames = extractFileNames(listing.content);\n\n  for (const fileName of fileNames) {\n    const filePath = joinPath(input.directory, fileName);\n\n    const contents = await tools.filesystem.readTextFile({ path: filePath });\n\n    await tools.memory.createEntities({\n      entities: [\n        {\n          name: filePath,\n          entityType: \"file\",\n          observations: [contents.content]\n        }\n      ]\n    });\n  }\n\n  return { recordedFiles: fileNames.length };\n}\n\nfunction extractFileNames(listing: string): string[] {\n  return listing\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.startsWith(\"[FILE]\"))\n    .map((line) => line.slice(\"[FILE]\".length).trim());\n}\n\nfunction joinPath(directory: string, fileName: string): string {\n  return `${directory}/${fileName}`;\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 53748
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.listDirectory",
+        "filesystem.readTextFile",
+        "memory.createEntities"
+      ]
+    },
+    {
+      "intent": "index-directory-into-memory",
+      "covers": [
+        "for...of",
+        "tool call",
+        "nested object argument",
+        "two namespaces"
+      ],
+      "firstLevel": "L1",
+      "finalLevel": "L1",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/** Extract file names from a listDirectory listing (lines prefixed with [FILE] / [DIR]). */\nfunction parseFileNames(listing: string): string[] {\n  return listing\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.startsWith(\"[FILE]\"))\n    .map((line) => line.slice(\"[FILE]\".length).trim());\n}\n\nexport default async function flow(\n  input: { directory: string },\n  tools: Tools\n) {\n  const listing = await tools.filesystem.listDirectory({ path: input.directory });\n  const fileNames = parseFileNames(listing.content);\n\n  const recordedFiles: string[] = [];\n\n  for (const fileName of fileNames) {\n    const filePath = `${input.directory}/${fileName}`;\n    const contents = await tools.filesystem.readTextFile({ path: filePath });\n    await tools.memory.createEntities({\n      entities: [\n        {\n          name: filePath,\n          entityType: \"file\",\n          observations: [contents.content],\n        },\n      ],\n    });\n    recordedFiles.push(filePath);\n  }\n\n  return { recordedFiles };\n}\n",
+          "level": "L1",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 19,
+                  "column": 3,
+                  "offset": 596
+                },
+                "end": {
+                  "line": 19,
+                  "column": 38,
+                  "offset": 631
+                },
+                "semanticPath": "flow/stmt[2]",
+                "fingerprint": "a23d2c2da3961fe81deb3b4f4f63d1f51f77d3a3a1c5a39676774a495d103fd7"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 22,
+                  "column": 5,
+                  "offset": 675
+                },
+                "end": {
+                  "line": 22,
+                  "column": 55,
+                  "offset": 725
+                },
+                "semanticPath": "flow/for[0]/stmt[0]",
+                "fingerprint": "c1e992bd6c2903373a01ff091c1c70740afc76e598daa512279dfe6820a8c341"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 33,
+                  "column": 5,
+                  "offset": 1004
+                },
+                "end": {
+                  "line": 33,
+                  "column": 34,
+                  "offset": 1033
+                },
+                "semanticPath": "flow/for[0]/stmt[3]",
+                "fingerprint": "78420aa639e18a0cfc48614a18f1fb883edd2353a4c081d7b01462d884b47dcf"
+              }
+            },
+            {
+              "severity": "warning",
+              "code": "inline-logic-in-code-node",
+              "message": "`recordedFiles.push(filePath)` runs inside a custom code node, so the step is invisible on the graph. Give the call its own `const x = await …` statement if it is a tool, or move the logic into a named function and call that (01 §3 rules 4–5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 33,
+                  "column": 5,
+                  "offset": 1004
+                },
+                "end": {
+                  "line": 33,
+                  "column": 34,
+                  "offset": 1033
+                },
+                "semanticPath": "flow/for[0]/stmt[3]",
+                "fingerprint": "78420aa639e18a0cfc48614a18f1fb883edd2353a4c081d7b01462d884b47dcf"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 70108
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.listDirectory",
+        "filesystem.readTextFile",
+        "memory.createEntities"
+      ]
+    }
+  ]
+}

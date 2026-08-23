@@ -1,0 +1,555 @@
+{
+  "kind": "real-mcp",
+  "evalVersion": 1,
+  "servers": [
+    "filesystem",
+    "memory",
+    "sequential-thinking"
+  ],
+  "toolCount": 24,
+  "model": "stealth/ox-alpha",
+  "maxTokens": 32000,
+  "maxRetries": 2,
+  "includeExamples": true,
+  "systemPromptTokens": 4567,
+  "ranAt": "2026-08-23T02:26:53.236Z",
+  "rates": {
+    "total": 4,
+    "l0": 3,
+    "l1": 3,
+    "l2": 2
+  },
+  "results": [
+    {
+      "intent": "index-directory-into-memory",
+      "covers": [
+        "for...of",
+        "tool call",
+        "nested object argument",
+        "two namespaces"
+      ],
+      "firstLevel": "invalid",
+      "finalLevel": "invalid",
+      "retries": 2,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction parseFileNames(listing: string): string[] {\n  return listing\n    .split(\"\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.startsWith(\"[FILE]\"))\n    .map((line) => line.slice(\"[FILE]\".length).trim());\n}\n\nexport default async function flow(\n  input: { directory: string },\n  tools: Tools\n) {\n  const listing = await tools.filesystem.listDirectory({ path: input.directory });\n  const fileNames = parseFileNames(listing.content);\n\n  for (const fileName of fileNames) {\n    const filePath = `${input.directory}/${fileName}`;\n    const fileContents = await tools.filesystem.readTextFile({ path: filePath });\n\n    await tools.memory.createEntities({\n      entities: [\n        {\n          name: filePath,\n          entityType: \"file\",\n          observations: [fileContents.content],\n        },\n      ],\n    });\n  }\n\n  return { directory: input.directory, recordedFiles: fileNames.length };\n}\n",
+          "level": "invalid",
+          "diagnostics": [
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 5,
+                  "column": 13,
+                  "offset": 132
+                },
+                "end": {
+                  "line": 5,
+                  "column": 13,
+                  "offset": 132
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "',' expected. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 6,
+                  "column": 1,
+                  "offset": 133
+                },
+                "end": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "end": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "')' expected. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 9,
+                  "column": 55,
+                  "offset": 271
+                },
+                "end": {
+                  "line": 9,
+                  "column": 56,
+                  "offset": 272
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            }
+          ],
+          "feedback": "The flow you wrote did not reach L0 (target: L1). CodeFlow reported:\n\n- [error] parse-error (line 5, column 13): Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 6, column 1): ',' expected. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 6, column 3): Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 9, column 55): ')' expected. The file must be valid TypeScript before anything else can be checked (10 §5).\n\nFix every point above and answer with the complete corrected flow file — the whole\nfile, no fences, no commentary. Do not change anything the diagnostics did not ask\nyou to change.",
+          "finishReason": "stop",
+          "ms": 45533
+        },
+        {
+          "round": 1,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction parseFileNames(listing: string): string[] {\n  return listing\n    .split(\"\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.startsWith(\"[FILE]\"))\n    .map((line) => line.slice(\"[FILE]\".length).trim());\n}\n\nexport default async function flow(\n  input: { directory: string },\n  tools: Tools\n) {\n  const listing = await tools.filesystem.listDirectory({ path: input.directory });\n  const fileNames = parseFileNames(listing.content);\n\n  for (const fileName of fileNames) {\n    const filePath = `${input.directory}/${fileName}`;\n    const fileContents = await tools.filesystem.readTextFile({ path: filePath });\n\n    await tools.memory.createEntities({\n      entities: [\n        {\n          name: filePath,\n          entityType: \"file\",\n          observations: [fileContents.content],\n        },\n      ],\n    });\n  }\n\n  return { directory: input.directory, recordedFiles: fileNames.length };\n}\n",
+          "level": "invalid",
+          "diagnostics": [
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 5,
+                  "column": 13,
+                  "offset": 132
+                },
+                "end": {
+                  "line": 5,
+                  "column": 13,
+                  "offset": 132
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "',' expected. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 6,
+                  "column": 1,
+                  "offset": 133
+                },
+                "end": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "end": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "')' expected. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 9,
+                  "column": 55,
+                  "offset": 271
+                },
+                "end": {
+                  "line": 9,
+                  "column": 56,
+                  "offset": 272
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            }
+          ],
+          "feedback": "The flow you wrote did not reach L0 (target: L1). CodeFlow reported:\n\n- [error] parse-error (line 5, column 13): Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 6, column 1): ',' expected. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 6, column 3): Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 9, column 55): ')' expected. The file must be valid TypeScript before anything else can be checked (10 §5).\n\nFix every point above and answer with the complete corrected flow file — the whole\nfile, no fences, no commentary. Do not change anything the diagnostics did not ask\nyou to change.",
+          "finishReason": "stop",
+          "ms": 31163
+        },
+        {
+          "round": 2,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction parseFileNames(listing: string): string[] {\n  return listing\n    .split(\"\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.startsWith(\"[FILE]\"))\n    .map((line) => line.slice(\"[FILE]\".length).trim());\n}\n\nexport default async function flow(\n  input: { directory: string },\n  tools: Tools\n) {\n  const listing = await tools.filesystem.listDirectory({ path: input.directory });\n  const fileNames = parseFileNames(listing.content);\n\n  for (const fileName of fileNames) {\n    const filePath = `${input.directory}/${fileName}`;\n    const fileContents = await tools.filesystem.readTextFile({ path: filePath });\n\n    await tools.memory.createEntities({\n      entities: [\n        {\n          name: filePath,\n          entityType: \"file\",\n          observations: [fileContents.content],\n        },\n      ],\n    });\n  }\n\n  return { directory: input.directory, recordedFiles: fileNames.length };\n}\n",
+          "level": "invalid",
+          "diagnostics": [
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 5,
+                  "column": 13,
+                  "offset": 132
+                },
+                "end": {
+                  "line": 5,
+                  "column": 13,
+                  "offset": 132
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "',' expected. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 6,
+                  "column": 1,
+                  "offset": 133
+                },
+                "end": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "end": {
+                  "line": 6,
+                  "column": 3,
+                  "offset": 135
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            },
+            {
+              "severity": "error",
+              "code": "parse-error",
+              "message": "')' expected. The file must be valid TypeScript before anything else can be checked (10 §5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 9,
+                  "column": 55,
+                  "offset": 271
+                },
+                "end": {
+                  "line": 9,
+                  "column": 56,
+                  "offset": 272
+                },
+                "semanticPath": "flow",
+                "fingerprint": ""
+              }
+            }
+          ],
+          "feedback": "The flow you wrote did not reach L0 (target: L1). CodeFlow reported:\n\n- [error] parse-error (line 5, column 13): Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 6, column 1): ',' expected. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 6, column 3): Unterminated string literal. The file must be valid TypeScript before anything else can be checked (10 §5).\n- [error] parse-error (line 9, column 55): ')' expected. The file must be valid TypeScript before anything else can be checked (10 §5).\n\nFix every point above and answer with the complete corrected flow file — the whole\nfile, no fences, no commentary. Do not change anything the diagnostics did not ask\nyou to change.",
+          "finishReason": "stop",
+          "ms": 52075
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.listDirectory",
+        "filesystem.readTextFile",
+        "memory.createEntities"
+      ]
+    },
+    {
+      "intent": "search-and-report",
+      "covers": [
+        "tool call",
+        "if",
+        "template literal",
+        "early return"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nexport default async function flow(\n  input: { directory: string; pattern: string },\n  tools: Tools\n) {\n  const searchResult = await tools.filesystem.searchFiles({\n    path: input.directory,\n    pattern: input.pattern,\n  });\n\n  const matches = parseMatches(searchResult.content);\n\n  if (matches.length === 0) {\n    const noMatchWrite = await tools.filesystem.writeFile({\n      path: `${input.directory}/report.txt`,\n      content: \"No files matched the given pattern.\",\n    });\n    return {\n      found: false,\n      reportPath: `${input.directory}/report.txt`,\n      result: noMatchWrite,\n    };\n  }\n\n  const reportContent = formatReport(input.pattern, matches);\n  const reportWrite = await tools.filesystem.writeFile({\n    path: `${input.directory}/report.txt`,\n    content: reportContent,\n  });\n\n  return {\n    found: true,\n    matchCount: matches.length,\n    reportPath: `${input.directory}/report.txt`,\n    result: reportWrite,\n  };\n}\n\nfunction parseMatches(content: string): string[] {\n  return content\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0);\n}\n\nfunction formatReport(pattern: string, matches: string[]): string {\n  const lines = [\n    `Search pattern: ${pattern}`,\n    `Matches found: ${matches.length}`,\n    \"\",\n    ...matches.map((match) => `- ${match}`),\n  ];\n  return lines.join(\"\\n\");\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 58184
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.searchFiles",
+        "filesystem.writeFile"
+      ]
+    },
+    {
+      "intent": "resilient-edit",
+      "covers": [
+        "try/catch",
+        "tool call with array-of-object argument",
+        "error path"
+      ],
+      "firstLevel": "L1",
+      "finalLevel": "L1",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nexport default async function flow(\n  input: { path: string },\n  tools: Tools\n) {\n  let succeeded = false;\n  let failureReason = \"\";\n\n  try {\n    await tools.filesystem.editFile({\n      path: input.path,\n      edits: [{ oldText: \"TODO\", newText: \"DONE\" }],\n    });\n    succeeded = true;\n  } catch (error) {\n    failureReason = String(error);\n  }\n\n  if (!succeeded) {\n    let previousLog = \"\";\n    try {\n      const currentLog = await tools.filesystem.readTextFile({ path: \"errors.log\" });\n      previousLog = currentLog.content;\n    } catch {\n      previousLog = \"\";\n    }\n    const newLogContent = `${previousLog}Failed to replace TODO with DONE in ${input.path}: ${failureReason}\\n`;\n    await tools.filesystem.writeFile({ path: \"errors.log\", content: newLogContent });\n  }\n\n  return { succeeded };\n}\n",
+          "level": "L1",
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 7,
+                  "column": 3,
+                  "offset": 134
+                },
+                "end": {
+                  "line": 8,
+                  "column": 26,
+                  "offset": 182
+                },
+                "semanticPath": "flow/stmt[0..1]",
+                "fingerprint": "d05dfeaefb32e394aea688a1ac9ce782da7795ab7c9554c67cf2d9b937e172bd"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 15,
+                  "column": 5,
+                  "offset": 319
+                },
+                "end": {
+                  "line": 15,
+                  "column": 22,
+                  "offset": 336
+                },
+                "semanticPath": "flow/try[0]/stmt[1]",
+                "fingerprint": "04337253edc8155f2f74acc4419960472d62c737b2910ace31033b302b6b5093"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 17,
+                  "column": 5,
+                  "offset": 361
+                },
+                "end": {
+                  "line": 17,
+                  "column": 35,
+                  "offset": 391
+                },
+                "semanticPath": "flow/try[0]/catch/stmt[0]",
+                "fingerprint": "033fbff10dbf703e8e6c52d444aada5b3d889d935720666b1fba6bcee92fafbb"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 21,
+                  "column": 5,
+                  "offset": 421
+                },
+                "end": {
+                  "line": 21,
+                  "column": 26,
+                  "offset": 442
+                },
+                "semanticPath": "flow/if[0]/stmt[0]",
+                "fingerprint": "6115c6b4ace8f10dd36fe1d27834a57e689533e99ed39cbf95be4c323f4aaeaa"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 24,
+                  "column": 7,
+                  "offset": 545
+                },
+                "end": {
+                  "line": 24,
+                  "column": 40,
+                  "offset": 578
+                },
+                "semanticPath": "flow/if[0]/try[0]/stmt[1]",
+                "fingerprint": "d364335d34acda9e06f1b0720c59a6595e3ec1dbe59a2071c5501998e07c62c6"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 26,
+                  "column": 7,
+                  "offset": 599
+                },
+                "end": {
+                  "line": 26,
+                  "column": 24,
+                  "offset": 616
+                },
+                "semanticPath": "flow/if[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "4b18f0b0a7307f92ba7208188b46d146a333b3ebff58a27c9d1e68c4e4e7e6da"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 28,
+                  "column": 5,
+                  "offset": 627
+                },
+                "end": {
+                  "line": 28,
+                  "column": 113,
+                  "offset": 735
+                },
+                "semanticPath": "flow/if[0]/stmt[2]",
+                "fingerprint": "d8cfd062afdc6811a53790a817bab32dd45f1c2f88fbc3a9e15c8e812f797e52"
+              }
+            },
+            {
+              "severity": "warning",
+              "code": "inline-logic-in-code-node",
+              "message": "`String(error)` runs inside a custom code node, so the step is invisible on the graph. Give the call its own `const x = await …` statement if it is a tool, or move the logic into a named function and call that (01 §3 rules 4–5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 17,
+                  "column": 5,
+                  "offset": 361
+                },
+                "end": {
+                  "line": 17,
+                  "column": 35,
+                  "offset": 391
+                },
+                "semanticPath": "flow/try[0]/catch/stmt[0]",
+                "fingerprint": "033fbff10dbf703e8e6c52d444aada5b3d889d935720666b1fba6bcee92fafbb"
+              }
+            }
+          ],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 79198
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.editFile",
+        "filesystem.readTextFile",
+        "filesystem.writeFile"
+      ]
+    },
+    {
+      "intent": "think-then-act",
+      "covers": [
+        "sequential tool calls",
+        "boolean/number arguments",
+        "output reuse"
+      ],
+      "firstLevel": "L2",
+      "finalLevel": "L2",
+      "retries": 0,
+      "rounds": [
+        {
+          "round": 0,
+          "source": "import type { Tools } from \"../generated/tools\";\n\nexport default async function flow(\n  input: { readmePath: string; repository: string },\n  tools: Tools\n) {\n  const openingThought = await tools.sequentialThinking.sequentialthinking({\n    thought: `Planning how to summarise the repository \"${input.repository}\". Step 1 of the plan: read the README at the documented path and extract its purpose, key features, and setup instructions.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 1,\n    totalThoughts: 3\n  });\n\n  const structureThought = await tools.sequentialThinking.sequentialthinking({\n    thought: `Step 2 of the plan: complement the README with the repository layout — top-level directories, configuration files, and entry points — so the summary covers structure and tooling, not just prose.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 2,\n    totalThoughts: 3\n  });\n\n  const finalPlanThought = await tools.sequentialThinking.sequentialthinking({\n    thought: `Step 3 of the plan: merge the README findings and the structural notes into a concise summary (purpose, architecture, setup, usage) and record it as an observation on the knowledge-graph entity \"${input.repository}\". Plan complete.`,\n    nextThoughtNeeded: false,\n    thoughtNumber: 3,\n    totalThoughts: 3\n  });\n\n  const readme = await tools.filesystem.readTextFile({ path: input.readmePath });\n\n  const recorded = await tools.memory.addObservations({\n    observations: [\n      {\n        entityName: input.repository,\n        contents: [\n          `Repository summary plan for \"${input.repository}\": (1) read the README (${input.readmePath}) for purpose, features and setup; (2) review the top-level layout and config files for structure and tooling; (3) merge both into a concise summary.`\n        ]\n      }\n    ]\n  });\n\n  return {\n    repository: input.repository,\n    planThoughts: [\n      openingThought.thoughtNumber,\n      structureThought.thoughtNumber,\n      finalPlanThought.thoughtNumber\n    ],\n    readmeChars: readme.content.length,\n    recorded\n  };\n}\n",
+          "level": "L2",
+          "diagnostics": [],
+          "feedback": null,
+          "finishReason": "stop",
+          "ms": 102768
+        }
+      ],
+      "toolsUsed": [
+        "filesystem.readTextFile",
+        "memory.addObservations",
+        "sequentialThinking.sequentialthinking"
+      ]
+    }
+  ]
+}

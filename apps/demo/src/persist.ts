@@ -35,7 +35,16 @@ function write(key: string, value: unknown): void {
   }
 }
 
-/** The flow on screen: which example it came from, and its current text. */
+/**
+ * The flow on screen: which flow it is, and its current text.
+ *
+ * `exampleId` is the id of a built-in example *or* of one of the visitor's own
+ * flows (`my-flows.ts`), which is why the id space of the two was made not to
+ * overlap. For a flow of their own the text is also in `localStorage`, saved as
+ * a document; this copy is the tab's scratch pad and is what makes an *unsaved*
+ * edit to somebody else's example survive an accidental reload without ever
+ * being written back into the example.
+ */
 export interface KeptFlow {
   exampleId: string;
   source: string;

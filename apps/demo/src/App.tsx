@@ -69,7 +69,7 @@ import { EXAMPLES, type FlowExample } from "./examples-source.js";
 import { McpManager } from "./McpManager.js";
 import { runSpecs } from "./mcp/model.js";
 import { tokenFor } from "./mcp/storage.js";
-import { activeRegistry, useMcpServers } from "./mcp/use-mcp-servers.js";
+import { useMcpServers } from "./mcp/use-mcp-servers.js";
 import { RunPanel } from "./RunPanel.js";
 import {
   EMPTY_RUN,
@@ -83,7 +83,7 @@ import { ExampleGallery } from "./ExampleGallery.js";
 import { FlowAbout } from "./FlowAbout.js";
 import { OutlinePanel } from "./OutlinePanel.js";
 import { ChatPanel } from "./ChatPanel.js";
-import { rememberStats, statsFromGraph } from "./example-stats.js";
+import { forgetStats, rememberStats, statsFromGraph } from "./example-stats.js";
 import { fetchAiStatus, type AiStatus } from "./ai.js";
 import {
   IS_PUBLIC_BUILD,
@@ -96,8 +96,31 @@ import { loadFlow, saveFlow } from "./persist.js";
 import { useMediaQuery } from "./use-media-query.js";
 import { useTriggerInput } from "./trigger-input.js";
 import { TriggerInputDialog, TriggerInputForm } from "./TriggerInput.js";
+import { NewFlowDialog } from "./NewFlowDialog.js";
+import { resolveRegistry } from "./flow-registry.js";
+import {
+  MCP_REGISTRY,
+  asExample,
+  exportFlowFile,
+  fileNameFor,
+  isMine,
+  loadMyFlows,
+  newFlowId,
+  saveMyFlows,
+  uniqueTitle,
+  type MyFlow,
+} from "./my-flows.js";
 
 const FIRST = EXAMPLES[0] as FlowExample;
+
+/**
+ * The visitor's own flows, read once at module load.
+ *
+ * Same reason as `RESTORED` below: the very first render has to know whether
+ * the id the tab was last looking at belongs to a flow of theirs, and asking
+ * later would mean one paint of the wrong file.
+ */
+const MY_FLOWS = loadMyFlows();
 
 /**
  * The flow this tab was last looking at.
@@ -107,10 +130,16 @@ const FIRST = EXAMPLES[0] as FlowExample;
  * threw away a file the user had just spent minutes generating, with no save
  * anywhere (QA BUG-1). Restoring it costs nothing and the diagram is redrawn
  * from the restored text, so what comes back is a real flow, not a snapshot.
+ *
+ * The id may name one of the visitor's own flows or one of the built-in
+ * examples — the two id spaces were deliberately made not to overlap
+ * (`my-flows.ts`), so one lookup after the other is unambiguous.
  */
 const RESTORED = (() => {
   const kept = loadFlow();
   if (kept === null) return null;
+  const mine = MY_FLOWS.find((candidate) => candidate.id === kept.exampleId);
+  if (mine !== undefined) return { example: asExample(mine), source: kept.source };
   const example = EXAMPLES.find((candidate) => candidate.id === kept.exampleId);
   if (example === undefined) return null;
   return { example, source: kept.source };
@@ -139,10 +168,35 @@ export function App() {
   const [run, setRun] = useState<RunSnapshot>(EMPTY_RUN);
   const [runOpen, setRunOpen] = useState(false);
   const [runUnavailableOpen, setRunUnavailableOpen] = useState(false);
+  /** Set only while the registry has genuinely moved under the open flow (06 §5). */
+  const [registryNote, setRegistryNote] = useState<string | null>(null);
   /** The "start the flow from *this*" panel, between Run and the run itself. */
   const [triggerOpen, setTriggerOpen] = useState(false);
   const runHandle = useRef<RunHandle | null>(null);
   const [theme, setTheme] = useTheme("light");
+
+  /* --- the visitor's own flows ------------------------------------------- */
+
+  const [myFlows, setMyFlows] = useState<MyFlow[]>(MY_FLOWS);
+  /** Set when this browser refused to keep them — said out loud, never hidden. */
+  const [flowStorageError, setFlowStorageError] = useState<string | null>(null);
+  const [newFlowOpen, setNewFlowOpen] = useState(false);
+  /** What the generation loop reached, carried onto the canvas after Create. */
+  const [creationNote, setCreationNote] = useState<{ tone: "ok" | "warn"; text: string } | null>(null);
+  /** Dismissed once per example, so the offer to save is not nagging. */
+  const [saveOfferHidden, setSaveOfferHidden] = useState(false);
+
+  const firstSave = useRef(true);
+  useEffect(() => {
+    // Nothing to write on the very first render — that value came *from*
+    // storage, and writing it back would only risk a spurious quota error.
+    if (firstSave.current) {
+      firstSave.current = false;
+      return;
+    }
+    const outcome = saveMyFlows(myFlows);
+    setFlowStorageError(outcome.ok ? null : outcome.error);
+  }, [myFlows]);
 
   const wide = useMediaQuery("(min-width: 1024px)");
   const roomy = useMediaQuery("(min-width: 900px)");
@@ -160,8 +214,13 @@ export function App() {
    */
   const mcp = useMcpServers();
   const [mcpOpen, setMcpOpen] = useState(false);
+  /**
+   * One flow, one registry. `resolveRegistry` is `activeRegistry` for a built-in
+   * example — unchanged — and honours the choice recorded on the flow when the
+   * flow is one the visitor made, because that choice is part of the document.
+   */
   const active = useMemo(
-    () => activeRegistry(example, { composed: mcp.composed, active: mcp.active }),
+    () => resolveRegistry(example, { composed: mcp.composed, active: mcp.active }),
     [example, mcp.composed, mcp.active],
   );
 
@@ -340,11 +399,23 @@ export function App() {
     setSelectedNodeId(failed.nodeId);
   }, [run.status, run.nodes, run.plan]);
 
-  // ⌘K palette · ⌘O examples · ⌘J chat · ⌘B outline — the four things this demo
-  // is for, each one key away.
+  // ⌥⌘N new flow · ⌘K palette · ⌘O examples · ⌘J chat · ⌘B outline — the five
+  // things this demo is for, each one key away.
+  //
+  // ⌥⌘N rather than the ⌘N a desktop app would use: ⌘N and ⇧⌘N are handled by
+  // the browser itself before any page sees them, so binding either would
+  // advertise a shortcut that opens a new window instead of a new flow. Read
+  // through `event.code`, because Option changes `event.key` to a dead key.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.altKey) {
+        if (event.code === "KeyN") {
+          event.preventDefault();
+          setNewFlowOpen(true);
+        }
+        return;
+      }
       const key = event.key.toLowerCase();
       if (key === "k") {
         event.preventDefault();
@@ -381,6 +452,20 @@ export function App() {
   const wideRef = useRef(wide);
   wideRef.current = wide;
 
+  /**
+   * What the graph on screen actually is — which flow, and which registry.
+   *
+   * `WorkflowGraph.registryHash` is the registry the graph was analyzed against
+   * (06 §5), and comparing it to the live one is the only honest definition of
+   * "the registry moved under this flow". The example id rides along because a
+   * graph belonging to the *previous* flow is not stale, it is about to be
+   * replaced — and the two facts have to be read together, in the same tick, or
+   * switching flows looks exactly like a registry change.
+   */
+  const graphOrigin = useRef<{ exampleId: string; registryHash: string } | null>(null);
+  const exampleIdRef = useRef(example.id);
+  exampleIdRef.current = example.id;
+
   const analyze = useCallback(
     async (text: string, exampleId?: string) => {
       const started = performance.now();
@@ -388,6 +473,7 @@ export function App() {
       try {
         const next = decorate(await session.analyze(text, { trigger: { kind: "webhook", label: "Trigger" } }));
         const ms = Math.round(performance.now() - started);
+        graphOrigin.current = { exampleId: exampleIdRef.current, registryHash: next.registryHash };
         setGraph(next);
         setError(null);
         setElapsed(ms);
@@ -430,6 +516,11 @@ export function App() {
     setSource(text);
     setSelectedNodeId(null);
     setGraph(null);
+    graphOrigin.current = null;
+    // Whatever the banner was saying, it was saying it about the flow that just
+    // left the screen.
+    setRegistryNote(null);
+    setSaveOfferHidden(false);
     setElapsed(null);
     void analyze(text, restored ? undefined : example.id);
   }, [example, analyze]);
@@ -448,26 +539,185 @@ export function App() {
   const registryHash = registry.registryHash();
   const sourceRef = useRef(source);
   sourceRef.current = source;
-  const lastRegistryHash = useRef(registryHash);
-  const [registryNote, setRegistryNote] = useState<string | null>(null);
   useEffect(() => {
-    if (lastRegistryHash.current === registryHash) return;
-    lastRegistryHash.current = registryHash;
-    // The example switching already reloads everything; only a registry change
-    // *under the same flow* needs saying.
-    if (loadedRef.current !== example.id) return;
+    /*
+     * Deliberately *not* "the hash differs from the one I saw last render".
+     * Every example names its own registry, so that test is true of every
+     * example switch, and it cannot be rescued by also comparing the example
+     * id: the effect above runs first and only *queues* `setGraph(null)`, so
+     * in the one commit where `example.id` has already changed this effect is
+     * still looking at the previous flow's graph. Which is how a banner ends
+     * up interrupting the ordinary act of opening another flow.
+     *
+     * The question core asks is `graph.registryHash !== registry.registryHash()`
+     * (06 §5, `session.applyPatch`), and `graphOrigin` is that pair plus the
+     * flow it belongs to — all three written in one go, by whoever produced the
+     * graph, so there is no window in which they disagree.
+     */
+    const origin = graphOrigin.current;
+    // Nothing analyzed yet, or the graph on screen belongs to a flow that is
+    // already being replaced. Neither is a registry that moved.
+    if (origin === null || origin.exampleId !== example.id) return;
+    if (origin.registryHash === registryHash) return;
+
     setRegistryNote(
       `The registry changed — this flow was redrawn against ${String(registry.listTools().length)} tools in ${String(registry.listToolNamespaces().length)} namespace${registry.listToolNamespaces().length === 1 ? "" : "s"}. Any call to a tool that is no longer there is now an unknown step.`,
     );
-    void analyze(sourceRef.current);
-  }, [registryHash, registry, example.id, analyze]);
+    // One tick later, and cancelled if the registry moves again first: ticking
+    // five tool checkboxes in a row is five registry hashes, and re-analyzing a
+    // 300-line flow five times to show the last result is four wasted passes.
+    const handle = setTimeout(() => { void analyze(sourceRef.current); }, 0);
+    return () => { clearTimeout(handle); };
+    // `graph` is a dependency because `graphOrigin` is written beside it: the
+    // re-analyze this effect schedules is what makes the two agree again, and
+    // the effect has to run once more to see that it did.
+  }, [registryHash, registry, example.id, graph, analyze]);
 
-  // Keep the tab's own copy current. Debounced: this fires on every keystroke in
-  // Monaco, and serializing a 300-line file per character is not free.
+  /*
+   * Keep the tab's own copy current, and — for a flow of the visitor's own —
+   * the document too.
+   *
+   * Debounced: this fires on every keystroke in Monaco, and serializing a
+   * 300-line file per character is not free.
+   *
+   * The asymmetry is the point. Editing *your* flow saves it, because it is
+   * yours. Editing a built-in example writes only to the tab's scratch pad, so
+   * the example itself is never mutated and the gallery stays trustworthy; the
+   * bar over the canvas offers to make it yours the first time you change one.
+   */
   useEffect(() => {
-    const timer = setTimeout(() => { saveFlow({ exampleId: example.id, source }); }, 400);
+    const timer = setTimeout(() => {
+      saveFlow({ exampleId: example.id, source });
+      if (!isMine(example)) return;
+      setMyFlows((current) => {
+        const found = current.find((flow) => flow.id === example.id);
+        // Returning the same array is how React is told nothing changed — the
+        // save effect above must not fire on every keystroke.
+        if (found === undefined || found.source === source) return current;
+        forgetStats(example.id);
+        return current.map((flow) =>
+          flow.id === example.id ? { ...flow, source, updatedAt: Date.now() } : flow,
+        );
+      });
+    }, 400);
     return () => { clearTimeout(timer); };
-  }, [example.id, source]);
+  }, [example, source]);
+
+  /* --- creating, renaming, deleting, exporting ---------------------------- */
+
+  /** Save it and open it — one commit, so the canvas never lags the list. */
+  const createFlow = useCallback(
+    (flow: MyFlow) => {
+      setMyFlows((current) => [flow, ...current]);
+      setNewFlowOpen(false);
+      setSaveOfferHidden(false);
+      setExample(asExample(flow));
+      const generated = flow.generation;
+      setCreationNote(
+        generated === null
+          ? null
+          : generated.unresolved === null
+            ? {
+                tone: "ok",
+                text: `“${flow.title}” reached ${generated.level} in ${String(generated.rounds)} round${generated.rounds === 1 ? "" : "s"} — every call resolves against ${active.source.label}.`,
+              }
+            : {
+                tone: "warn",
+                text: `“${flow.title}” is open, but it is not finished: ${generated.unresolved} The issues button on the canvas lists what the analyzer sees.`,
+              },
+      );
+    },
+    [active.source.label],
+  );
+
+  const renameFlow = useCallback((id: string, title: string) => {
+    setMyFlows((current) =>
+      current.map((flow) => (flow.id === id ? { ...flow, title, updatedAt: Date.now() } : flow)),
+    );
+    setExample((current) =>
+      isMine(current) && current.id === id
+        ? asExample({ ...current.mine, title, updatedAt: Date.now() })
+        : current,
+    );
+  }, []);
+
+  const deleteFlow = useCallback(
+    (id: string) => {
+      setMyFlows((current) => current.filter((flow) => flow.id !== id));
+      forgetStats(id);
+      // Deleting the flow on screen has to leave something on screen.
+      setExample((current) => (current.id === id ? FIRST : current));
+      toast.add({
+        title: "Flow deleted",
+        description: "It was only in this browser, so there is no other copy.",
+      });
+    },
+    [toast],
+  );
+
+  /**
+   * A real file, downloaded.
+   *
+   * The artifact people want to take to a repository is a `.flow.ts`, so that is
+   * what comes out: the source verbatim, with one comment line carrying the name
+   * and the registry so re-importing it here restores both instead of guessing.
+   */
+  const exportFlow = useCallback(
+    (flow: Pick<MyFlow, "title" | "registryChoice" | "source">) => {
+      try {
+        const blob = new Blob([exportFlowFile(flow)], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileNameFor(flow);
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => { URL.revokeObjectURL(url); }, 2000);
+        toast.add({ title: "Exported", description: `${fileNameFor(flow)} — drop it in a repo next to a generated tools.d.ts.` });
+      } catch (cause) {
+        toast.add({
+          title: "Could not export",
+          description: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
+    },
+    [toast],
+  );
+
+  /**
+   * "This is somebody else's example and you have changed it."
+   *
+   * Editing a built-in flow must not quietly become an edit *to* the built-in
+   * flow — the gallery is only worth anything if what it promises is what opens.
+   * So the change lives in the tab until it is made into a flow of the visitor's
+   * own, and this is that one action.
+   */
+  const saveAsMine = useCallback(() => {
+    const now = Date.now();
+    const flow: MyFlow = {
+      id: newFlowId(),
+      title: uniqueTitle(example.title, myFlows),
+      source,
+      registryChoice: active.fromMcp ? MCP_REGISTRY : active.source.id,
+      createdAt: now,
+      updatedAt: now,
+      origin: { exampleId: example.id, exampleTitle: example.title },
+      prompt: null,
+      generation: null,
+    };
+    setMyFlows((current) => [flow, ...current]);
+    setExample(asExample(flow));
+    setSaveOfferHidden(false);
+    setCreationNote(null);
+    toast.add({
+      title: "Saved as your flow",
+      description: `“${flow.title}” is yours now; “${example.title}” is back to how it shipped.`,
+    });
+  }, [example, source, myFlows, active, toast]);
+
+  const dirtyExample =
+    !isMine(example) && graph !== null && source.trim() !== example.source.trim();
 
   // Monaco edits: re-analyze once typing settles. No provenance on this path —
   // identity is resolved heuristically, exactly like an edit made outside the UI.
@@ -485,6 +735,7 @@ export function App() {
     (result: PatchResult) => {
       // One commit: the new source and the graph it was re-analyzed into.
       setSource(result.source);
+      graphOrigin.current = { exampleId: exampleIdRef.current, registryHash: result.graph.registryHash };
       setGraph(decorate(result.graph));
       setError(null);
       const added = result.changes.some((change) => change.type === "node.added");
@@ -519,7 +770,10 @@ export function App() {
       selectedNodeId={selectedNodeId}
       onSelectNode={setSelectedNodeId}
       onPatched={onPatched}
-      onGraphSync={(next) => { setGraph(decorate(next)); }}
+      onGraphSync={(next) => {
+        graphOrigin.current = { exampleId: exampleIdRef.current, registryHash: next.registryHash };
+        setGraph(decorate(next));
+      }}
       onReanalyze={() => { void analyze(source); }}
       run={runView}
       defaultMode="expanded"
@@ -538,7 +792,18 @@ export function App() {
             open={galleryOpen}
             onOpenChange={setGalleryOpen}
             currentId={example.id}
-            onPick={setExample}
+            onPick={(next) => { setCreationNote(null); setExample(next); }}
+            mine={myFlows}
+            onNew={() => { setNewFlowOpen(true); }}
+            onRename={renameFlow}
+            onDelete={deleteFlow}
+            onExport={exportFlow}
+            lookupFor={(candidate) =>
+              isMine(candidate)
+                ? resolveRegistry(candidate, { composed: mcp.composed, active: mcp.active }).lookup
+                : undefined
+            }
+            storageError={flowStorageError}
             trigger={
               <Button variant="secondary" size="md" data-testid="open-gallery" className="max-w-[16rem]">
                 <LayoutGrid />
@@ -549,6 +814,24 @@ export function App() {
               </Button>
             }
           />
+
+          {/* The way in for someone with nothing open yet — next to the picker,
+              not hidden behind it. */}
+          <Hint label="Start a new flow — describe it and the AI writes it, or start blank">
+            <Button
+              variant="primary"
+              size="md"
+              data-testid="new-flow"
+              aria-label="New flow"
+              onClick={() => { setNewFlowOpen(true); }}
+            >
+              <Plus />
+              <span className="hidden sm:inline">New</span>
+              <span className="ml-1 hidden rounded bg-white/20 px-1 py-0.5 text-[10px] leading-none lg:inline">
+                ⌥⌘N
+              </span>
+            </Button>
+          </Hint>
 
           <Hint label={dirty ? "The code changed — redraw the diagram" : "Redraw the diagram from the code"}>
             <Button
@@ -711,6 +994,81 @@ export function App() {
               onDismiss={() => { setRegistryNote(null); }}
             >
               {registryNote}
+            </Notice>
+          </div>
+        )}
+
+        {/*
+          A generated flow that is not finished says so — 07 §5. It still opens,
+          because the most instructive thing this demo does is show what the
+          model could not resolve and why; it is never dressed up as complete.
+        */}
+        {creationNote === null ? null : (
+          <div className="shrink-0 border-b border-line px-3 py-2">
+            <Notice
+              tone={creationNote.tone}
+              role="status"
+              title={creationNote.tone === "ok" ? "Your flow is open" : "Your flow is open, but unfinished"}
+              data-testid="creation-note"
+              onDismiss={() => { setCreationNote(null); }}
+            >
+              {creationNote.text}
+            </Notice>
+          </div>
+        )}
+
+        {/* The flow asked for a registry that is not here — said out loud
+            rather than resolved against something else. */}
+        {active.note === null ? null : (
+          <div className="shrink-0 border-b border-line px-3 py-2">
+            <Notice tone="warn" role="status" title="These tools are not connected" data-testid="registry-missing">
+              {active.note}
+            </Notice>
+          </div>
+        )}
+
+        {/*
+          Editing somebody else's example.
+
+          The gallery is worth something only if what it promises is what opens,
+          so an edit to a built-in flow stays in this tab until it is made into a
+          flow of the visitor's own. This is the offer, once, dismissible.
+        */}
+        {dirtyExample && !saveOfferHidden ? (
+          <div className="shrink-0 border-b border-line px-3 py-2">
+            <Notice
+              tone="info"
+              role="status"
+              title={`You have changed “${example.title}”`}
+              data-testid="save-as-mine"
+              onDismiss={() => { setSaveOfferHidden(true); }}
+              actions={
+                <>
+                  <Button variant="primary" size="sm" data-testid="save-as-mine-go" onClick={saveAsMine}>
+                    Save as my flow
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    data-testid="save-as-mine-revert"
+                    onClick={() => { setSource(example.source); void analyze(example.source); }}
+                  >
+                    Put the example back
+                  </Button>
+                </>
+              }
+            >
+              The built-in example is unchanged — this edit lives in this tab only, and a reload of a
+              different flow will lose it. Save it as your own and it becomes a document in this
+              browser, with its own name, registry and trigger input.
+            </Notice>
+          </div>
+        ) : null}
+
+        {flowStorageError === null ? null : (
+          <div className="shrink-0 border-b border-line px-3 py-2">
+            <Notice tone="warn" role="alert" title="Your flows are not being saved" data-testid="flow-storage-error">
+              {flowStorageError}
             </Notice>
           </div>
         )}
@@ -903,6 +1261,25 @@ export function App() {
         lookup={active.lookup}
         fromMcp={active.fromMcp}
         fallbackLabel={active.source.label}
+      />
+
+      {/*
+        Start from nothing.
+
+        Generation runs through the same `generate-flow.ts` pipeline the chat
+        panel uses — one loop, one place it can drift from — and the rounds are
+        drawn as they land rather than hidden behind a spinner.
+      */}
+      <NewFlowDialog
+        open={newFlowOpen}
+        onOpenChange={setNewFlowOpen}
+        existing={myFlows}
+        composed={mcp.composed}
+        configured={ai.configured}
+        model={ai.model}
+        aiMode={ai.mode ?? "proxy"}
+        onKeyChange={() => { void fetchAiStatus().then(setAi); }}
+        onCreate={createFlow}
       />
 
       {/*

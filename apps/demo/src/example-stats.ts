@@ -9,7 +9,7 @@
  * blocks the frame.
  */
 
-import { createCodeFlow, type WorkflowGraph } from "@codeflow/core";
+import { createCodeFlow, type RegistryLookup, type WorkflowGraph } from "@codeflow/core";
 import type { FlowExample } from "./examples-source.js";
 import { registryInstanceFor } from "./registry.js";
 
@@ -46,9 +46,12 @@ export function statsFromGraph(graph: WorkflowGraph, ms: number): ExampleStats {
   };
 }
 
-async function measure(example: FlowExample): Promise<ExampleStats | null> {
+async function measure(example: FlowExample, lookup?: RegistryLookup): Promise<ExampleStats | null> {
   try {
-    const session = createCodeFlow({ registry: registryInstanceFor(example) });
+    // A flow the visitor made may name the composed MCP registry, which
+    // `registryInstanceFor` knows nothing about — so the caller passes the one
+    // `flow-registry.ts` resolved instead of this file guessing.
+    const session = createCodeFlow({ registry: lookup ?? registryInstanceFor(example) });
     const started = performance.now();
     const graph = await session.analyze(example.source, {
       trigger: { kind: "webhook", label: "Trigger" },
@@ -63,12 +66,15 @@ async function measure(example: FlowExample): Promise<ExampleStats | null> {
   }
 }
 
-export function measureExample(example: FlowExample): Promise<ExampleStats | null> {
+export function measureExample(
+  example: FlowExample,
+  lookup?: RegistryLookup,
+): Promise<ExampleStats | null> {
   const cached = cache.get(example.id);
   if (cached !== undefined) return Promise.resolve(cached);
   const running = inFlight.get(example.id);
   if (running !== undefined) return running;
-  const promise = measure(example).finally(() => {
+  const promise = measure(example, lookup).finally(() => {
     inFlight.delete(example.id);
   });
   inFlight.set(example.id, promise);
@@ -79,16 +85,28 @@ export function measureExample(example: FlowExample): Promise<ExampleStats | nul
 export async function measureAll(
   examples: readonly FlowExample[],
   onEach: (id: string, stats: ExampleStats) => void,
+  lookupFor?: (example: FlowExample) => RegistryLookup | undefined,
 ): Promise<void> {
   for (const example of examples) {
     if (cache.has(example.id)) {
       onEach(example.id, cache.get(example.id) as ExampleStats);
       continue;
     }
-    const stats = await measureExample(example);
+    const stats = await measureExample(example, lookupFor?.(example));
     if (stats !== null) onEach(example.id, stats);
     await new Promise((resolve) => { setTimeout(resolve, 0); });
   }
+}
+
+/**
+ * Forget what was measured for one flow.
+ *
+ * A visitor's own flow is edited in place, so its card's numbers stop being
+ * true the moment the source changes. A built-in example never changes and is
+ * never invalidated.
+ */
+export function forgetStats(id: string): void {
+  cache.delete(id);
 }
 
 /** Record numbers the app already paid for — the open flow is never re-analyzed. */

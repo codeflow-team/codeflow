@@ -27,9 +27,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  renderDiagnosticsFeedback,
   renderSystemPrompt,
-  validateFlowSource,
   type ConformanceLevel,
   type Diagnostic,
   type RegistryLookup,
@@ -40,7 +38,6 @@ import {
   Badge,
   Button,
   CodeDiff,
-  Input,
   Notice,
   Segmented,
   cn,
@@ -60,78 +57,19 @@ import {
 } from "lucide-react";
 import {
   callModel,
-  clearUserKey,
   diffLines,
   extractJson,
-  getUserKey,
-  setUserKey,
-  splitAnswer,
   type AiMode,
-  type ChatMessage,
 } from "./ai.js";
-import { REPO_URL } from "./deployment.js";
+import { ByokKeyBox } from "./ByokKeyBox.js";
 import { registryFor, type ExampleRegistry, type FlowExample } from "./examples-source.js";
+import { generateFlowSource, MAX_ROUNDS, TARGET, type GenerationRound } from "./generate-flow.js";
+import { openersFor } from "./openers.js";
+import { RoundCard } from "./RoundCard.js";
 import { registryInstanceFor } from "./registry.js";
 import { argumentTypeProblems, type ArgumentTypeProblem } from "./argument-types.js";
 import { removalTone, rewriteScope, type RewriteScope } from "./rewrite-scope.js";
 import { loadChat, saveChat } from "./persist.js";
-
-const TARGET: "L1" = "L1";
-const MAX_ROUNDS = 3;
-
-/**
- * Openers that name tools the model can actually reach.
- *
- * A suggestion is a promise about what this flow's registry contains, so it is
- * keyed by registry rather than written once: offering "read every file in
- * /tmp/logs" to a flow whose only tools are GitHub and Slack sets the model up
- * to fail and teaches the reader the wrong thing about the contract. Registries
- * with nothing written for them fall back to shapes rather than tool names.
- */
-const OPENERS: Record<string, string[]> = {
-  sample: [
-    "For every new pull request, post its title to #releases",
-    "Alert #oncall when a pull request changes more than ten files",
-    "Read each PR's files and skip the ones that only touch tests",
-  ],
-  "repo-triage": [
-    "Read every file in the repository root and remember the risky ones",
-    "Walk the allowed directories and write a summary file for each one",
-    "Search memory for what changed last run, then re-read only those files",
-  ],
-  research: [
-    "Search the web for a topic, read the top result, and file a brief",
-    "Ask three sources in parallel and keep whichever answers first",
-    "Retry the search up to three times before giving up",
-  ],
-  "browser-qa": [
-    "Open a page, take a snapshot, and save it next to the report",
-    "Click through a login form and screenshot whatever comes back",
-    "Retry a failing step twice, then close the browser either way",
-  ],
-  pipeline: [
-    "Read every CSV in the drop folder and total them by region",
-    "Enrich each row from three sources at once, then write the ledger",
-    "Stop the whole run if any file fails to parse",
-  ],
-};
-
-const GENERIC_OPENERS = [
-  "Do the first step, then loop over whatever it gives back",
-  "Wrap the risky step in a try and report the failure",
-  "Run the independent steps in parallel, then join the results",
-];
-
-/**
- * Asked for in front of the file, and shown above the diff.
- *
- * 10 §4's own output rule is "no explanation before or after" — right for an
- * eval harness reading the answer with a script, wrong for a person who is being
- * asked to accept a three-hundred-line rewrite. `splitAnswer` handles both
- * shapes, so relaxing it here costs nothing if the model ignores it.
- */
-const SAY_WHAT_YOU_DID =
-  'First write ONE short sentence in plain English: what this flow does, and anything you could not do — a step with no matching tool, an assumption you had to make. Then the complete file inside one ```ts fence.';
 
 type Turn =
   | { kind: "user"; id: number; text: string }
@@ -254,104 +192,6 @@ export interface ChatPanelProps {
   onApplySource: (source: string) => void;
   onClose?: () => void;
   className?: string;
-}
-
-/**
- * The key box for the hosted build — bring your own.
- *
- * There is no server here to hold a key, and a shared one baked into a
- * serverless function is a key anyone can drain, so the honest arrangement is
- * that the visitor supplies theirs. The copy says exactly where it goes,
- * because "paste your API key" with no explanation is a thing a reader is right
- * to refuse: it is stored in this browser's `localStorage`, and the request
- * goes from this page straight to `openrouter.ai` — the origin serving this
- * page never sees it and could not use it if it did.
- *
- * Everything else in the demo — analyze, graph, inspect, patch, diff — needs no
- * key at all, which is why this is a small box in one panel and not a wall in
- * front of the app.
- */
-function ByokKeyBox(props: {
-  configured: boolean;
-  model: string;
-  onChanged?: () => void;
-}): ReactNode {
-  const [draft, setDraft] = useState("");
-  const [editing, setEditing] = useState(!props.configured);
-
-  if (props.configured && !editing) {
-    const key = getUserKey() ?? "";
-    return (
-      <Notice tone="ok" title="Using your OpenRouter key">
-        <p className="m-0">
-          <code className="font-mono text-[11px]">{key.slice(0, 8)}…{key.slice(-4)}</code> — stored
-          in this browser only, sent straight to openrouter.ai. Model:{" "}
-          <code className="font-mono text-[11px]">{props.model}</code>.
-        </p>
-        <div className="mt-2 flex gap-2">
-          <Button variant="ghost" size="sm" onClick={() => { setDraft(""); setEditing(true); }}>
-            Replace
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              clearUserKey();
-              setEditing(true);
-              props.onChanged?.();
-            }}
-          >
-            Forget it
-          </Button>
-        </div>
-      </Notice>
-    );
-  }
-
-  return (
-    <Notice tone="info" title="Ask AI needs a key — yours">
-      <p className="m-0">
-        This is the hosted demo: it is a static site with no server, so there is no key here to
-        borrow. Paste an <a className="underline" href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">OpenRouter key</a>{" "}
-        and it is kept in this browser&apos;s local storage and sent only to{" "}
-        <code className="font-mono text-[11px]">openrouter.ai</code> — never to the site serving this
-        page. <code className="font-mono text-[11px]">{props.model}</code> is free there.
-      </p>
-      <p className="m-0 mt-1.5 text-ink-faint">
-        Everything else — the graph, the inspector, editing, the diff — works without any key.
-      </p>
-      <div className="mt-2 flex gap-2">
-        <Input
-          mono
-          type="password"
-          value={draft}
-          placeholder="sk-or-v1-…"
-          aria-label="Your OpenRouter API key"
-          data-testid="byok-input"
-          className="min-w-0 flex-1"
-          onChange={(event) => { setDraft(event.target.value); }}
-        />
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={draft.trim().length < 12}
-          data-testid="byok-save"
-          onClick={() => {
-            setUserKey(draft);
-            setDraft("");
-            setEditing(false);
-            props.onChanged?.();
-          }}
-        >
-          Use it
-        </Button>
-      </div>
-      <p className="m-0 mt-2 text-[11px] text-ink-faint">
-        Prefer not to? Run it locally instead — <code className="font-mono text-[11px]">git clone {REPO_URL}</code>,{" "}
-        <code className="font-mono text-[11px]">pnpm dev</code>, and the key stays in the dev server.
-      </p>
-    </Notice>
-  );
 }
 
 export function ChatPanel(props: ChatPanelProps): ReactNode {
@@ -487,83 +327,33 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
   const generateSource = useCallback(
     async (intent: string, existing: string | null, signal: AbortSignal): Promise<void> => {
       if (session === null) return;
-      const context = await session.buildGenerationContext({
-        includeExamples: true,
-        ...(existing === null ? {} : { existingSource: existing }),
-      });
-      const system = renderSystemPrompt(context);
 
-      const messages: ChatMessage[] = [
-        { role: "system", content: system },
-        {
-          role: "user",
-          content:
-            existing === null
-              ? `${intent}\n\n${SAY_WHAT_YOU_DID}`
-              : `Here is the flow file as it stands:\n\n\`\`\`ts\n${existing}\`\`\`\n\nChange it so that: ${intent}\n\n${SAY_WHAT_YOU_DID} It must be the complete updated file, not a fragment.`,
+      // The loop itself lives in `generate-flow.ts`, because the create dialog
+      // runs the identical one and a second copy would drift from this one.
+      const accepted = await generateFlowSource({
+        session,
+        registryLookup,
+        intent,
+        existing,
+        signal,
+        aiMode: props.aiMode,
+        model: props.model,
+        onStage: stage,
+        onRound: (round: GenerationRound) => {
+          push({ kind: "round", round: round.round, level: round.level, diagnostics: round.diagnostics, ms: round.ms });
         },
-      ];
-
-      let accepted:
-        | { source: string; level: ConformanceLevel; rounds: number; prose: string | null; graph: WorkflowGraph | null; diagnostics: Diagnostic[] }
-        | null = null;
-
-      for (let round = 1; round <= MAX_ROUNDS; round++) {
-        stage(
-          round === 1
-            ? existing === null
-              ? "Writing the flow…"
-              : "Rewriting the file…"
-            : `Fixing what validation found (round ${String(round)})…`,
-        );
-        const answer = await callModel(messages, {
-          signal,
-          onDelta,
-          onThinking,
-          mode: props.aiMode,
-          model: props.model,
-        });
-        stage("Checking it against the flow contract…");
-        const { source: candidate, prose } = splitAnswer(answer.content);
-        const result = validateFlowSource(candidate, registryLookup);
-
-        const typed =
-          result.graph === null ? [] : argumentTypeProblems(result.graph, registryLookup);
-        const diagnostics: Diagnostic[] = [
-          ...result.diagnostics,
-          ...typed.map((problem) => ({
-            severity: "error" as const,
-            code: "argument-type-mismatch",
-            message: problem.message,
-          })),
-        ];
-
-        push({ kind: "round", round, level: result.level, diagnostics, ms: answer.ms });
-
-        accepted = {
-          source: candidate,
-          level: result.level,
-          rounds: round,
-          prose,
-          graph: result.graph,
-          diagnostics,
-        };
-        if (result.level === "L1" || result.level === "L2") break;
-
-        const feedback = renderDiagnosticsFeedback(result, { target: TARGET });
-        if (feedback === null) break;
-        if (round === MAX_ROUNDS) {
-          push({
-            kind: "note",
-            tone: "warn",
-            text: `Still below ${TARGET} after ${String(MAX_ROUNDS)} rounds — the file below is the best answer; look at what the checks found before applying it.`,
-          });
-          break;
-        }
-        messages.push({ role: "assistant", content: answer.content }, { role: "user", content: feedback });
-      }
+        onDelta,
+        onThinking,
+      });
 
       if (accepted === null) return;
+      if (accepted.gaveUp) {
+        push({
+          kind: "note",
+          tone: "warn",
+          text: `Still below ${TARGET} after ${String(MAX_ROUNDS)} rounds — the file below is the best answer; look at what the checks found before applying it.`,
+        });
+      }
 
       const scope =
         accepted.graph !== null && graph !== null ? rewriteScope(graph, accepted.graph) : null;
@@ -793,7 +583,7 @@ export function ChatPanel(props: ChatPanelProps): ReactNode {
   // only in the empty state, which meant that once you had a conversation there
   // was no way left to see which tools you were talking about (BUG-11).
   const toolSurface = `${registry.label} — ${String(registry.tools.length)} tools`;
-  const openers = OPENERS[registry.id] ?? GENERIC_OPENERS;
+  const openers = openersFor(registry.id);
 
   const placeholder = useMemo(() => {
     if (effectiveMode === "edit" && selectedNode !== null) {
@@ -1158,97 +948,7 @@ function TurnView({ turn, onRetry }: { turn: Turn; onRetry?: () => void }): Reac
     );
   }
 
-  return <RoundView turn={turn} />;
-}
-
-/**
- * One validation round.
- *
- * The list is deduplicated with a count and carries line numbers, because the
- * previous one repeated an identical sentence six times, then said "+25 more",
- * and headed the whole thing "10 warnings" (BUG-12). Numbers that do not add up
- * teach a reader to ignore the panel.
- */
-function RoundView({ turn }: { turn: Extract<Turn, { kind: "round" }> }): ReactNode {
-  const grouped = useMemo(() => {
-    const byMessage = new Map<string, { diagnostic: Diagnostic; count: number; lines: number[] }>();
-    for (const diagnostic of turn.diagnostics) {
-      const key = `${diagnostic.code} ${diagnostic.message}`;
-      const line = diagnostic.source?.start.line;
-      const entry = byMessage.get(key);
-      if (entry === undefined) {
-        byMessage.set(key, { diagnostic, count: 1, lines: line === undefined ? [] : [line] });
-      } else {
-        entry.count += 1;
-        if (line !== undefined) entry.lines.push(line);
-      }
-    }
-    return [...byMessage.values()].sort((a, b) => severityRank(a.diagnostic) - severityRank(b.diagnostic));
-  }, [turn.diagnostics]);
-
-  const counts = { error: 0, warning: 0, info: 0 };
-  for (const diagnostic of turn.diagnostics) counts[diagnostic.severity] += 1;
-  const good = turn.level === "L1" || turn.level === "L2";
-
-  return (
-    <div className="rounded-lg border border-line bg-surface-2 px-2.5 py-2" data-testid="chat-round">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[11px] font-medium text-ink-dim">Round {turn.round}</span>
-        <Badge tone={good ? "ok" : turn.level === "L0" ? "warn" : "danger"} title="Conformance level (10 §5)">
-          {turn.level}
-        </Badge>
-        {counts.error > 0 ? <Badge tone="danger">{counts.error} error{counts.error === 1 ? "" : "s"}</Badge> : null}
-        {counts.warning > 0 ? <Badge tone="warn">{counts.warning} warning{counts.warning === 1 ? "" : "s"}</Badge> : null}
-        {counts.info > 0 ? <Badge tone="neutral">{counts.info} note{counts.info === 1 ? "" : "s"}</Badge> : null}
-        <span className="ml-auto text-[10.5px] tabular-nums text-ink-faint">
-          {(turn.ms / 1000).toFixed(1)}s
-        </span>
-      </div>
-      {grouped.length === 0 ? null : (
-        <ul className="m-0 mt-1.5 flex list-none flex-col gap-1 p-0">
-          {grouped.slice(0, 8).map((entry, i) => (
-            <li key={i} className="flex gap-1.5 text-[10.5px] leading-snug text-ink-dim">
-              <span
-                className={cn(
-                  "mt-[5px] size-1.5 shrink-0 rounded-full",
-                  entry.diagnostic.severity === "error"
-                    ? "bg-danger"
-                    : entry.diagnostic.severity === "warning"
-                      ? "bg-warn"
-                      : "bg-info",
-                )}
-              />
-              <span className="min-w-0">
-                <span className="font-mono">{entry.diagnostic.code}</span>
-                {entry.lines.length === 0 ? null : (
-                  <span className="font-mono text-ink-faint"> · {formatLines(entry.lines)}</span>
-                )}
-                {entry.count === 1 ? null : (
-                  <span className="text-ink-faint"> · ×{entry.count}</span>
-                )}{" "}
-                — {entry.diagnostic.message}
-              </span>
-            </li>
-          ))}
-          {grouped.length > 8 ? (
-            <li className="text-[10.5px] text-ink-faint">
-              +{grouped.length - 8} more kind{grouped.length - 8 === 1 ? "" : "s"} of issue
-            </li>
-          ) : null}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function severityRank(diagnostic: Diagnostic): number {
-  return diagnostic.severity === "error" ? 0 : diagnostic.severity === "warning" ? 1 : 2;
-}
-
-function formatLines(lines: readonly number[]): string {
-  const sorted = [...new Set(lines)].sort((a, b) => a - b);
-  const shown = sorted.slice(0, 4).map((line) => String(line)).join(", ");
-  return sorted.length > 4 ? `lines ${shown}, …` : sorted.length === 1 ? `line ${shown}` : `lines ${shown}`;
+  return <RoundCard round={turn} />;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -9,6 +9,9 @@ export type {
 export type { JsonSchema, TsTypeRef, NamedFieldsSchema, Schema } from "./schema.js";
 export { isTsTypeRef, isJsonSchema, isNamedFieldsSchema } from "./schema.js";
 
+export { sampleFromSchema } from "./sample.js";
+export type { JsonSchemaish } from "./sample.js";
+
 export type { Diagnostic, DiagnosticSeverity } from "./diagnostic.js";
 
 export type {
@@ -22,6 +25,8 @@ export type {
   WorkflowGraph,
   GraphChange,
 } from "./graph.js";
+
+export type { ScopeOrigin, ScopeBinding } from "./scope.js";
 
 export type { TriggerMetadata, AnalyzeOptions } from "./trigger.js";
 

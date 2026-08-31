@@ -171,7 +171,9 @@ This is a complete MVP, not a 1.0. It is built against the specs in [`docs/`](do
 - **Execution in core.** The library analyzes and patches; it does not run anything. Core has no execution engine and no dependency on one.
 - **Arbitrary application code.** The input is flow code that follows a contract ([`docs/01-flow-contract.md`](docs/01-flow-contract.md)). That restriction is what makes the projection tractable.
 
-**Known weak spot, stated plainly:** field edits are AST-precise, but statement insert and delete still work in line/offset arithmetic and do not know which statement is the parent. The transactional validator does not catch that class of bug, because the corrupted result still parses and still satisfies the flow contract. It is the first thing to fix.
+**Where the edges still are, stated plainly:** every edit is AST-anchored — insert and delete resolve a real syntax node and use line arithmetic only to place text at a boundary the AST chose. Insert refuses the two shapes where "the line after the anchor" is not "after the anchor's step": a statement that *is* the whole brace-less body of an `if`/loop (inserting there would put the new step outside the branch it was aimed at), and anything after a `break`/`continue`/`return` (nothing runs there). Both are refusals with a reason, because both used to be silent.
+
+What remains unsupported is structural relocation: moving a step into or out of a branch, and wrapping or unwrapping one, are rewrites rather than patches. One conservative edge is left over — appending into an `if` branch falls back to the enclosing container's scope, so it can refuse a reference to something that branch declares.
 
 **The demo runner is a demo runner, not a sandbox.** It starts a short allowlist of MCP servers that are harmless on a laptop, points the filesystem server at a scratch directory it deletes afterwards, and gives the worker no network of its own. That is enough to prove a flow really runs; it is not isolation. A real deployment needs a V8 isolate or a container.
 

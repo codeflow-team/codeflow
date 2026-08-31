@@ -34,6 +34,7 @@ import type {
   ProvenanceMap,
   ProvenanceTarget,
   NodeType,
+  ScopeBinding,
   WorkflowGraph,
   WorkflowNode,
 } from "../model/index.js";
@@ -540,6 +541,21 @@ export function applyIdentity(
     return { ...node, id, data };
   });
 
+  // The scope table is keyed by node id and its origins *are* node ids, so it
+  // is remapped with the nodes — otherwise a session graph would hand the UI
+  // cold ids that match nothing in `graph.nodes` (03 §5.0).
+  const scopes: Record<string, ScopeBinding[]> = {};
+  for (const [nodeId, bindings] of Object.entries(fresh.scopes)) {
+    scopes[idMap.get(nodeId) ?? nodeId] = bindings.map((binding) => ({
+      ...binding,
+      origins: binding.origins.map((origin) =>
+        origin.port === undefined
+          ? { nodeId: idMap.get(origin.nodeId) ?? origin.nodeId }
+          : { nodeId: idMap.get(origin.nodeId) ?? origin.nodeId, port: origin.port },
+      ),
+    }));
+  }
+
   const edges = fresh.edges.map((edge) => {
     const source = idMap.get(edge.source) ?? edge.source;
     const target = idMap.get(edge.target) ?? edge.target;
@@ -552,5 +568,5 @@ export function applyIdentity(
     };
   });
 
-  return { ...fresh, nodes, edges };
+  return { ...fresh, nodes, edges, scopes };
 }

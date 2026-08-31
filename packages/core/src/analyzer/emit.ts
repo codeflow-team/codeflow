@@ -281,7 +281,12 @@ interface RunEntry {
   statement: Statement;
   index: number;
   classification: Extract<Classification, { type: "code" }>;
-  /** Value bindings this statement introduces — writers are filled in on flush. */
+  /**
+   * Every binding this statement introduces, `tools` aliases included. Writers
+   * are filled in on flush for the value ones; an alias has no writer (it names
+   * the `tools` parameter, not a produced value). The alias is listed all the
+   * same, so the node's scope capture can exclude what the node itself declares.
+   */
   bindings: FlowBinding[];
 }
 
@@ -379,6 +384,10 @@ function emitCodeNode(ctx: AnalysisContext, frame: Frame, run: readonly RunEntry
       statementFingerprints: statements.map((s) => fingerprintNode(s)),
     },
     outputs: [...declared].map((name) => ({ id: name, label: name })),
+    // A code node's bindings are declared while its run is classified, i.e.
+    // *before* the node exists — so they have to be named here to stay out of
+    // the node's own scope capture (builder.ts, AddNodeInput.declares).
+    declares: run.flatMap((entry) => entry.bindings),
   });
 
   recordReads(ctx, frame, node.id, statements, declared);
@@ -417,15 +426,21 @@ function emitCodeNode(ctx: AnalysisContext, frame: Frame, run: readonly RunEntry
   }
 
   for (const entry of run) {
-    for (const binding of entry.bindings) binding.writers.push({ nodeId: node.id, port: binding.name });
+    for (const binding of entry.bindings) {
+      // A `tools` alias is not a produced value: it has no writer, and giving
+      // it one would invent a data edge out of a rename (03 §6).
+      if (binding.kind !== "value") continue;
+      binding.writers.push({ nodeId: node.id, port: binding.name });
+    }
   }
   return node;
 }
 
 /**
  * Declare the bindings one unsupported statement introduces, including `tools`
- * aliases (04 §1.2). Value bindings come back with an empty writer list; the
- * code node fills it in once it exists.
+ * aliases (04 §1.2). Every declared binding comes back — value bindings with an
+ * empty writer list that the code node fills in once it exists, aliases with no
+ * writer at all — so the caller knows exactly what this statement introduced.
  */
 function declareStatementBindings(frame: Frame, statement: Statement): FlowBinding[] {
   if (!Node.isVariableStatement(statement)) return [];
@@ -439,12 +454,14 @@ function declareStatementBindings(frame: Frame, statement: Statement): FlowBindi
     if (initializer !== undefined && Node.isIdentifier(nameNode)) {
       const prefix = toolsAliasPrefix(initializer, frame);
       if (prefix !== null) {
-        frame.scope.declare({
-          name: nameNode.getText(),
-          kind: "tools",
-          toolsPrefix: prefix,
-          writers: [],
-        });
+        declared.push(
+          frame.scope.declare({
+            name: nameNode.getText(),
+            kind: "tools",
+            toolsPrefix: prefix,
+            writers: [],
+          }),
+        );
         continue;
       }
     }
@@ -453,12 +470,14 @@ function declareStatementBindings(frame: Frame, statement: Statement): FlowBindi
       const prefix = toolsAliasPrefix(initializer, frame);
       if (prefix !== null) {
         for (const bound of bindingNames(nameNode)) {
-          frame.scope.declare({
-            name: bound.name,
-            kind: "tools",
-            toolsPrefix: [...prefix, bound.property ?? bound.name],
-            writers: [],
-          });
+          declared.push(
+            frame.scope.declare({
+              name: bound.name,
+              kind: "tools",
+              toolsPrefix: [...prefix, bound.property ?? bound.name],
+              writers: [],
+            }),
+          );
         }
         continue;
       }
@@ -923,6 +942,9 @@ function emitLoop(
       name: bound.name,
       kind: "value",
       writers: [{ nodeId: node.id, port: bound.port }],
+      // The item variable exists only inside the body — the UI shows it as the
+      // per-iteration value rather than as a step's output (model/scope.ts).
+      loopItem: true,
     });
   }
   const bodyFrame = childFrame(frame, {

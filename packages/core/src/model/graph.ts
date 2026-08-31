@@ -2,6 +2,7 @@
 
 import type { Diagnostic } from "./diagnostic.js";
 import type { Schema } from "./schema.js";
+import type { ScopeBinding } from "./scope.js";
 import type { SourceDocument, SourceMapping } from "./source.js";
 
 export type CoreNodeType =
@@ -94,6 +95,22 @@ export interface WorkflowGraph {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   diagnostics: Diagnostic[];
+  /**
+   * What is in scope **at** each node, keyed by node id — the data the UI's
+   * left pane offers for dragging into a parameter (see `ScopeBinding`).
+   *
+   * A **side table, deliberately not a field on `WorkflowNode`**: scope is
+   * quadratic-ish information (a 101-node flow where every node sees ten
+   * bindings would carry a thousand entries inline, most of them duplicated
+   * from node to node), while only the *selected* node's list is ever read.
+   * Keeping it beside the nodes leaves `WorkflowNode` the size it is today,
+   * lets a host drop the table when it does not render an inspector, and keeps
+   * `nodes` diffable without scope churn dominating every `node.updated`.
+   *
+   * Absent key ⇒ no bindings captured for that node (never `undefined`
+   * entries); `CodeFlowSession.scopeAt` answers `[]` for an unknown id.
+   */
+  scopes: Record<string, ScopeBinding[]>;
 }
 
 /** Graph diff emitted after each re-analyze — 03 §10. */

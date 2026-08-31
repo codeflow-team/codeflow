@@ -16,3 +16,8 @@ export { renderStringLiteral, isFieldValue } from "./values.js";
 export type { FieldValue, LiteralValue, ResolvedValue, OriginalForm } from "./values.js";
 
 export { suggestVariableName } from "./statement-edits.js";
+
+// Exported so a UI can pre-check a drag before it calls `patchNode` (and see
+// the *same* answer the patch engine will give — one implementation, 03 §6).
+export { checkExpressionScope, rootReferences, ALLOWED_GLOBALS } from "./scope-check.js";
+export type { SnippetKind, ScopeCheckInput } from "./scope-check.js";

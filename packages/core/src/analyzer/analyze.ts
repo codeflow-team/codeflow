@@ -28,6 +28,7 @@ import { TsMorphParser, isTsSyntaxTree, type TsMorphParserOptions } from "../par
 import { CodeFlowError } from "../errors.js";
 import { Scope, type AnalysisContext, type Frame } from "./context.js";
 import { addNode, connectAll } from "./builder.js";
+import { materializeScopes } from "./scopes.js";
 import { checkFlowContract, type FlowFunction } from "./flow-contract.js";
 import { emitSequence } from "./emit.js";
 
@@ -127,6 +128,7 @@ export function analyzeSource(
     localFunctions: new Map(),
     dataEdgeKeys: new Set(),
     controlEdgeKeys: new Set(),
+    scopeCaptures: [],
   };
 
   const flow = contract.flow;
@@ -145,6 +147,9 @@ export function analyzeSource(
     nodes: ctx.nodes,
     edges: ctx.edges,
     diagnostics: ctx.diagnostics,
+    // Materialised last: `FlowBinding.writers` keeps growing during the walk
+    // (03 §6 union of writers) — see analyzer/scopes.ts.
+    scopes: materializeScopes(ctx),
   };
 }
 
@@ -160,15 +165,24 @@ function analyzeFlowBody(
 
   if (toolsParameter !== undefined) {
     ctx.toolsParam = toolsParameter.getName();
-    scope.declare({ name: ctx.toolsParam, kind: "tools", toolsPrefix: [], writers: [] });
+    scope.declare({
+      name: ctx.toolsParam,
+      kind: "tools",
+      toolsPrefix: [],
+      writers: [],
+      parameter: true,
+    });
   }
 
   const trigger = emitTrigger(ctx, flow, options);
   if (inputParameter !== undefined) {
+    // `input` is a flow parameter *and* the trigger's output port: the trigger
+    // is a real node in the graph, so a drag from it has somewhere to come from.
     scope.declare({
       name: inputParameter.getName(),
       kind: "value",
       writers: [{ nodeId: trigger.id, port: inputParameter.getName() }],
+      parameter: true,
     });
   }
 
@@ -225,6 +239,8 @@ function emitTrigger(
   const end = body === undefined ? flow.getEnd() : body.getStart();
   const semanticPath = withRole(FLOW_ROOT, "trigger");
 
+  // A fresh, empty scope: nothing in the flow has run yet, so the trigger's
+  // scope table is empty — it *produces* `input`, it cannot read it (03 §6).
   const frame: Frame = {
     scope: new Scope(null),
     path: new PathScope(FLOW_ROOT),

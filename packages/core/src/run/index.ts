@@ -7,7 +7,15 @@
  * loud.
  */
 
-export type { NodeRange, RunEvent, RunPhase, RunStatus, RunTrace } from "./types.js";
+export type {
+  IterationPath,
+  NodeRange,
+  RunEmit,
+  RunEvent,
+  RunPhase,
+  RunStatus,
+  RunTrace,
+} from "./types.js";
 export {
   isSyntheticNode,
   nodeAtOffset,
@@ -15,5 +23,14 @@ export {
   nodeRanges,
   rangeLength,
   summarizeRun,
+  summarizeTrace,
+  traceIdentity,
+  traceMatches,
 } from "./resolve.js";
-export type { NodeRunState } from "./resolve.js";
+export type {
+  NodeIterationState,
+  NodeRunState,
+  RunNodeStatus,
+  SummarizeRunOptions,
+  TraceMatch,
+} from "./resolve.js";

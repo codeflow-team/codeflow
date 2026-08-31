@@ -15,7 +15,7 @@ import type {
   WorkflowNode,
 } from "../model/index.js";
 import { coldNodeId, computeEdgeId, mappingForNode } from "../mapper/index.js";
-import type { AnalysisContext, Exit, Frame } from "./context.js";
+import type { AnalysisContext, Exit, FlowBinding, Frame } from "./context.js";
 
 /** Default capabilities per node type — 03 §11. */
 export function capabilitiesFor(type: NodeType, synthetic: boolean): NodeCapabilities {
@@ -54,6 +54,15 @@ export interface AddNodeInput {
   outputs?: NodePort[];
   synthetic?: boolean;
   capabilities?: NodeCapabilities;
+  /**
+   * Bindings this node itself declares and that are *already* in `frame.scope`
+   * when the node is created — a code node declares its bindings while its run
+   * is being classified, before the node exists. They are excluded from the
+   * node's scope capture: `const prs = await …` makes the node the writer of
+   * `prs`, and that value is not available at the node's own configuration.
+   * (Every other emitter declares after `addNode`, so it needs nothing here.)
+   */
+  declares?: readonly FlowBinding[];
 }
 
 export function addNode(ctx: AnalysisContext, frame: Frame, input: AddNodeInput): WorkflowNode {
@@ -72,6 +81,13 @@ export function addNode(ctx: AnalysisContext, frame: Frame, input: AddNodeInput)
     capabilities: input.capabilities ?? capabilitiesFor(input.type, input.synthetic === true),
   };
   ctx.nodes.push(node);
+  // The single choke point for node creation is also the single choke point
+  // for "what was visible here" — captured now, materialised after the whole
+  // analysis (03 §6, see analyzer/scopes.ts).
+  ctx.scopeCaptures.push({
+    nodeId: node.id,
+    bindings: frame.scope.visible(new Set(input.declares ?? [])),
+  });
   return node;
 }
 

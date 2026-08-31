@@ -43,6 +43,10 @@ export interface FlowBinding {
    * a `let` reassigned in several branches has one per writer (03 §6).
    */
   writers: BindingWriter[];
+  /** Item variable of an enclosing `for…of` / `for await…of` — 04 §2.5. */
+  loopItem?: boolean;
+  /** A parameter of the flow function itself (`input`, `tools`) — 01 §1. */
+  parameter?: boolean;
 }
 
 export class Scope {
@@ -53,6 +57,32 @@ export class Scope {
   declare(binding: FlowBinding): FlowBinding {
     this.bindings.set(binding.name, binding);
     return binding;
+  }
+
+  /**
+   * Every binding visible from here, innermost scope first, with shadowing
+   * already applied: a name declared in an inner scope hides the outer one, so
+   * it appears exactly once (the same rule `lookup` follows).
+   *
+   * The returned entries are the **live** `FlowBinding` objects on purpose:
+   * `writers` is mutated after the fact (a `let` reassigned by a later node
+   * adds a writer), so the scope table is materialised only once the whole
+   * analysis is done — see `analyzer/scopes.ts`.
+   */
+  visible(exclude: ReadonlySet<FlowBinding> = new Set()): FlowBinding[] {
+    const out: FlowBinding[] = [];
+    const seen = new Set<string>();
+    let scope: Scope | null = this;
+    while (scope !== null) {
+      for (const binding of scope.bindings.values()) {
+        if (seen.has(binding.name)) continue;
+        seen.add(binding.name);
+        if (exclude.has(binding)) continue;
+        out.push(binding);
+      }
+      scope = scope.parent;
+    }
+    return out;
   }
 
   /** Nearest binding for `name` — shadowing resolves to the innermost declaration. */
@@ -117,6 +147,15 @@ export interface AnalysisContext {
   dataEdgeKeys: Set<string>;
   /** Deduplication for control edges. */
   controlEdgeKeys: Set<string>;
+  /**
+   * Scope visible at each node, captured **when the node is emitted** and in
+   * node emission order. Holding live `FlowBinding` references (not plain
+   * data) is deliberate: `writers` still grows after the capture. The set of
+   * *names* however is frozen here — capturing it later would leak bindings
+   * declared after the node, which is precisely the wrong answer to "what can
+   * I drag into this node".
+   */
+  scopeCaptures: { nodeId: string; bindings: readonly FlowBinding[] }[];
 }
 
 /** Derive a nested frame, inheriting anything not overridden. */

@@ -56,7 +56,15 @@ import {
   type InsertWhere,
 } from "./statement-edits.js";
 import type { SourceStyle } from "./style.js";
-import { asFieldValue, formOf, renderValue, resolveValue, type FieldValue } from "./values.js";
+import { checkExpressionScope } from "./scope-check.js";
+import {
+  asFieldValue,
+  formOf,
+  renderValue,
+  resolveValue,
+  type FieldValue,
+  type ResolvedValue,
+} from "./values.js";
 
 export interface PlanInput {
   sourceFile: SourceFile;
@@ -108,6 +116,139 @@ export function planPatch(input: PlanInput): PatchPlan {
   if (input.changes["$condition"] !== undefined) return planCondition(input);
   if (input.changes["$iterable"] !== undefined) return planIterable(input);
   return planFields(input);
+}
+
+/* -------------------------------------------------------------------------- */
+/* scope of a written expression — 03 §6, 06 §3                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A check run on every expression (and every template) a patch writes, before
+ * one byte is planned. See `scope-check.ts` for why an unchecked reference is
+ * an I6 failure rather than a typo.
+ */
+export type ExpressionGuard = (field: string, value: ResolvedValue) => void;
+
+function byName(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * The bindings a node declares: its output ports' **labels**.
+ *
+ * The label is the local name (`const { data: rows }` gives port `data`
+ * labelled `rows` — 03 §6); the id is the property it came from, which binds
+ * nothing and must not be offered as a name.
+ */
+function outputNames(node: WorkflowNode): string[] {
+  return node.outputs.map((port) => port.label);
+}
+
+/** Names a patch may reference at `node`, sorted so the message is stable. */
+function namesAt(graph: WorkflowGraph, nodeId: string, extra: readonly string[] = []): string[] {
+  const names = new Set((graph.scopes[nodeId] ?? []).map((binding) => binding.name));
+  for (const name of extra) names.add(name);
+  return [...names].sort(byName);
+}
+
+/**
+ * The subset of `namesAt` worth *offering* when the check refuses.
+ *
+ * Everything in scope stays legal — `tools.slack.send` in an expression is a
+ * perfectly good reference. But the refusal message answers "what can I put
+ * here?", and answering that with `tools` or the name of an imported function
+ * points the reader at something that is not a value. Values and the flow's own
+ * parameters are the honest answer; the check itself is unchanged.
+ */
+function suggestionsAt(graph: WorkflowGraph, nodeId: string, extra: readonly string[] = []): string[] {
+  const names = new Set(
+    (graph.scopes[nodeId] ?? [])
+      .filter((binding) => binding.kind === "value")
+      .map((binding) => binding.name),
+  );
+  for (const name of extra) names.add(name);
+  return [...names].sort(byName);
+}
+
+function guardFor(
+  available: readonly string[],
+  nodeLabel: string,
+  suggest: readonly string[],
+): ExpressionGuard {
+  return (field, value) => {
+    if (value.kind === "expression") {
+      checkExpressionScope(value.text, "expression", { field, nodeLabel, available, suggest });
+      return;
+    }
+    if (value.kind === "template") {
+      checkExpressionScope(value.text, "template", { field, nodeLabel, available, suggest });
+    }
+  };
+}
+
+/** Guard for an edit *of* a node's own fields: the node's scope, as analyzed. */
+function scopeGuard(input: PlanInput): ExpressionGuard {
+  return guardFor(
+    namesAt(input.graph, input.node.id),
+    input.node.label,
+    suggestionsAt(input.graph, input.node.id),
+  );
+}
+
+/**
+ * Guard for an **insert**, whose reference point is the insertion site rather
+ * than the anchor node:
+ *
+ *  - `before` — the anchor's own binding is not declared yet at that point, so
+ *    the anchor's scope is exactly right;
+ *  - `after` — the anchor has run, so what it declares is available too;
+ *  - `append` — the statement lands at the *end* of a block, where everything
+ *    that block declared is in scope. The nearest thing the graph already
+ *    knows is the scope of the last node in that block, plus what that node
+ *    declares; with an empty block, the container's own scope and outputs (a
+ *    loop's item variable, a catch's error binding).
+ *
+ * Conservative by construction: an over-refusal names the binding and can be
+ * worked around in the code view, while an under-check writes code that does
+ * not run.
+ */
+function insertGuard(input: PlanInput, spec: InsertSpec): ExpressionGuard {
+  const where = spec.where ?? "after";
+  const node = input.node;
+  if (where === "before") {
+    return guardFor(namesAt(input.graph, node.id), node.label, suggestionsAt(input.graph, node.id));
+  }
+  if (where === "after") {
+    return guardFor(
+      namesAt(input.graph, node.id, outputNames(node)),
+      node.label,
+      suggestionsAt(input.graph, node.id, outputNames(node)),
+    );
+  }
+
+  const slot = node.type === "try" ? (spec.slot ?? "body") : "body";
+  const isChild = (candidate: WorkflowNode): boolean =>
+    node.type === "trigger"
+      ? candidate.data["parentId"] === null
+      : candidate.data["parentId"] === node.id && candidate.data["parentSlot"] === slot;
+
+  let last: WorkflowNode | null = null;
+  for (const candidate of input.graph.nodes) {
+    if (candidate.id === node.id || !isChild(candidate)) continue;
+    if (last === null || candidate.source.end.offset > last.source.end.offset) last = candidate;
+  }
+  if (last === null) {
+    return guardFor(
+      namesAt(input.graph, node.id, outputNames(node)),
+      node.label,
+      suggestionsAt(input.graph, node.id, outputNames(node)),
+    );
+  }
+  return guardFor(
+    namesAt(input.graph, last.id, outputNames(last)),
+    node.label,
+    suggestionsAt(input.graph, last.id, outputNames(last)),
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -181,12 +322,13 @@ function planFields(input: PlanInput): PatchPlan {
   const call = callExpressionFor(input.sourceFile, input.node);
   const definition = definitionFor(input);
   const schemaFields = definition.inputSchema === undefined ? null : inputSchemaFieldNames(definition.inputSchema);
+  const guard = scopeGuard(input);
 
   // A function is called with positional parameters; its named schema is the
   // bridge between an editable field and the argument at that position (05 §4).
   if (input.node.type === "function") {
     return {
-      edits: [...edits, ...positionalEdits(input, call, definition, schemaFields, fields)],
+      edits: [...edits, ...positionalEdits(input, call, definition, schemaFields, fields, guard)],
       diagnostics,
       removed: [],
     };
@@ -230,6 +372,9 @@ function planFields(input: PlanInput): PatchPlan {
           `"${name}" is not a field of the input schema of "${definition.label}" — only schema fields can be added (06 §2).`,
         );
       }
+      // A brand-new property has no original form: resolution matches what
+      // `addPropertyEdit` does, so the guard sees exactly what will be written.
+      guard(name, resolveValue(name, resolved, "none"));
       edits.push(...addPropertyEdit(object, name, resolved, input.style, input.source));
       continue;
     }
@@ -244,6 +389,10 @@ function planFields(input: PlanInput): PatchPlan {
     }
 
     const fieldValue = asFieldValue(name, value);
+    // Resolved against the form it replaces, exactly as `setPropertyEdit`
+    // does — a bare string against a template field is a template body, and
+    // its `${…}` interpolations are references like any other (06 §3).
+    guard(name, resolveValue(name, fieldValue, location.shorthand ? "none" : formOf(location.value)));
     edits.push(...setPropertyEdit(object, location, name, fieldValue, input.style, input.source));
 
     // Clearing a field the schema knows about leaves the node unconfigured —
@@ -277,6 +426,7 @@ function positionalEdits(
   definition: { label: string; editable: string[] },
   schemaFields: string[] | null,
   fields: Record<string, FieldValue>,
+  guard: ExpressionGuard,
 ): TextEdit[] {
   if (!Node.isCallExpression(call)) return [];
   const args = call.getArguments();
@@ -310,6 +460,7 @@ function positionalEdits(
         `A positional argument cannot be removed on its own — removing "${name}" would shift every argument after it (06 §2).`,
       );
     }
+    guard(name, resolved);
     edits.push({
       start: argument.getStart(),
       end: argument.getEnd(),
@@ -323,17 +474,23 @@ function positionalEdits(
 /* condition / iterable — 06 §2                                                */
 /* -------------------------------------------------------------------------- */
 
-function expressionText(field: string, value: unknown): string {
-  if (typeof value === "string") return value;
+function expressionText(field: string, value: unknown, guard: ExpressionGuard): string {
+  // A bare string here *is* the expression source (a condition has no literal
+  // form to fall back to), so it is guarded like an explicit expression.
+  if (typeof value === "string") {
+    guard(field, { kind: "expression", text: value });
+    return value;
+  }
   const resolved = resolveValue(field, asFieldValue(field, value), "expression");
   if (resolved.kind === "remove") {
     throw new CodeFlowError("patch-unsupported", `"${field}" cannot be removed — it is required by the construct.`);
   }
+  guard(field, resolved);
   return renderValue(resolved, undefined, { quote: '"', indent: "  ", eol: "\n", semicolons: true, trailingComma: false });
 }
 
 function planCondition(input: PlanInput): PatchPlan {
-  const text = expressionText("$condition", input.changes["$condition"]);
+  const text = expressionText("$condition", input.changes["$condition"], scopeGuard(input));
   const owner = astNodeFor(input.sourceFile, input.node);
   const statement = Node.isLabeledStatement(owner) ? owner.getStatement() : owner;
 
@@ -352,7 +509,7 @@ function planCondition(input: PlanInput): PatchPlan {
 }
 
 function planIterable(input: PlanInput): PatchPlan {
-  const text = expressionText("$iterable", input.changes["$iterable"]);
+  const text = expressionText("$iterable", input.changes["$iterable"], scopeGuard(input));
   const owner = astNodeFor(input.sourceFile, input.node);
   const statement = Node.isLabeledStatement(owner) ? owner.getStatement() : owner;
   if (!Node.isForOfStatement(statement)) {
@@ -547,6 +704,7 @@ function buildArguments(
   schema: Schema | undefined,
   supplied: Record<string, unknown>,
   style: SourceStyle,
+  guard: ExpressionGuard,
 ): { text: string; placeholders: string[] } {
   const names = schema === undefined ? [] : (inputSchemaFieldNames(schema) ?? []);
   const ordered = [...names];
@@ -558,6 +716,7 @@ function buildArguments(
     if (Object.prototype.hasOwnProperty.call(supplied, name)) {
       const value = resolveValue(name, asFieldValue(name, supplied[name]), "none");
       if (value.kind === "remove") continue;
+      guard(name, value);
       parts.push(`${name}: ${renderValue(value, undefined, style)}`);
       continue;
     }
@@ -614,11 +773,68 @@ function flowBodyFor(input: PlanInput): Block {
   throw new CodeFlowError("patch-conflict", "The flow body no longer starts where the trigger node says it does (06 §5).");
 }
 
+/**
+ * Structural preconditions for an insert **relative to a statement** (06 §2).
+ *
+ * `insertStatementEdit` puts the new statement on its own line before or after
+ * the anchor's line. That is right when the anchor is one statement of a block
+ * and wrong in two ways when it is not — both of them the silent change of
+ * meaning `isUnbracedBody` already guards on the delete path:
+ *
+ *  - the anchor **is** the brace-less body of an `if`/`else`/loop
+ *    (`if (pr.draft) await tools.slack.send(…)`). The new line lands *after the
+ *    whole `if`*, so a step the user aimed at "only for drafts" runs for every
+ *    item. Putting it inside the branch instead is not available either: there
+ *    is no block to put it in, and manufacturing one would rewrite a statement
+ *    the user did not edit;
+ *  - the anchor is a **terminal** statement — `break`/`continue`/`return`.
+ *    Nothing runs after it. `where: "after"` either lands outside the branch
+ *    (the jump case) or writes unreachable code (the `return` case).
+ *
+ * Both are refused by name, in the house style: say what cannot be done and
+ * what to do instead, rather than approximate the gesture (07 §5). A refusal
+ * throws before any edit exists, so the source is untouched by construction.
+ */
+function checkInsertAnchor(input: PlanInput, spec: InsertSpec): void {
+  const where = spec.where ?? "after";
+  if (where === "append") return;
+  const node = input.node;
+
+  if (where === "after" && (node.type === "jump" || node.type === "output")) {
+    // The synthetic end-of-flow node has no statement to sit next to at all
+    // (03 §4), so "insert before it" is not the way out there — appending to
+    // the flow body is.
+    const synthetic = node.type === "output" && node.data["explicit"] === false;
+    const what =
+      node.type === "jump"
+        ? `\`${String(node.data["kind"] ?? "jump")}\` leaves this block`
+        : synthetic
+          ? "the flow ends here"
+          : "a `return` leaves the flow";
+    const instead = synthetic
+      ? "Append to the end of the flow instead (`$insert` with `where: \"append\"` on the trigger)"
+      : `Insert it *before* "${node.label}" instead`;
+    throw new CodeFlowError(
+      "patch-unsupported",
+      `Nothing runs after "${node.label}" — ${what}, so a step inserted after it would never execute. ${instead} (06 §2).`,
+    );
+  }
+
+  const statement = statementFor(input.sourceFile, node);
+  if (isUnbracedBody(statement)) {
+    throw new CodeFlowError(
+      "patch-unsupported",
+      `"${node.label}" is the entire brace-less body of the branch it sits in, so it has no block of its own to insert into — a statement placed ${where} it would land outside the branch and run every time. Add braces to the branch first, or insert relative to the enclosing \`if\`/loop instead (06 §2).`,
+    );
+  }
+}
+
 function planInsert(input: PlanInput): PatchPlan {
   const spec = input.changes["$insert"] as InsertSpec;
   if (typeof spec !== "object" || spec === null) {
     throw new CodeFlowError("patch-unsupported", "`$insert` must be an object describing the node to insert.");
   }
+  checkInsertAnchor(input, spec);
   if ((spec.tool === undefined) === (spec.function === undefined)) {
     throw new CodeFlowError(
       "patch-unsupported",
@@ -629,6 +845,9 @@ function planInsert(input: PlanInput): PatchPlan {
   const style = input.style;
   const diagnostics: Diagnostic[] = [];
   const edits: TextEdit[] = [];
+  // An inserted call's arguments reference the *insertion site's* scope, not
+  // the anchor node's own (03 §6, `insertGuard`).
+  const guard = insertGuard(input, spec);
 
   let callText: string;
   let schema: Schema | undefined;
@@ -649,7 +868,7 @@ function planInsert(input: PlanInput): PatchPlan {
     outputSchema = tool.outputSchema;
     callableName = tool.name;
     awaited = spec.await ?? true;
-    const args = buildArguments(schema, spec.arguments ?? {}, style);
+    const args = buildArguments(schema, spec.arguments ?? {}, style, guard);
     if (args.placeholders.length > 0) {
       diagnostics.push({
         severity: "warning",
@@ -671,7 +890,7 @@ function planInsert(input: PlanInput): PatchPlan {
     outputSchema = definition.outputSchema;
     callableName = definition.name;
     awaited = spec.await ?? false;
-    const args = buildArguments(schema, spec.arguments ?? {}, style);
+    const args = buildArguments(schema, spec.arguments ?? {}, style, guard);
     // A library function takes positional parameters; the named schema is the
     // bridge between field names and positions (05 §4).
     const names = schema === undefined ? [] : (inputSchemaFieldNames(schema) ?? []);

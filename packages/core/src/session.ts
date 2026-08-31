@@ -28,6 +28,7 @@ import type {
   Parser,
   PatchNodeOptions,
   PatchResult,
+  ScopeBinding,
   ValidationResult,
   WorkflowGraph,
 } from "./model/index.js";
@@ -62,6 +63,16 @@ export interface CodeFlowSession {
 
   /** How the last re-analyze bound ids across (03 §5.2); `null` on a cold analyze. */
   lastResolution(): IdentityResolution | null;
+
+  /**
+   * What is in scope **at** `nodeId` — the values the inspector may offer for
+   * dragging into one of that node's fields (03 §6, `WorkflowGraph.scopes`).
+   *
+   * Answers `[]` for an unknown id and before the first analyze rather than
+   * throwing: the UI calls this on every selection change, including on a node
+   * that has just been deleted, and an empty list is the honest answer there.
+   */
+  scopeAt(nodeId: string): ScopeBinding[];
 
   analyze(source: string, options?: AnalyzeOptions): Promise<WorkflowGraph>;
   /**
@@ -123,6 +134,10 @@ class Session implements CodeFlowSession {
 
   lastResolution(): IdentityResolution | null {
     return this.resolution;
+  }
+
+  scopeAt(nodeId: string): ScopeBinding[] {
+    return this.graph?.scopes[nodeId] ?? [];
   }
 
   /**

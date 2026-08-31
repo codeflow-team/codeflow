@@ -38,7 +38,7 @@ import { instrument, type ProbeRange, type SkippedProbe } from "./instrument.ts"
 import { resolveWorkspaceToken, synthesizeInput } from "./input.ts";
 import { planFor, stubReason, userPlan, type McpServerPlan, type UserServerSpec } from "./mcp-servers.ts";
 import { stdioAllowed, stdioDisabledReason } from "./mcp-discover.ts";
-import type { ToolBinding, WorkerJob } from "./worker.ts";
+import type { EmitFrame, ToolBinding, WorkerJob } from "./worker.ts";
 
 export const DEFAULT_TIMEOUT_MS = 120_000;
 export const MAX_TIMEOUT_MS = 600_000;
@@ -85,11 +85,17 @@ export type RunFrame =
       bindings: BindingReport[];
       timeoutMs: number;
       libraryFunctions: string[];
+      /** Loops this run can number the passes of — see `instrument()`. */
+      counted: string[];
+      /** Steps that make an iteration number a guess, so none is sent inside them. */
+      uncounted: string[];
+      /** True when nothing in this run may carry an iteration at all. */
+      blind: boolean;
       note: string;
     }
   | { type: "input"; input: unknown }
-  | { type: "event"; nodeId: string; phase: string; at: number; durationMs?: number; preview?: unknown; error?: { message: string; stack?: string } }
-  | { type: "call"; at: number; tool: string; mode: "mcp" | "stub"; ms: number; ok: boolean; nodeId: string | null; detail?: string }
+  | { type: "event"; nodeId: string; phase: string; at: number; durationMs?: number; preview?: unknown; error?: { message: string; stack?: string }; iteration?: number[] }
+  | EmitFrame
   | { type: "ready"; namespaces: { namespace: string; mode: string; server?: string; tools?: number }[] }
   | { type: "done"; status: "ok" | "failed" | "timeout" | "cancelled"; ms?: number; result?: unknown; error?: { message: string; stack?: string } };
 
@@ -99,6 +105,52 @@ export interface RunHandle {
   cancel: () => void;
   /** Resolves once the final frame has been emitted. Never rejects. */
   finished: Promise<void>;
+}
+
+/**
+ * One library function's source, guaranteed to be exported.
+ *
+ * The obvious version of this was `code.startsWith("export ") ? code : "export
+ * " + code`, and it is wrong for the most natural thing anyone writing a
+ * library function does — open it with a doc comment. Both halves fail on it:
+ *
+ *  - `/** … *\/ export function f()` does not *start with* `export`, so one is
+ *    prepended and the result is `export /** … *\/ export function`;
+ *  - `/** … *\/ function f()` genuinely needs the keyword, but prepending it at
+ *    offset 0 puts it in front of the comment, where it modifies nothing.
+ *
+ * Either way `lib.ts` stops parsing — and it is one file for the whole
+ * registry, so a single doc comment stops *every* flow in that registry at its
+ * first step, with a syntax error nobody wrote. (Found for real; the author's
+ * workaround was to keep doc blocks inside function bodies, which is a tax on
+ * writing the comment rather than a fix.)
+ *
+ * So leading whitespace and comments are skipped, the question is asked of the
+ * first *token*, and the keyword goes exactly where a person would have typed
+ * it — after the comment, in front of the declaration it applies to.
+ */
+export function exported(code: string): string {
+  let at = 0;
+  for (;;) {
+    while (at < code.length && /\s/.test(code[at])) at++;
+    if (code.startsWith("//", at)) {
+      const line = code.indexOf("\n", at);
+      if (line === -1) return code; // nothing but a comment — nothing to export
+      at = line + 1;
+      continue;
+    }
+    if (code.startsWith("/*", at)) {
+      const end = code.indexOf("*/", at + 2);
+      if (end === -1) return code; // unterminated — not this runner's to repair
+      at = end + 2;
+      continue;
+    }
+    break;
+  }
+  // `\b` rather than a trailing space: `export{f}` and `export\nfunction` are
+  // both already exported, and neither has a space after the keyword.
+  if (/^export\b/.test(code.slice(at))) return code;
+  return `${code.slice(0, at)}export ${code.slice(at)}`;
 }
 
 /**
@@ -121,7 +173,7 @@ function writeModule(
   const bodies = functions
     .map((fn) => fn.code?.trim())
     .filter((code): code is string => code !== undefined && code.length > 0)
-    .map((code) => (code.startsWith("export ") ? code : `export ${code}`));
+    .map(exported);
   writeFileSync(
     join(scratch, "lib.ts"),
     `/* Library functions, from the registry (05 §4). Real code, really run. */\n${bodies.join("\n\n")}\n`,
@@ -188,6 +240,67 @@ function seedWorkspace(workspace: string): void {
       "id,region,amount\nE-1,east,1200.50\nE-2,east,880\nE-3,east,not-a-number\nE-4,,410.25\n",
     "drop-west.csv":
       "id,region,amount\nW-1,west,2200\nW-2,central,145.75\nW-3,west,90.10\n",
+    /*
+     * Two JSON documents, for the flows built out of the `common` registry.
+     *
+     * Both are shaped so the flow has something true to say rather than
+     * something empty: `orders.json` has two customers with more than one paid
+     * order, so a group-and-total has groups; `tickets.json` repeats `T-1` so
+     * Remove Duplicates removes something, and gives `T-3` a timestamp that is
+     * not a date so the "could not read this one" branch is a branch that
+     * actually runs. Without these the flows read an empty file and honestly
+     * return `unreadable`, which demonstrates the honesty and nothing else.
+     */
+    "orders.json": JSON.stringify(
+      {
+        orders: [
+          { id: "A-1", customer: "Acme", status: "paid", total: 1200 },
+          { id: "A-2", customer: "Beta", status: "open", total: 300 },
+          { id: "A-3", customer: "Acme", status: "paid", total: 450 },
+          { id: "A-4", customer: "Gamma", status: "paid", total: 450 },
+        ],
+      },
+      null,
+      2,
+    ),
+    "tickets.json": JSON.stringify(
+      {
+        tickets: [
+          {
+            id: "T-1",
+            customer: "Acme",
+            plan: "enterprise",
+            openedAt: "2026-01-30T08:00:00Z",
+            body: "Checkout times out on card payment.",
+          },
+          // Deliberately the same ticket twice — Remove Duplicates has to have
+          // a duplicate to remove, or the step proves nothing.
+          {
+            id: "T-1",
+            customer: "Acme",
+            plan: "enterprise",
+            openedAt: "2026-01-30T08:00:00Z",
+            body: "Checkout times out on card payment.",
+          },
+          {
+            id: "T-2",
+            customer: "Beta",
+            plan: "free",
+            openedAt: "2026-01-29T08:00:00Z",
+            body: "Search is slow above 10k rows.",
+          },
+          {
+            id: "T-3",
+            customer: "Gamma",
+            plan: "team",
+            openedAt: "not a date",
+            body: "Bad timestamp, exercises the skip branch.",
+          },
+        ],
+      },
+      null,
+      2,
+    ),
   };
 
   for (const [relative, contents] of Object.entries(files)) {
@@ -309,6 +422,9 @@ export function startRun(request: RunRequest, workerEntry: string, emit: (frame:
       bindings,
       timeoutMs,
       libraryFunctions: functions.map((fn) => fn.name),
+      counted: built.counted,
+      uncounted: built.uncounted,
+      blind: built.blind,
       note: "Demo runner — a worker thread on the dev server, not a production sandbox (09 §1).",
     });
 

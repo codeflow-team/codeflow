@@ -1,7 +1,7 @@
 /**
  * `<NewFlowDialog>` — start from nothing.
  *
- * The demo used to have eleven examples and no front door: a newcomer could open
+ * The demo used to have thirteen examples and no front door: a newcomer could open
  * somebody else's flow and ask the AI to rewrite it, which is a different and
  * much less interesting sentence than *describe what you want and watch it get
  * written*. This is that front door, and it is AI-first on purpose — the prompt

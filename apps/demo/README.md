@@ -16,7 +16,7 @@ Everything except the AI chat works with no configuration.
 
 ## What is in it
 
-- **Gallery** (`⌘O`) — the eleven flows from [`@codeflow/examples`](../../packages/examples/README.md), grouped and searchable, each card listing what the flow shows off.
+- **Gallery** (`⌘O`) — the thirteen flows from [`@codeflow/examples`](../../packages/examples/README.md), grouped and searchable, each card listing what the flow shows off.
 - **Canvas** — three disclosure levels (Simple / Details / Code), containers that fold, a step list for long flows, a diagnostics popover, and light/dark.
 - **Inspector** — edit a field, preview the exact diff, apply it. Delete with a dependency check, swap a tool, edit an opaque code region, insert a step from the command palette (`⌘K`).
 - **Code drawer** — Monaco, synced both ways with the canvas. Type in it and the diagram re-reads the file.

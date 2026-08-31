@@ -21,10 +21,21 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Badge, Button, Hint, NodeGlyph, cn, useCodeFlow } from "@codeflow/react";
 import type { WorkflowNode } from "@codeflow/core";
 import { ChevronRight, CircleAlert, CircleCheck, FolderOpen, LoaderCircle, Play, Square, X } from "lucide-react";
-import type { RunSnapshot } from "./run.js";
+import type { TraceMatch } from "@codeflow/core";
+import { TRACE_MATCH_HINT, type RunSnapshot } from "./run.js";
 
 export interface RunPanelProps {
   run: RunSnapshot;
+  /**
+   * Whether these values still describe the flow on screen.
+   *
+   * A run is not cleared when the code is edited — last run's values are useful
+   * while you edit, and n8n keeps them for the same reason. What must not
+   * happen is showing them as if they were about the code in front of you: node
+   * ids survive patches by design (I5), so a stale value re-attaches to exactly
+   * the node whose code just changed.
+   */
+  match?: TraceMatch;
   onStart: () => void;
   onStop: () => void;
   onClose?: () => void;
@@ -140,6 +151,23 @@ export function RunPanel(props: RunPanelProps): ReactNode {
           )}
         </div>
       </header>
+
+      {/* --- which version of the flow these values are about -------------- */}
+      {props.match === undefined || props.match === "current" || run.status === "idle" ? null : (
+        <div
+          className="shrink-0 border-b border-line bg-warn-soft px-3 py-2"
+          data-testid="run-panel-trace-match"
+          data-match={props.match}
+          role="status"
+        >
+          <p className="m-0 text-[11.5px] font-semibold leading-4 text-warn">
+            {props.match === "stale"
+              ? "These values are from an earlier version of this flow"
+              : "Which version of this flow these values came from was not recorded"}
+          </p>
+          <p className="m-0 mt-0.5 text-[11px] leading-4 text-ink-dim">{TRACE_MATCH_HINT[props.match]}</p>
+        </div>
+      )}
 
       {/* --- where the data came from ------------------------------------- */}
       {run.plan === null ? null : (

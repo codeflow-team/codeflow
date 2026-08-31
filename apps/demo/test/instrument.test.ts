@@ -27,101 +27,7 @@ import { analyzeSource, createRegistry, nodeRanges } from "@codeflow/core";
 import { EXAMPLES, registryFor } from "@codeflow/examples";
 
 import { instrument } from "../server/instrument.ts";
-
-/* -------------------------------------------------------------------------- */
-/* running a flow twice                                                        */
-/* -------------------------------------------------------------------------- */
-
-interface Effect {
-  call: string;
-  args: unknown;
-}
-
-interface Outcome {
-  effects: Effect[];
-  result: unknown;
-  error: string | null;
-  /** Marker pairs recorded, only meaningful for the instrumented copy. */
-  probes: string[];
-}
-
-/** Transpile to CommonJS and call the default export — no bundler needed. */
-async function execute(source: string, input: unknown): Promise<Outcome> {
-  const js = ts.transpileModule(source, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-  }).outputText;
-
-  const effects: Effect[] = [];
-  const probes: string[] = [];
-  const tools = new Proxy(
-    {},
-    {
-      get: (_target, namespace: string) =>
-        new Proxy(
-          {},
-          {
-            get: (_inner, method: string) => async (args: unknown) => {
-              effects.push({ call: `${namespace}.${method}`, args });
-              await Promise.resolve();
-              // One method name throws, so a rejection path can be tested with
-              // the same harness as the happy one.
-              if (method === "explode") throw new Error(`${namespace}.${method} failed`);
-              return { ok: true, of: `${namespace}.${method}` };
-            },
-          },
-        ),
-    },
-  );
-
-  const globals = globalThis as unknown as Record<string, unknown>;
-  const previous = globals["__cf"];
-  globals["__cf"] = {
-    s: (id: string) => probes.push(`s:${id}`),
-    f: (id: string) => probes.push(`f:${id}`),
-    x: (id: string) => probes.push(`x:${id}`),
-    // Mirrors the worker's own `p`: run the thunk, *listen* to the promise it
-    // returned, hand back that identical promise. Chaining here would make the
-    // test pass while the real runtime shifted timing.
-    p: <T,>(id: string, thunk: () => T): T => {
-      probes.push(`s:${id}`);
-      const value = thunk();
-      const thenable = value as unknown as { then?: unknown };
-      if (typeof thenable?.then === "function") {
-        (value as unknown as Promise<unknown>).then(
-          () => probes.push(`f:${id}`),
-          () => probes.push(`f:${id}`),
-        );
-      } else {
-        probes.push(`f:${id}`);
-      }
-      return value;
-    },
-  };
-
-  const moduleExports: Record<string, unknown> = {};
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval -- test harness, not core (I7 scopes to packages/core).
-    const factory = new Function("exports", "module", "require", js) as (
-      exports: Record<string, unknown>,
-      module: { exports: Record<string, unknown> },
-      require: (id: string) => unknown,
-    ) => void;
-    factory(moduleExports, { exports: moduleExports }, () => ({}));
-    const flow = moduleExports["default"] as (input: unknown, tools: unknown) => Promise<unknown>;
-    const result = (await flow(input, tools)) as unknown;
-    return { effects, result, error: null, probes };
-  } catch (cause) {
-    return { effects, result: undefined, error: cause instanceof Error ? cause.message : String(cause), probes };
-  } finally {
-    globals["__cf"] = previous;
-  }
-}
-
-const registry = createRegistry({ tools: [], functions: [] });
-
-function rangesFor(source: string): ReturnType<typeof nodeRanges> {
-  return nodeRanges(analyzeSource(source, registry, { file: "flow.ts" }));
-}
+import { execute, rangesFor, type Outcome } from "./harness.ts";
 
 /**
  * Instrument `source`, run both copies, and require them to agree.
@@ -325,6 +231,70 @@ export default async function flow(input: {}, tools: any) {
 `,
   },
   {
+    // The pass marker has to reach inside a body that has no braces, by the
+    // same wrap the step markers use — two nested wraps around one statement.
+    name: "unbraced `for` body that also has to carry a loop pass marker",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  const seen: number[] = [];
+  for (const item of [1, 2, 3]) seen.push(item * 2);
+  return seen;
+}
+`,
+  },
+  {
+    // A `var` used as a body binds in the enclosing scope, so no block may
+    // appear around it — neither for the step marker nor for the pass marker.
+    name: "`var` as a loop body, which no wrap may touch",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  for (const item of [1, 2, 3]) var seen = item;
+  await tools.report.write({ seen });
+  return seen;
+}
+`,
+  },
+  {
+    name: "`do…while` with an unbraced body",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  let n = 0;
+  do n = n + 1; while (n < 3);
+  return n;
+}
+`,
+  },
+  {
+    name: "`for await…of` over an async iterable",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  async function* pages() { yield 1; yield 2; }
+  const seen: number[] = [];
+  for await (const page of pages()) {
+    const r = await tools.page.load({ page });
+    seen.push(page);
+  }
+  return seen;
+}
+`,
+  },
+  {
+    name: "a `Promise.all` inside a loop body",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  const out: any[] = [];
+  for (const region of ["east", "west"]) {
+    const [a, b] = await Promise.all([
+      tools.first.load({ region }),
+      tools.second.load({ region })
+    ]);
+    out.push(a.of + b.of + region);
+  }
+  return out;
+}
+`,
+  },
+  {
     name: "switch with fallthrough",
     source: `
 export default async function flow(input: { kind: string }, tools: any) {
@@ -391,6 +361,29 @@ describe("instrument() preserves behaviour", () => {
     // The wrap must sit around the call and nothing else: the array literal,
     // the `await` and the destructuring are all untouched.
     expect(result.code).toContain("await Promise.all([");
+  });
+
+  it("puts a loop's pass marker inside the body, never around the loop", () => {
+    const source = CASES.find((entry) => entry.name.startsWith("nested loops"))!.source;
+    const result = instrument(source, rangesFor(source));
+    expect(result.counted.length).toBe(2);
+    expect(result.blind).toBe(false);
+    // Immediately after each `{` that opens a body — so a `break` on the first
+    // statement still skips everything the pass would have done.
+    expect(result.code).toMatch(/for \(const a of \["x", "y"\]\) \{__cf\.pass\(/);
+    expect(result.code).toMatch(/for \(const b of \[1, 2\]\) \{__cf\.pass\(/);
+  });
+
+  it("refuses the pass marker where it refuses every other wrap", () => {
+    const source = CASES.find((entry) => entry.name.startsWith("`var` as a loop body"))!.source;
+    const result = instrument(source, rangesFor(source));
+    expect(result.counted).toEqual([]);
+    expect(result.uncounted.length).toBe(1);
+    // Declared, not merely absent: the loop announces that nothing inside it
+    // can be numbered, and the run stays numbered everywhere else.
+    expect(result.code).toContain("__cf.unknown(");
+    expect(result.blind).toBe(false);
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(["hoisted-declaration-body"]);
   });
 
   it("keeps every line on its own line, so a stack trace still points somewhere real", () => {

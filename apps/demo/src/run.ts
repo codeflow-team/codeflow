@@ -19,7 +19,15 @@
  *    means three steps are open; only the deepest one is executing.
  */
 
-import { summarizeRun, type NodeRunState, type RunEvent, type WorkflowGraph } from "@codeflow/core";
+import {
+  summarizeTrace,
+  traceMatches,
+  type NodeRunState,
+  type RunEmit,
+  type RunEvent,
+  type TraceMatch,
+  type WorkflowGraph,
+} from "@codeflow/core";
 import { nodeRanges } from "@codeflow/core";
 import type { ExampleRegistry } from "./examples-source.js";
 import type { RunServerSpec } from "./mcp/model.js";
@@ -40,6 +48,23 @@ export interface SkippedProbe {
   detail: string;
 }
 
+/**
+ * One thing a node said mid-step, as the runner sends it.
+ *
+ * Core's `RunEmit` with `nodeId` widened to allow `null`: a tool called from a
+ * statement no probe could bracket has no node to belong to, and an emit exists
+ * to be folded *into* a node. Rather than drop the fact or invent an owner, it
+ * arrives unattributed; only the attributed ones are folded.
+ */
+export type RunEmitFrame = Omit<RunEmit, "nodeId"> & { nodeId: string | null };
+
+/**
+ * One tool call, as the Run panel has always shown it.
+ *
+ * **Derived**, not received. This used to be its own `{type:"call"}` frame — a
+ * per-node side channel the demo invented because core had no such thing. Core
+ * has `RunEmit` now, so there is one channel and this is a view of it.
+ */
 export interface RunCall {
   at: number;
   tool: string;
@@ -48,6 +73,30 @@ export interface RunCall {
   ok: boolean;
   nodeId: string | null;
   detail?: string;
+}
+
+/** The payload the runner puts on a `kind: "tool-call"` emit. */
+export interface ToolCallPayload {
+  tool: string;
+  mode: "mcp" | "stub";
+  ms: number;
+  ok: boolean;
+  detail?: string;
+}
+
+/** The `calls` view of one emit, or `null` if it is not a tool call. */
+export function callFromEmit(emit: RunEmitFrame): RunCall | null {
+  if (emit.kind !== "tool-call") return null;
+  const payload = emit.payload as ToolCallPayload;
+  return {
+    at: emit.at,
+    tool: payload.tool,
+    mode: payload.mode,
+    ms: payload.ms,
+    ok: payload.ok,
+    nodeId: emit.nodeId,
+    ...(payload.detail === undefined ? {} : { detail: payload.detail }),
+  };
 }
 
 export interface RunPlan {
@@ -59,6 +108,12 @@ export interface RunPlan {
   bindings: RunBinding[];
   timeoutMs: number;
   libraryFunctions: string[];
+  /** Loops whose passes this run can count. */
+  counted: string[];
+  /** Steps inside which an iteration number would be a guess, so none is sent. */
+  uncounted: string[];
+  /** True when nothing in this run carries an iteration at all. */
+  blind: boolean;
   note: string;
 }
 
@@ -72,6 +127,9 @@ export interface RunSnapshot {
   plan: RunPlan | null;
   input: unknown;
   events: RunEvent[];
+  /** Everything the nodes said mid-step, in arrival order. */
+  emits: RunEmitFrame[];
+  /** The tool calls among them, in the shape the Run panel reads. Derived. */
   calls: RunCall[];
   nodes: Map<string, NodeRunState>;
   activeNodeId: string | null;
@@ -88,6 +146,17 @@ export interface RunSnapshot {
   error?: { message: string; stack?: string };
   /** Milliseconds since the run started — ticks while it runs. */
   elapsedMs: number;
+  /**
+   * `WorkflowGraph.id` this run was launched against — core's `traceIdentity`.
+   *
+   * Without it a run is unattached to any version of the flow, and node ids are
+   * stable across patches on purpose (I5) — so an old value re-attaches, silent
+   * and confident, to the very node whose code just changed. Carried so
+   * `traceMatchFor` can say `stale` instead of the picture quietly lying.
+   */
+  graphId?: string;
+  /** `WorkflowGraph.source.contentHash` at launch. Copied, never re-hashed. */
+  sourceHash?: string;
 }
 
 export const EMPTY_RUN: RunSnapshot = {
@@ -95,12 +164,45 @@ export const EMPTY_RUN: RunSnapshot = {
   plan: null,
   input: undefined,
   events: [],
+  emits: [],
   calls: [],
   nodes: new Map(),
   activeNodeId: null,
   untraced: new Set(),
   tracked: null,
   elapsedMs: 0,
+};
+
+/**
+ * Do this run's values still describe this graph?
+ *
+ * A thin wrapper over core's `traceMatches` so there is one answer in the demo
+ * rather than one per panel. `unknown` means the run carries no identity to
+ * compare — it must be rendered as uncertainty, never as `current`.
+ */
+export function traceMatchFor(run: RunSnapshot, graph: WorkflowGraph | null | undefined): TraceMatch {
+  return traceMatches(run, graph);
+}
+
+/**
+ * How each answer reads on screen.
+ *
+ * `unknown` is worded as uncertainty and never as agreement: "not known" is the
+ * honest caption, while showing the values plainly would say "this is what your
+ * flow does now" — which nothing established (07 §5).
+ */
+export const TRACE_MATCH_LABEL: Record<TraceMatch, string> = {
+  current: "from this version",
+  stale: "from an earlier version",
+  unknown: "version not recorded",
+};
+
+export const TRACE_MATCH_HINT: Record<TraceMatch, string> = {
+  current: "This run was launched against the code on screen.",
+  stale:
+    "The flow changed after this run. These values are from an earlier version of it — the steps are the same steps, but the code behind them is not the code that produced these numbers. Run again to see what it does now.",
+  unknown:
+    "This run carries no record of which version of the flow it ran against, so whether these values still describe the code on screen is not known.",
 };
 
 export interface RunStatusInfo {
@@ -188,8 +290,8 @@ export function runRequestFor(
 type Frame =
   | ({ type: "plan" } & RunPlan)
   | { type: "input"; input: unknown }
-  | { type: "event"; nodeId: string; phase: RunEvent["phase"]; at: number; durationMs?: number; preview?: unknown; error?: { message: string; stack?: string } }
-  | ({ type: "call" } & RunCall)
+  | { type: "event"; nodeId: string; phase: RunEvent["phase"]; at: number; durationMs?: number; preview?: unknown; error?: { message: string; stack?: string }; iteration?: number[] }
+  | ({ type: "emit" } & RunEmitFrame)
   | { type: "ready"; namespaces: { namespace: string; mode: string; server?: string; tools?: number }[] }
   | { type: "done"; status: "ok" | "failed" | "timeout" | "cancelled"; ms?: number; result?: unknown; error?: { message: string; stack?: string } }
   | { type: "fatal"; message: string };
@@ -209,6 +311,8 @@ export interface RunHandle {
 export function startRun(
   body: unknown,
   onSnapshot: (snapshot: RunSnapshot) => void,
+  /** `traceIdentity(graph)` — which version of the flow this run is about. */
+  identity?: { graphId: string; sourceHash: string },
 ): RunHandle {
   const controller = new AbortController();
   const startedAt = performance.now();
@@ -216,7 +320,7 @@ export function startRun(
   let plan: RunPlan | null = null;
   let input: unknown;
   const events: RunEvent[] = [];
-  const calls: RunCall[] = [];
+  const emits: RunEmitFrame[] = [];
   /** Open steps, innermost last — the runtime's own probe stack, mirrored. */
   const openStack: string[] = [];
   let status: RunStatus = "starting";
@@ -234,8 +338,16 @@ export function startRun(
     // list that is mutated in place looks unchanged to every `useMemo` reading
     // it — the run log stayed empty for exactly that reason.
     events: events.slice(),
-    calls: calls.slice(),
-    nodes: summarizeRun(events),
+    emits: emits.slice(),
+    // One channel, two views. `calls` is what the Run panel has always read;
+    // the fold below is what a node card reads. Neither is a second source.
+    calls: emits.map(callFromEmit).filter((call): call is RunCall => call !== null),
+    // Only the attributed emits reach core: `RunEmit` is keyed by `nodeId`, and
+    // an emit with none has no node to be folded onto.
+    nodes: summarizeTrace({
+      events,
+      emits: emits.filter((emit): emit is RunEmit => emit.nodeId !== null),
+    }),
     activeNodeId: openStack.length === 0 ? null : openStack[openStack.length - 1],
     untraced: new Set((plan?.skipped ?? []).map((entry) => entry.nodeId)),
     tracked:
@@ -243,6 +355,7 @@ export function startRun(
     result,
     error,
     elapsedMs: Math.round(performance.now() - startedAt),
+    ...(identity ?? {}),
   });
 
   const flush = (): void => {
@@ -288,9 +401,9 @@ export function startRun(
         }
         break;
       }
-      case "call": {
-        const { type: _type, ...call } = frame;
-        calls.push(call);
+      case "emit": {
+        const { type: _type, ...emit } = frame;
+        emits.push(emit);
         break;
       }
       case "ready": {

@@ -83,7 +83,9 @@ for (const example of selected) {
     (frame) => {
       if (frame.type === "plan") plan = frame;
       else if (frame.type === "event") events.push(frame);
-      else if (frame.type === "call") calls.push(frame);
+      // One per-node channel: a tool call is an emit like any other (`RunEmit`),
+      // and this table reads the `tool-call` kind out of it.
+      else if (frame.type === "emit" && frame.kind === "tool-call") calls.push({ ...frame.payload, nodeId: frame.nodeId, at: frame.at });
       else if (frame.type === "done") outcome = frame;
     },
   );

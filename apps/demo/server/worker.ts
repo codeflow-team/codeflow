@@ -34,6 +34,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
+import { createProbe } from "./probe.ts";
 import { preview, sampleFromSchema } from "./sample.ts";
 import type { McpServerPlan } from "./mcp-servers.ts";
 
@@ -63,9 +64,36 @@ export interface WorkerJob {
   maxPreviewChars: number;
 }
 
+/**
+ * One thing a node said mid-step, on the wire.
+ *
+ * This is core's `RunEmit` with one field widened: `nodeId` may be `null`. A
+ * tool called from a statement no probe could bracket has no node to belong to,
+ * and core's `RunEmit` — which exists to be folded *into* a node — has no way
+ * to say that. Rather than drop the fact or invent an owner, it travels
+ * unattributed and the client folds only the attributed ones.
+ */
+export interface EmitFrame {
+  type: "emit";
+  nodeId: string | null;
+  at: number;
+  kind: string;
+  payload: unknown;
+  iteration?: number[];
+}
+
+/** What a `kind: "tool-call"` emit carries. The demo's own kind, not core's. */
+export interface ToolCallPayload {
+  tool: string;
+  mode: "mcp" | "stub";
+  ms: number;
+  ok: boolean;
+  detail?: string;
+}
+
 type Outbound =
-  | { type: "event"; nodeId: string; phase: string; at: number; durationMs?: number; preview?: unknown; error?: { message: string; stack?: string } }
-  | { type: "call"; at: number; tool: string; mode: "mcp" | "stub"; ms: number; ok: boolean; nodeId: string | null; detail?: string }
+  | { type: "event"; nodeId: string; phase: string; at: number; durationMs?: number; preview?: unknown; error?: { message: string; stack?: string }; iteration?: number[] }
+  | EmitFrame
   | { type: "ready"; namespaces: { namespace: string; mode: "mcp" | "stub"; server?: string; tools?: number; error?: string }[] }
   | { type: "done"; status: "ok" | "failed"; ms: number; result?: unknown; error?: { message: string; stack?: string } };
 
@@ -81,104 +109,17 @@ const send = (message: Outbound): void => { port.postMessage(message); };
 /* probes                                                                      */
 /* -------------------------------------------------------------------------- */
 
-interface Frame {
-  nodeId: string;
-  at: number;
-  /** Result of the last tool call made while this frame was innermost. */
-  preview?: unknown;
-}
-
-const stack: Frame[] = [];
-
-/**
- * Close `frame`, and say why.
- *
- * `unwind` covers the frames that were still open when an enclosing step ended.
- * How that reads depends on *how* it ended, and the difference is not cosmetic:
- * an exception caught by a `try` means the steps inside it failed, while a
- * `break` out of a loop means they simply stopped. The instrumenter marks the
- * entry to every `catch` (`__cf.x`) precisely so the two can be told apart.
+/*
+ * The marker protocol itself lives in `probe.ts` — including the rule for when
+ * an event may carry a loop iteration and when it must carry none. It is a
+ * module of its own because this file reads `workerData` at import time and so
+ * cannot be loaded by a test, and those rules are exactly what has to be tested
+ * against real instrumented programs.
  */
-function close(frame: Frame, phase: "finished" | "failed", error?: { message: string; stack?: string }): void {
-  send({
-    type: "event",
-    nodeId: frame.nodeId,
-    phase,
-    at: now(),
-    durationMs: now() - frame.at,
-    ...(frame.preview === undefined ? {} : { preview: frame.preview }),
-    ...(error === undefined ? {} : { error }),
-  });
-}
-
-function unwindAbove(index: number, phase: "finished" | "failed", error?: { message: string; stack?: string }): void {
-  while (stack.length > index + 1) {
-    const orphan = stack.pop();
-    if (orphan !== undefined) close(orphan, phase, error);
-  }
-}
-
-/** Innermost open frame for `nodeId`, or -1. (`findLastIndex` is ES2023.) */
-function openIndexOf(nodeId: string): number {
-  for (let i = stack.length - 1; i >= 0; i--) if (stack[i].nodeId === nodeId) return i;
-  return -1;
-}
-
-const probe = {
-  s(nodeId: string): void {
-    stack.push({ nodeId, at: now() });
-    send({ type: "event", nodeId, phase: "started", at: now() });
-  },
-  f(nodeId: string): void {
-    const index = openIndexOf(nodeId);
-    if (index === -1) return;
-    // Anything still open above this step left early (a `break`, a `continue`,
-    // a `return`). It ran; it just did not reach its own closing marker.
-    unwindAbove(index, "finished");
-    const frame = stack.pop();
-    if (frame !== undefined) close(frame, "finished");
-  },
-  x(nodeId: string): void {
-    const index = openIndexOf(nodeId);
-    if (index === -1) return;
-    unwindAbove(index, "failed", { message: "An error was thrown before this step finished." });
-  },
-  /**
-   * A step that is an *expression*, not a statement — an element of
-   * `Promise.all([…])`.
-   *
-   * Several of these are in flight at once, so they cannot use the stack: each
-   * gets its own frame, closed when its own promise settles. The promise is
-   * *listened to*, never chained, so what the caller gets back is the identical
-   * promise with identical timing.
-   */
-  p<T>(nodeId: string, thunk: () => T): T {
-    const frame: Frame = { nodeId, at: now() };
-    send({ type: "event", nodeId, phase: "started", at: now() });
-    let value: T;
-    try {
-      value = thunk();
-    } catch (cause) {
-      close(frame, "failed", { message: cause instanceof Error ? cause.message : String(cause) });
-      throw cause;
-    }
-    const thenable = value as unknown as { then?: unknown };
-    if (typeof thenable?.then === "function") {
-      (value as unknown as Promise<unknown>).then(
-        (settled: unknown) => {
-          frame.preview = preview(settled, job.maxPreviewChars);
-          close(frame, "finished");
-        },
-        (cause: unknown) => {
-          close(frame, "failed", { message: cause instanceof Error ? cause.message : String(cause) });
-        },
-      );
-    } else {
-      close(frame, "finished");
-    }
-    return value;
-  },
-};
+const probe = createProbe(
+  (event) => { send({ type: "event", ...event }); },
+  { now, preview: (value) => preview(value, job.maxPreviewChars) },
+);
 
 (globalThis as unknown as Record<string, unknown>)["__cf"] = probe;
 
@@ -312,9 +253,31 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
 
     out[namespace] ??= {};
     out[namespace][method] = async (args?: unknown): Promise<unknown> => {
-      const frame = stack[stack.length - 1];
+      const frame = probe.current();
       const at = now();
       const began = Date.now();
+      // Read before the call, beside `at`: by the time it returns the stack may
+      // be somewhere else entirely, and this fact belongs to the moment the
+      // call was made.
+      const iteration = probe.iterationNow();
+      /**
+       * One tool call, on the per-node emit channel (core's `RunEmit`).
+       *
+       * There is exactly one such channel. The demo used to have a private
+       * `{type:"call"}` frame here because core had nothing of the kind; core
+       * has `RunEmit` now, so this *is* that frame — same payload, folded by
+       * `summarizeTrace` onto the node it belongs to.
+       */
+      const emit = (payload: ToolCallPayload): void => {
+        send({
+          type: "emit",
+          nodeId: frame?.nodeId ?? null,
+          at,
+          kind: "tool-call",
+          payload,
+          ...(iteration === undefined ? {} : { iteration }),
+        });
+      };
 
       if (plan !== undefined) {
         try {
@@ -336,11 +299,11 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
           const value = unwrap(raw);
           const shown = preview(value, job.maxPreviewChars);
           if (frame !== undefined) frame.preview = { tool: binding.name, source: "mcp", value: shown };
-          send({ type: "call", at, tool: binding.name, mode: "mcp", ms: Date.now() - began, ok: true, nodeId: frame?.nodeId ?? null });
+          emit({ tool: binding.name, mode: "mcp", ms: Date.now() - began, ok: true });
           return value;
         } catch (cause) {
           const message = cause instanceof Error ? cause.message : String(cause);
-          send({ type: "call", at, tool: binding.name, mode: "mcp", ms: Date.now() - began, ok: false, nodeId: frame?.nodeId ?? null, detail: message });
+          emit({ tool: binding.name, mode: "mcp", ms: Date.now() - began, ok: false, detail: message });
           throw cause;
         }
       }
@@ -349,7 +312,7 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
       const value = binding.outputSchema === undefined ? undefined : sampleFromSchema(binding.outputSchema, method);
       const shown = preview(value, job.maxPreviewChars);
       if (frame !== undefined) frame.preview = { tool: binding.name, source: "sample", value: shown };
-      send({ type: "call", at, tool: binding.name, mode: "stub", ms: Date.now() - began, ok: true, nodeId: frame?.nodeId ?? null });
+      emit({ tool: binding.name, mode: "stub", ms: Date.now() - began, ok: true });
       return value;
     };
   }
@@ -419,7 +382,7 @@ async function main(): Promise<void> {
 
   const result = (await module.default(job.input, tools)) as unknown;
   // Anything still open when the flow returned finished with it.
-  unwindAbove(-1, "finished");
+  probe.unwindAll("finished");
   send({ type: "done", status: "ok", ms: now(), result: preview(result, job.maxPreviewChars) });
 }
 
@@ -431,9 +394,8 @@ main()
     };
     // The innermost open step is the one that threw; everything above it in the
     // stack failed with it.
-    const innermost = stack.pop();
-    if (innermost !== undefined) close(innermost, "failed", error);
-    unwindAbove(-1, "failed", { message: "An error thrown inside this step ended the run." });
+    probe.failTop(error);
+    probe.unwindAll("failed", { message: "An error thrown inside this step ended the run." });
     send({ type: "done", status: "failed", ms: now(), error });
   })
   .finally(() => {

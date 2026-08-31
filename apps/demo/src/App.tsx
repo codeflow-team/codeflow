@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createCodeFlow, type PatchResult, type WorkflowGraph, type WorkflowNode } from "@codeflow/core";
+import { createCodeFlow, traceIdentity, type PatchResult, type WorkflowGraph, type WorkflowNode } from "@codeflow/core";
 import {
   Badge,
   Button,
@@ -49,6 +49,7 @@ import {
 } from "@codeflow/react";
 import {
   ChevronDown,
+  CircleAlert,
   CircleCheck,
   FileCode,
   LayoutGrid,
@@ -76,6 +77,9 @@ import {
   fetchRunStatus,
   runRequestFor,
   startRun,
+  traceMatchFor,
+  TRACE_MATCH_HINT,
+  TRACE_MATCH_LABEL,
   type RunHandle,
   type RunSnapshot,
 } from "./run.js";
@@ -292,7 +296,10 @@ export function App() {
     if (graph === null) return;
     setTriggerOpen(false);
     runHandle.current?.stop();
-    setRun({ ...EMPTY_RUN, status: "starting" });
+    // Stamped from the first frame on, not from the first *event*: a run that
+    // is still starting is already about a particular version of the flow, and
+    // an unstamped snapshot in between would read as "version not recorded".
+    setRun({ ...EMPTY_RUN, status: "starting", ...traceIdentity(graph) });
     setRunOpen(true);
     // The graph the ranges come from must be the graph on screen, or a step
     // would light up next to code it does not own.
@@ -308,6 +315,10 @@ export function App() {
         servers: runSpecs(mcp.servers, tokenFor),
       }),
       setRun,
+      // Which version of the flow this run is about. Copied off the graph, not
+      // recomputed: a second hashing scheme would answer a subtly different
+      // question than the one the comparison looks like it is asking.
+      traceIdentity(graph),
     );
   }, [graph, active.source, triggerInput, mcp.servers]);
 
@@ -345,13 +356,38 @@ export function App() {
     [triggerInput],
   );
 
-  // A run describes one version of one file. Switching example, or re-analyzing
-  // into a different graph, retires it rather than leaving stale marks behind.
+  /*
+   * Switching flow retires the run. Editing one does not.
+   *
+   * These are different questions and this effect only ever answered the first:
+   * its dependency is `example.id`, so a re-analysis into a different graph of
+   * the *same* flow left the run exactly where it was. The comment here used to
+   * claim otherwise, which is worse than the gap it described — node ids are
+   * stable across patches by design (I5), so the old values re-attach to the
+   * very nodes whose code just changed, and nothing said so.
+   *
+   * Clearing on every edit is not the fix: last run's values are useful while
+   * you edit, which is why n8n keeps them too. The fix is to say which version
+   * they came from — `traceMatch` below — and let the panel caption it.
+   */
   useEffect(() => {
     stopRun();
     setRun(EMPTY_RUN);
     setRunOpen(false);
   }, [example.id, stopRun]);
+
+  /**
+   * Whether the run on screen still describes the flow on screen.
+   *
+   * `stale` after any edit that moved the source or the registry; `unknown`
+   * when the run carries no identity to compare (a run from an older build of
+   * this page, restored state). `unknown` is uncertainty and is rendered as
+   * uncertainty — never as `current`.
+   */
+  const traceMatch = useMemo(
+    () => traceMatchFor(run, graph),
+    [run, graph],
+  );
 
   useEffect(() => () => { runHandle.current?.stop(); }, []);
 
@@ -898,6 +934,18 @@ export function App() {
               <LoaderCircle className="size-3 animate-spin text-accent" />
               {run.nodes.size} step{run.nodes.size === 1 ? "" : "s"} · {run.elapsedMs}ms
             </span>
+          ) : run.status !== "idle" && traceMatch !== "current" ? (
+            /* The values on the canvas are still there, and they are no longer
+               about this code. Saying so is the whole point — 07 §5. */
+            <Hint label={TRACE_MATCH_HINT[traceMatch]}>
+              <span
+                className="hidden items-center gap-1.5 text-[11.5px] text-warn sm:flex"
+                data-testid="run-trace-match"
+              >
+                <CircleAlert className="size-3" />
+                {TRACE_MATCH_LABEL[traceMatch]}
+              </span>
+            </Hint>
           ) : null}
 
           <GraphSummary elapsed={elapsed} />
@@ -1081,6 +1129,7 @@ export function App() {
             <aside className="w-[20rem] shrink-0 border-r border-line xl:w-[22rem]">
               <RunPanel
                 run={run}
+                match={traceMatch}
                 onStart={beginRun}
                 onStop={stopRun}
                 onClose={() => { setRunOpen(false); }}

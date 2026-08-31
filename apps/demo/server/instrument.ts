@@ -50,6 +50,27 @@
  *    `var`/function declaration as a body (hoisting differs), and anything
  *    whose parent shape is not on the known list.
  *
+ * ## Counting the passes through a loop
+ *
+ * `__cf.pass(loopId)` goes at the top of every loop body, which is what lets a
+ * run say *which* item a step's value came from (`RunEvent.iteration`). A
+ * braced body takes the marker straight after its `{`; an unbraced one is
+ * wrapped by the same rule as above, and refused by the same rule as above.
+ *
+ * Where a number cannot be established the marker's absence is not left to be
+ * inferred — it is **declared**, because a stack that is missing a level reads
+ * as a *different* stack, not as an incomplete one:
+ *
+ *  - a `parallel` node gets `__cf.unknown(id)` beside its opening marker: its
+ *    branches interleave, so no counter is trustworthy while it is in flight;
+ *  - a loop whose body could be reached but not wrapped gets `__cf.unknown(id)`
+ *    too — scoped to that loop;
+ *  - a loop that could not be probed at all makes the whole run unnumbered, via
+ *    a bare `__cf.unknown()` at the top of the file.
+ *
+ * `probe.ts` says why omitting beats guessing; core's `IterationPath` says the
+ * same thing from the other side.
+ *
  * ## Line numbers
  *
  * Every edit is inline — no inserted newlines, imports blanked with spaces
@@ -100,6 +121,23 @@ export interface InstrumentResult {
   skipped: SkippedProbe[];
   /** Import specifiers that were blanked (kept for the UI's "what got dropped"). */
   droppedImports: string[];
+  /** Loops whose passes this run can count — they carry a `pass` marker. */
+  counted: string[];
+  /**
+   * Steps declared unnumberable, and everything inside them with them.
+   *
+   * A `parallel` (its branches interleave) or a loop whose body could not be
+   * wrapped. Empty is the normal case; `blind` is the worse one.
+   */
+  uncounted: string[];
+  /**
+   * True when *no* event in this run may carry an iteration.
+   *
+   * Set when a loop got no marker at all, which leaves nothing at runtime to
+   * hang a scoped `unknown` on. Conservative on purpose: a missing level is
+   * indistinguishable from a different number, and only one of the two is safe.
+   */
+  blind: boolean;
 }
 
 interface Edit {
@@ -143,6 +181,30 @@ function hoists(node: ts.Node): boolean {
     return (node.declarationList.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0;
   }
   return false;
+}
+
+/**
+ * The body of the loop this statement is, or `undefined` if it is not one.
+ *
+ * Labels are unwrapped first: the analyzer's range for `outer: for (…) {…}` is
+ * the *labelled* statement, and the body being asked about is the loop's.
+ * Detection is by syntax rather than by `range.type` so that a loop the graph
+ * models as something else — a classic `for` inside a code node — is still
+ * counted rather than silently mis-stacked.
+ */
+function loopBodyOf(statement: ts.Statement): ts.Statement | undefined {
+  let inner: ts.Statement = statement;
+  while (ts.isLabeledStatement(inner)) inner = inner.statement;
+  if (
+    ts.isForStatement(inner) ||
+    ts.isForInStatement(inner) ||
+    ts.isForOfStatement(inner) ||
+    ts.isWhileStatement(inner) ||
+    ts.isDoStatement(inner)
+  ) {
+    return inner.statement;
+  }
+  return undefined;
 }
 
 function blankOut(source: string, start: number, end: number): string {
@@ -197,6 +259,35 @@ export function instrument(
   const probed: string[] = [];
   const skipped: SkippedProbe[] = [];
   const droppedImports: string[] = [];
+  const counted: string[] = [];
+  const uncounted: string[] = [];
+  let blind = false;
+
+  /**
+   * Put `__cf.pass(nodeId)` at the top of `body`.
+   *
+   * The braced case is an insertion after `{`. The unbraced case is the same
+   * wrap the probe markers use — and is refused by the caller for the same
+   * shape, a body that binds in the enclosing scope and would move if a block
+   * appeared around it.
+   *
+   * `rank` is the loop's own depth, which is lower than any statement inside
+   * it — so at a shared offset (`for (…) {stmt}` with no space) the pass marker
+   * lands *before* the inner step's opening marker, and its closing brace lands
+   * *after* the inner step's closing one.
+   */
+  const placePass = (nodeId: string, body: ts.Statement, depth: number): void => {
+    const marker = `${probe}.pass(${JSON.stringify(nodeId)});`;
+    if (ts.isBlock(body)) {
+      const at = body.getStart(file) + 1;
+      edits.push({ at, to: at, text: marker, rank: depth });
+      return;
+    }
+    const start = body.getStart(file);
+    const end = body.getEnd();
+    edits.push({ at: start, to: start, text: `{${marker}`, rank: depth });
+    edits.push({ at: end, to: end, text: "}", rank: -depth });
+  };
 
   /* --- imports ------------------------------------------------------------ */
   for (const statement of file.statements) {
@@ -270,14 +361,41 @@ export function instrument(
         reason: "no-matching-statement",
         detail: "No statement matches this node's source range exactly.",
       });
+      if (range.type === "loop") blind = true;
       continue;
     }
 
     const parent = first.parent;
     const start = first.getStart(file);
     const end = last.getEnd();
-    const open = `${probe}.s(${JSON.stringify(range.nodeId)});`;
-    const close = `${probe}.f(${JSON.stringify(range.nodeId)});`;
+    const id = JSON.stringify(range.nodeId);
+
+    /** Non-undefined exactly when this range is a loop whose passes to count. */
+    const loopBody = first === last ? loopBodyOf(first) : undefined;
+    /** A loop body that cannot take the marker — see `placePass`. */
+    const stubbornLoop = loopBody !== undefined && !ts.isBlock(loopBody) && hoists(loopBody);
+
+    /*
+     * A step that makes the counters untrustworthy says so as it opens, and
+     * keeps saying it until its closing marker: a `parallel`, whose branches
+     * interleave, and a loop whose body the marker cannot reach. The
+     * declaration rides inside `open` so it can never be separated from the
+     * `s` it qualifies.
+     */
+    const opaque = range.type === "parallel" || stubbornLoop;
+    const open = opaque ? `${probe}.s(${id});${probe}.unknown(${id});` : `${probe}.s(${id});`;
+    const close = `${probe}.f(${id});`;
+    if (opaque) uncounted.push(range.nodeId);
+
+    /**
+     * Called once the range is known to be probed: it has a frame at runtime,
+     * so a `pass` marker has something to count on.
+     */
+    const countLoop = (depth: number): void => {
+      if (loopBody === undefined || stubbornLoop) return;
+      placePass(range.nodeId, loopBody, depth);
+      counted.push(range.nodeId);
+    };
 
     /*
      * A `return` / `break` / `continue` / `throw` never comes back, so a marker
@@ -319,6 +437,7 @@ export function instrument(
       edits.push({ at: start, to: start, text: open, rank: depth });
       edits.push({ at: end, to: end, text: close, rank: -depth });
       probed.push(range.nodeId);
+      countLoop(depth);
       continue;
     }
 
@@ -328,6 +447,7 @@ export function instrument(
         reason: "labelled-statement",
         detail: "Wrapping a labelled statement would break `continue`/`break` to its label.",
       });
+      if (loopBody !== undefined) blind = true;
       continue;
     }
 
@@ -338,6 +458,7 @@ export function instrument(
           reason: "hoisted-declaration-body",
           detail: "A `var`/function declaration used as a body binds in the enclosing scope; a block would move it.",
         });
+        if (loopBody !== undefined) blind = true;
         continue;
       }
       edits.push({
@@ -348,6 +469,7 @@ export function instrument(
       });
       edits.push({ at: end, to: end, text: transfers ? "}" : `${close}}`, rank: -depth });
       probed.push(range.nodeId);
+      countLoop(depth);
       continue;
     }
 
@@ -356,7 +478,16 @@ export function instrument(
       reason: "unknown-parent",
       detail: `Statement sits directly inside a ${ts.SyntaxKind[parent.kind]}, which this runner will not rewrite.`,
     });
+    if (loopBody !== undefined) blind = true;
   }
+
+  /*
+   * One loop went uncounted with nowhere to say so at runtime, so nothing in
+   * this run may be numbered. A stack missing a level is not a shorter stack —
+   * it is a different one, and a UI reading `[0]` as "the first item" would be
+   * reading something the run never said.
+   */
+  if (blind) edits.push({ at: 0, to: 0, text: `${probe}.unknown();`, rank: -1e9 });
 
   /* --- apply -------------------------------------------------------------- */
   // Right to left, so no offset has to be adjusted. At a shared offset the
@@ -365,5 +496,5 @@ export function instrument(
   let out = source;
   for (const edit of edits) out = out.slice(0, edit.at) + edit.text + out.slice(edit.to);
 
-  return { code: out, probed, skipped, droppedImports };
+  return { code: out, probed, skipped, droppedImports, counted, uncounted, blind };
 }

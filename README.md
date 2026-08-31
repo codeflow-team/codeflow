@@ -33,7 +33,7 @@ Analyzing a flow takes three calls — a registry of the tools that exist, a ses
 import { createCodeFlow, createRegistry } from "@codeflow/core";
 import { EXAMPLES, registryFor } from "@codeflow/examples";
 
-// Any flow file works; the examples package ships eleven of them.
+// Any flow file works; the examples package ships thirteen of them.
 const example = EXAMPLES.find((e) => e.id === "canonical");
 const { tools, functions } = registryFor(example);
 
@@ -135,7 +135,7 @@ Dark theme is a first-class palette, not an inverted filter:
 | [`@codeflow/react`](packages/react/README.md) | The UI. React Flow canvas with hierarchical ELK layout, inspector, Monaco panel with two-way selection sync, diff preview, diagnostics, three disclosure levels, light and dark. |
 | [`@codeflow/cli`](packages/cli/README.md) | The Node half. `codeflow init` / `generate` / `check`, and the file-based function library over `lib/`. |
 | [`@codeflow/mcp`](packages/mcp/README.md) | Optional adapter. MCP `tools/list` → `ToolDefinition`, with safe name slugging and cursor paging. Zero runtime dependencies; the MCP SDK is an optional peer. |
-| [`@codeflow/examples`](packages/examples/README.md) | Eleven flows and the registries they are written against — 65 tool schemas captured from 8 real MCP servers. The stress corpus and the demo gallery in one package. |
+| [`@codeflow/examples`](packages/examples/README.md) | Thirteen flows and the registries they are written against, plus twelve everyday library functions — 65 tool schemas captured from 8 real MCP servers. The stress corpus and the demo gallery in one package. |
 | [`apps/demo`](apps/demo/README.md) | The demo app: gallery, canvas, inspector, AI chat, and the MCP-backed runner. |
 
 ---

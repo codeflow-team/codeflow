@@ -19,6 +19,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { stripsTypesNatively, TYPE_STRIPPING_REASON } from "./node-capability.ts";
 import { fileURLToPath } from "node:url";
 import { analyzeSource, createRegistry, nodeRanges, summarizeRun, summarizeTrace, traceIdentity, type RunEmit, type RunEvent } from "@codeflow-team/core";
 
@@ -114,7 +115,8 @@ function runOnce(): Promise<Recorded> {
 /* one channel                                                                 */
 /* -------------------------------------------------------------------------- */
 
-describe("the per-node emit channel", () => {
+// Drives the real runner in a real worker thread — see node-capability.ts.
+describe.skipIf(!stripsTypesNatively())("the per-node emit channel", () => {
   it("carries every tool call, as `RunEmit` and nothing else", async () => {
     const { emits } = await runOnce();
     // Two — one per loop pass. `tools.echo.nope` produces none, and did not

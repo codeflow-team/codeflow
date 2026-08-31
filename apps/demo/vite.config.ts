@@ -323,8 +323,13 @@ export default defineConfig(async ({ command, mode }) => {
    * static bundle's "the runner is not available here" story from depending on
    * an import that merely happened not to matter.
    */
+  // `command === "serve"` alone is not the condition: Vitest resolves this very
+  // config with `command: "serve"` too, so a test run would load the dev
+  // endpoints it never calls — and fail on Node 20 before a single test ran.
+  // The demo's tests import `server/*` directly; nothing there needs the
+  // middleware to be registered.
   const serverPlugins: Plugin[] = [];
-  if (command === "serve") {
+  if (command === "serve" && process.env["VITEST"] === undefined) {
     const { runPlugin } = (await import(
       new URL("./server/run-plugin.ts", import.meta.url).href
     )) as typeof import("./server/run-plugin.js");

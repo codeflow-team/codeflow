@@ -116,6 +116,10 @@ function runOnce(): Promise<Recorded> {
 /* -------------------------------------------------------------------------- */
 
 // Drives the real runner in a real worker thread — see node-capability.ts.
+// `describe.skipIf` takes no reason, and a skip nobody can explain is only
+// marginally better than a silent pass, so the reason is printed once.
+if (!stripsTypesNatively()) console.warn(`skipping the live-runner tests: ${TYPE_STRIPPING_REASON}`);
+
 describe.skipIf(!stripsTypesNatively())("the per-node emit channel", () => {
   it("carries every tool call, as `RunEmit` and nothing else", async () => {
     const { emits } = await runOnce();

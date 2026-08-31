@@ -54,6 +54,8 @@ import { canDrop, dropInto, type DropResult } from "./drop.js";
 import { PreviewValue } from "./PreviewValue.js";
 import {
   declaredOutput,
+  NO_VALUE_COPY,
+  noValueReason,
   observedAt,
   previewOrigin,
   resultItems,
@@ -895,7 +897,9 @@ function ResultPane({
               )}
 
               {item === null || !item.hasValue ? (
-                <p className="m-0 text-[12px] text-ink-dim">This pass reported no value.</p>
+                <p className="m-0 text-[12px] text-ink-dim">
+                  {NO_VALUE_COPY[noValueReason(node.id, run?.valueless)]}
+                </p>
               ) : (
                 <PreviewValue
                   value={item.value}

@@ -280,3 +280,26 @@ function registrySchema(node: WorkflowNode, registry: RegistryLookup | null | un
   }
   return registry.getNode(String(node.type))?.outputSchema;
 }
+
+/**
+ * What to say when a step shows no value.
+ *
+ * Two different facts wear the same blank space. A step can genuinely produce
+ * nothing, and a step can be one the runtime declined to read — a condition's
+ * value is its test, and reading it would evaluate that test a second time,
+ * which for a test with a side effect is not an observation but a change. Only
+ * the first is an emptiness; saying it about the second describes something
+ * that is not true (07 §5).
+ */
+export function noValueReason(
+  nodeId: string,
+  valueless: ReadonlySet<string> | undefined,
+): "not-recorded" | "produced-nothing" {
+  return valueless?.has(nodeId) === true ? "not-recorded" : "produced-nothing";
+}
+
+export const NO_VALUE_COPY: Record<ReturnType<typeof noValueReason>, string> = {
+  "not-recorded":
+    "No value was recorded for this step — which is not the same as it producing nothing. See the run plan for why.",
+  "produced-nothing": "This pass reported no value.",
+};

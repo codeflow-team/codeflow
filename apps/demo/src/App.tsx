@@ -405,6 +405,7 @@ export function App() {
       nodes: run.nodes,
       activeNodeId: run.activeNodeId,
       untraced: run.untraced,
+      valueless: run.valueless,
       tracked: run.tracked,
       // Without this the library has no way to tell a current run from one that
       // predates an edit, so it has to hedge on every value it shows. The

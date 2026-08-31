@@ -93,12 +93,14 @@ export {
   iterationLabel,
   traceNotice,
   observedAt,
+  noValueReason,
+  NO_VALUE_COPY,
   unwrapPreview,
   previewOrigin,
   declaredOutput,
   LATEST_LABEL,
 } from "./editor/result.js";
-export type { ResultItem, TraceNotice, DeclaredOutput } from "./editor/result.js";
+export type { ResultItem, TraceNotice, DeclaredOutput, ObservedAtOptions } from "./editor/result.js";
 export { pickPreviewRenderer, previewText, mediaTypeOf } from "./editor/preview.js";
 export type { PreviewRenderer, PreviewContext } from "./editor/preview.js";
 

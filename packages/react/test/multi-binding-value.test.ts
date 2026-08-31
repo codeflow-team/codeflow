@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { NodeRunState } from "@codeflow-team/core";
-import { observedAt } from "../src/editor/result.js";
+import { NO_VALUE_COPY, noValueReason, observedAt } from "../src/editor/result.js";
 import { scopeRows } from "../src/editor/scope-rows.js";
 
 function state(preview: unknown): NodeRunState {
@@ -72,5 +72,32 @@ describe("a preview that is not an object", () => {
   it("still unwraps a tool envelope", () => {
     const enveloped = state({ tool: "fs.readTextFile", source: "mcp", value: { content: "hi" } });
     expect(observedAt(enveloped, null)?.value).toEqual({ content: "hi" });
+  });
+});
+
+/**
+ * "No value recorded" is not "produced nothing".
+ *
+ * A condition's value is its test, so reading it would evaluate that test a
+ * second time — the runner declines rather than risk a side effect twice, and
+ * reports which steps it declined on. Telling the reader "this pass reported no
+ * value" there describes an emptiness the step does not have (07 §5).
+ */
+describe("a step the runtime could not read", () => {
+  it("is distinguishable from one that produced nothing", () => {
+    const declined = new Set(["cond"]);
+    expect(noValueReason("cond", declined)).toBe("not-recorded");
+    expect(noValueReason("tool", declined)).toBe("produced-nothing");
+  });
+
+  it("falls back to the plain reading when the runtime said nothing either way", () => {
+    // An older runtime sends no `valueless` at all. Claiming a step was
+    // "not recorded" then would be inventing a reason nobody gave.
+    expect(noValueReason("cond", undefined)).toBe("produced-nothing");
+  });
+
+  it("says something different in each case", () => {
+    expect(NO_VALUE_COPY["not-recorded"]).not.toBe(NO_VALUE_COPY["produced-nothing"]);
+    expect(NO_VALUE_COPY["not-recorded"]).toContain("not the same as it producing nothing");
   });
 });

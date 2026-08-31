@@ -83,6 +83,16 @@ export interface RunView {
    */
   untraced: Set<string>;
   /**
+   * Steps the runtime probed but could read no value from.
+   *
+   * Distinct from "this step produced nothing", and the difference is the whole
+   * point: a condition's value is its test, and reading it would evaluate that
+   * test a second time — so the runner declines rather than risking a side
+   * effect twice. Saying "reported no value" there reads as an emptiness the
+   * step does not have. Absent means the runtime said nothing either way.
+   */
+  valueless?: Set<string>;
+  /**
    * Nodes the runtime was asked to report on at all; `null` means "all of them".
    *
    * A synthetic node — the trigger, a merge, an implicit end — owns no source of

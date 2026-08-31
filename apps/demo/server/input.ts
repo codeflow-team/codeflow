@@ -134,7 +134,7 @@ function stringFor(name: string, context: InputContext): string {
   // orders, kept none, and reported `no-totals` — true, and a demonstration of
   // nothing.
   if (lower.includes("status")) return "paid";
-  if (lower.includes("package")) return "@codeflow/demo";
+  if (lower.includes("package")) return "@codeflow-team/demo";
   if (lower.includes("branch")) return "main";
   if (lower.includes("pattern") || lower.includes("glob")) return "*.txt";
   if (lower.includes("email")) return "demo@example.invalid";

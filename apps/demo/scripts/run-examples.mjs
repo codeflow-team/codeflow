@@ -22,8 +22,8 @@ import { readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { analyzeSource, createRegistry, nodeRanges, summarizeRun } from "@codeflow/core";
-import { EXAMPLES, registryFor } from "@codeflow/examples";
+import { analyzeSource, createRegistry, nodeRanges, summarizeRun } from "@codeflow-team/core";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_DIR = join(HERE, "..");

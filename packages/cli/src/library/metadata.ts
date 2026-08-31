@@ -17,7 +17,7 @@
  * library function: it is left alone and never registered.
  */
 
-import type { FunctionDefinition } from "@codeflow/core";
+import type { FunctionDefinition } from "@codeflow-team/core";
 import { CliError } from "../errors.js";
 
 export const MARKER = "@codeflow-function";

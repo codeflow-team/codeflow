@@ -51,7 +51,7 @@ import type {
   createRegistry,
   renderDiagnosticsFeedback,
   renderSystemPrompt,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 import type { mcpToolsToDefinitions } from "../../src/adapter.js";
 import type { McpTool } from "../../src/types.js";
@@ -340,7 +340,7 @@ export const WORKSPACE_BRIEF = [
   "```",
   "README.md            # a two-line markdown file",
   "CHANGELOG.md         # a two-line markdown file",
-  "package.json         # { name, version, type, dependencies: { '@modelcontextprotocol/sdk', '@codeflow/core', 'zod' } }",
+  "package.json         # { name, version, type, dependencies: { '@modelcontextprotocol/sdk', '@codeflow-team/core', 'zod' } }",
   "index.ts             # re-exports parseOrder and formatMoney, declares VERSION",
   "orders.ts            # exports interface Order and function parseOrder (has a JSDoc comment)",
   "money.ts             # exports formatMoney",
@@ -1352,7 +1352,7 @@ export async function runGenerateAndRun(
  */
 function cfNodeRanges(cf: CodeFlowModule, graph: WorkflowGraph): unknown[] {
   const fn = (cf as unknown as { nodeRanges?: (graph: WorkflowGraph) => unknown[] }).nodeRanges;
-  if (typeof fn !== "function") throw new Error("the injected @codeflow/core has no nodeRanges export");
+  if (typeof fn !== "function") throw new Error("the injected @codeflow-team/core has no nodeRanges export");
   return fn(graph);
 }
 

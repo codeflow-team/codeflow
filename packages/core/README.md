@@ -1,8 +1,8 @@
-# `@codeflow/core`
+# `@codeflow-team/core`
 
 The library CodeFlow actually is. It reads a TypeScript flow file into a `WorkflowGraph`, keeps node identity stable across edits, and writes a change to a node back into the file as the smallest possible text patch. It also carries the pieces an AI needs to write a flow in the first place — a generation context and a conformance validator.
 
-Browser-safe by construction: nothing in this package imports a Node API. The fs-backed parts live in [`@codeflow/cli`](../cli/README.md).
+Browser-safe by construction: nothing in this package imports a Node API. The fs-backed parts live in [`@codeflow-team/cli`](../cli/README.md).
 
 See the [root README](../../README.md) for what CodeFlow is and why.
 
@@ -12,7 +12,7 @@ Prepared for npm as v0.1.0; until the first release lands, use the workspace cop
 
 ```jsonc
 // package.json
-"dependencies": { "@codeflow/core": "workspace:*" }
+"dependencies": { "@codeflow-team/core": "workspace:*" }
 ```
 
 Its only runtime dependency is `ts-morph`.
@@ -24,7 +24,7 @@ Its only runtime dependency is `ts-morph`.
 Core ships no tools and hardcodes no integration. You describe what exists; everything else follows from that. With an empty registry every call becomes an unknown node and the system is still correct.
 
 ```js
-import { createRegistry } from "@codeflow/core";
+import { createRegistry } from "@codeflow-team/core";
 
 const registry = createRegistry({
   tools: [
@@ -41,13 +41,13 @@ const registry = createRegistry({
 registry.registryHash(); // fingerprint — generated artifacts carry it
 ```
 
-Tools can also come from an MCP server through [`@codeflow/mcp`](../mcp/README.md), or from a `codeflow.config.ts` through the CLI. Nothing downstream can tell the difference, which is the point.
+Tools can also come from an MCP server through [`@codeflow-team/mcp`](../mcp/README.md), or from a `codeflow.config.ts` through the CLI. Nothing downstream can tell the difference, which is the point.
 
 ### 2. `createCodeFlow(...).analyze(source)` — code → graph
 
 ```js
-import { createCodeFlow, createRegistry } from "@codeflow/core";
-import { EXAMPLES, registryFor } from "@codeflow/examples";
+import { createCodeFlow, createRegistry } from "@codeflow-team/core";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
 
 const example = EXAMPLES.find((e) => e.id === "canonical");
 const { tools, functions } = registryFor(example);
@@ -145,7 +145,7 @@ error unresolved-tool — Tool `github.getAuditLog` is not in the registry — t
 The registry is the source of truth; the `.d.ts` files are derived artifacts, sorted alphabetically so they are byte-stable across regenerations.
 
 ```js
-import { generateToolsDts } from "@codeflow/core";
+import { generateToolsDts } from "@codeflow-team/core";
 console.log(generateToolsDts(registry));
 ```
 
@@ -175,8 +175,8 @@ export interface Tools {
 ## Tests
 
 ```bash
-pnpm --filter @codeflow/core test                                        # 1,185 tests
-pnpm --filter @codeflow/core exec vitest run test/stress/performance.test.ts
+pnpm --filter @codeflow-team/core test                                        # 1,185 tests
+pnpm --filter @codeflow-team/core exec vitest run test/stress/performance.test.ts
 ```
 
 The performance test prints the whole table it asserts on. A 345-line, 101-node flow analyzes cold in about 21 ms against a 500 ms budget, and re-analyzes warm in about 26 ms against a 100 ms budget.

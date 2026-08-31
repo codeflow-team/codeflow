@@ -1,10 +1,10 @@
 /**
- * The adapters against a *real* graph from `@codeflow/core`, so the assumptions
+ * The adapters against a *real* graph from `@codeflow-team/core`, so the assumptions
  * they make about `data.parentId` / `data.parentSlot` stay honest.
  */
 
 import { describe, expect, it } from "vitest";
-import { createCodeFlow, createRegistry } from "@codeflow/core";
+import { createCodeFlow, createRegistry } from "@codeflow-team/core";
 import { toElkGraph } from "../src/layout/elk-graph.js";
 import { toReactFlow } from "../src/flow/to-react-flow.js";
 import { buildIndex } from "../src/graph/index.js";

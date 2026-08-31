@@ -15,7 +15,7 @@
  * Pure, so both statements are testable without a DOM.
  */
 
-import type { NodeRunState, RegistryLookup, Schema, TraceMatch, WorkflowNode } from "@codeflow/core";
+import type { NodeRunState, RegistryLookup, Schema, TraceMatch, WorkflowNode } from "@codeflow-team/core";
 import { stringData } from "../graph/index.js";
 import { describeSchema } from "./scope-rows.js";
 

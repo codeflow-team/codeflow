@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
-import { EXAMPLES, registryFor } from "@codeflow/examples";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
 
 import { exported } from "../server/runner.ts";
 

@@ -9,7 +9,7 @@
  */
 
 import { useContext } from "react";
-import type { Diagnostic, WorkflowNode } from "@codeflow/core";
+import type { Diagnostic, WorkflowNode } from "@codeflow-team/core";
 import { CodeFlowContext } from "./context.js";
 import type { CodeFlowContextValue } from "./types.js";
 

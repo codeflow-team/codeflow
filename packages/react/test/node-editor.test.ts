@@ -1,6 +1,6 @@
 /**
  * The node editor's decision layer, against a **real** graph from
- * `@codeflow/core`.
+ * `@codeflow-team/core`.
  *
  * The gesture this whole feature exists for — drag the output of one step into
  * a parameter of another — is a field patch, and these tests hold it to that:
@@ -18,7 +18,7 @@ import {
   type NodeRunState,
   type ScopeBinding,
   type WorkflowGraph,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 import { scopeRows, groupScope, describeSchema } from "../src/editor/scope-rows.js";
 import { canDrop, dropInto, rootNameOf } from "../src/editor/drop.js";
 import { resultItems, traceNotice, observedAt, LATEST_LABEL } from "../src/editor/result.js";

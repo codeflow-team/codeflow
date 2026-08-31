@@ -27,7 +27,7 @@
 
 import { useCallback, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { CornerDownLeft, Database, Info, Layers, Pin, Play } from "lucide-react";
-import type { ScopeBinding, WorkflowNode } from "@codeflow/core";
+import type { ScopeBinding, WorkflowNode } from "@codeflow-team/core";
 import { useCodeFlow } from "../context/hooks.js";
 import { humanFieldLabel, splitSpecRefs } from "../copy.js";
 import { NodeGlyph } from "../flow/glyphs.js";

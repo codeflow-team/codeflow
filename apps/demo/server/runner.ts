@@ -210,7 +210,7 @@ export function seedWorkspace(workspace: string): void {
         type: "module",
         dependencies: {
           "@modelcontextprotocol/sdk": "^1.30.0",
-          "@codeflow/core": "^0.1.0",
+          "@codeflow-team/core": "^0.1.0",
           zod: "^3.24.1",
         },
       },

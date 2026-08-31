@@ -12,7 +12,7 @@ import type {
   WorkflowEdge,
   WorkflowGraph,
   WorkflowNode,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 const CAPS: NodeCapabilities = { editable: true, deletable: true, expandable: false };
 

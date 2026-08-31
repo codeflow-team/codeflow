@@ -15,7 +15,7 @@
  *    of them.
  *
  * The mapping is **not** re-implemented here: `mcpToolsToDefinitions` from
- * `@codeflow/mcp` is the one adapter (05 §3), and this endpoint is a transport
+ * `@codeflow-team/mcp` is the one adapter (05 §3), and this endpoint is a transport
  * plus a timeout around it.
  *
  * ## Security — read this before changing anything
@@ -40,7 +40,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import { mcpToolsToDefinitions, type McpTool } from "@codeflow/mcp";
+import { mcpToolsToDefinitions, type McpTool } from "@codeflow-team/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -68,7 +68,7 @@ export interface DiscoverResponse {
   ok: boolean;
   /** Raw `tools/list` entries, verbatim — the payload before any mapping. */
   tools?: McpTool[];
-  /** The same tools after `@codeflow/mcp`'s adapter. */
+  /** The same tools after `@codeflow-team/mcp`'s adapter. */
   definitions?: unknown[];
   serverInfo?: { name?: string; version?: string } | undefined;
   transport?: string;

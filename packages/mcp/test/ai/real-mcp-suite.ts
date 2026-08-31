@@ -1,7 +1,7 @@
 /**
  * AI conformance eval against a registry of **real** MCP tools — 11 §3.6, 10 §5.
  *
- * The eval in `@codeflow/core` uses a hand-authored github/slack/jira registry:
+ * The eval in `@codeflow-team/core` uses a hand-authored github/slack/jira registry:
  * short names, TS type refs, one obvious tool per job. This one hands the model
  * `generated/tools.d.ts` built from the schemas that
  * `@modelcontextprotocol/server-filesystem`, `-memory` and
@@ -31,7 +31,7 @@ import type {
   createRegistry,
   renderDiagnosticsFeedback,
   renderSystemPrompt,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 import type { mcpToolsToDefinitions } from "../../src/adapter.js";
 import type { McpTool } from "../../src/types.js";
@@ -45,7 +45,7 @@ export interface McpAdapterModule {
   mcpToolsToDefinitions: typeof mcpToolsToDefinitions;
 }
 
-/** The slice of `@codeflow/core` the suite needs, from `src` or from `dist`. */
+/** The slice of `@codeflow-team/core` the suite needs, from `src` or from `dist`. */
 export interface CodeFlowModule {
   createRegistry: typeof createRegistry;
   createCodeFlow: typeof createCodeFlow;

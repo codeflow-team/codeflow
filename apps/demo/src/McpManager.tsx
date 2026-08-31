@@ -3,7 +3,7 @@
  *
  * The architectural claim of this project is that core knows no tool: everything
  * that can become a node arrives through the registry at runtime (00 §6.6b,
- * 05 §3). Five registries baked into `@codeflow/examples` demonstrate that
+ * 05 §3). Five registries baked into `@codeflow-team/examples` demonstrate that
  * badly, because they were put there by us. This panel is the honest version —
  * point it at *your* MCP server and your tools become palette entries, lines in
  * `tools.d.ts` for the AI, nodes in the graph, and bindings when you press Run.
@@ -31,7 +31,7 @@ import {
   estimateTokens,
   generateToolsDts,
   type RegistryLookup,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 import {
   Badge,
   Button,
@@ -45,7 +45,7 @@ import {
   Segmented,
   cn,
   useToast,
-} from "@codeflow/react";
+} from "@codeflow-team/react";
 import {
   Check,
   Copy,

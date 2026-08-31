@@ -60,7 +60,7 @@ export type NodePatcher = (
 ) => TextPatch[];
 
 /**
- * React component type — defined in @codeflow/react. Core only keeps an opaque
+ * React component type — defined in @codeflow-team/react. Core only keeps an opaque
  * reference so it stays browser-safe and React-free.
  */
 export type NodeRenderer = unknown;

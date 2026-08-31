@@ -1,5 +1,5 @@
 {
-  "name": "@codeflow/mcp",
+  "name": "@codeflow-team/mcp",
   "version": "0.1.0",
   "description": "Turn MCP tool schemas into CodeFlow ToolDefinitions — safe name slugging, cursor paging, inline $ref resolution. Zero runtime dependency on the MCP SDK.",
   "keywords": [
@@ -50,7 +50,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@codeflow/core": "workspace:^"
+    "@codeflow-team/core": "workspace:^"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

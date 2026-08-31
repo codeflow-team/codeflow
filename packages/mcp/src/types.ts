@@ -10,12 +10,12 @@
  *    `@modelcontextprotocol/sdk` client is accepted as is (the test suite pins
  *    that with a compile-time assignability check).
  *
- * Everything imported from `@codeflow/core` in this package is a **type**: the
+ * Everything imported from `@codeflow-team/core` in this package is a **type**: the
  * dependency direction is core ← mcp, never the reverse (02 §2), and the adapter
  * ships no runtime coupling to core at all.
  */
 
-import type { ToolDefinition } from "@codeflow/core";
+import type { ToolDefinition } from "@codeflow-team/core";
 
 /** JSON Schema as MCP carries it — a draft-standard object, not re-modelled here. */
 export type McpJsonSchema = Record<string, unknown>;

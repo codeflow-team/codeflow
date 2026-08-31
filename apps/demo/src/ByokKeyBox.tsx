@@ -17,7 +17,7 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { Button, Input, Notice } from "@codeflow/react";
+import { Button, Input, Notice } from "@codeflow-team/react";
 import { clearUserKey, getUserKey, setUserKey } from "./ai.js";
 import { REPO_URL } from "./deployment.js";
 

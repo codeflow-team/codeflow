@@ -16,7 +16,7 @@
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createCodeFlow, createRegistry, type WorkflowGraph, type WorkflowNode } from "@codeflow/core";
+import { createCodeFlow, createRegistry, type WorkflowGraph, type WorkflowNode } from "@codeflow-team/core";
 import { CodeFlowProvider } from "../../src/context/provider.js";
 import { NodeInspector } from "../../src/inspector/NodeInspector.js";
 

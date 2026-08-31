@@ -43,7 +43,7 @@
  * Guessing is the failure this project is organised against (07 §5).
  */
 
-import type { RunEvent, RunPhase } from "@codeflow/core";
+import type { RunEvent, RunPhase } from "@codeflow-team/core";
 
 /** One open step. `preview` is filled in by whoever called a tool inside it. */
 export interface ProbeFrame {

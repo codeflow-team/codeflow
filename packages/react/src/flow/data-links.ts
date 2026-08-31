@@ -14,7 +14,7 @@
  * they read it instead of tracing it.
  */
 
-import type { WorkflowGraph } from "@codeflow/core";
+import type { WorkflowGraph } from "@codeflow-team/core";
 import type { GraphIndex } from "../graph/index.js";
 
 /** One end of a data edge, seen from the node this link is listed on. */

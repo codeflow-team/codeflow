@@ -20,7 +20,7 @@
 
 import { describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
-import { analyzeSource, createRegistry, nodeRanges, summarizeRun, summarizeTrace, traceIdentity, type RunEmit, type RunEvent } from "@codeflow/core";
+import { analyzeSource, createRegistry, nodeRanges, summarizeRun, summarizeTrace, traceIdentity, type RunEmit, type RunEvent } from "@codeflow-team/core";
 
 import { startRun, type RunFrame } from "../server/runner.ts";
 import { callFromEmit, EMPTY_RUN, traceMatchFor, type RunCall, type RunEmitFrame, type RunSnapshot } from "../src/run.ts";

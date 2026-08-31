@@ -2,7 +2,7 @@
  * Analyzer + patch engine, driven by a registry built entirely from **real** MCP
  * captures (`test/real-schemas/*.json`).
  *
- * The corpus in `@codeflow/core` proves the analyzer against tools that were
+ * The corpus in `@codeflow-team/core` proves the analyzer against tools that were
  * invented to exercise it. These flows call `filesystem.editFile`,
  * `memory.createEntities` and `sequentialThinking.sequentialthinking` with the
  * schemas those servers actually publish — an array of objects two levels deep,
@@ -19,7 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { CodeFlowError, createCodeFlow, createRegistry, type Registry, type WorkflowGraph, type WorkflowNode } from "@codeflow/core";
+import { CodeFlowError, createCodeFlow, createRegistry, type Registry, type WorkflowGraph, type WorkflowNode } from "@codeflow-team/core";
 
 import { mcpToolToDefinition, mcpToolsToDefinitions } from "../src/adapter.js";
 import type { McpTool } from "../src/types.js";

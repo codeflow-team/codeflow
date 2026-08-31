@@ -21,7 +21,7 @@ import {
   type RunEvent,
   type WorkflowGraph,
   type WorkflowNode,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 import { instrument, type InstrumentResult, type ProbeRange } from "../server/instrument.ts";
 import { createProbe } from "../server/probe.ts";

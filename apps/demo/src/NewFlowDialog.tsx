@@ -27,8 +27,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createCodeFlow, createRegistry, renderSystemPrompt, type RegistryLookup } from "@codeflow/core";
-import { Badge, Button, Input, Modal, Notice, cn } from "@codeflow/react";
+import { createCodeFlow, createRegistry, renderSystemPrompt, type RegistryLookup } from "@codeflow-team/core";
+import { Badge, Button, Input, Modal, Notice, cn } from "@codeflow-team/react";
 import { CircleStop, FileUp, LoaderCircle, Plus, ServerCog, Sparkles, Wand2 } from "lucide-react";
 import type { AiMode } from "./ai.js";
 import { ByokKeyBox } from "./ByokKeyBox.js";

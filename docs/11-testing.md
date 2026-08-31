@@ -92,7 +92,7 @@ A fixed, versioned set of intent prompts × N generations through a real LLM →
 ## 4. CI gates
 
 - Layers 1–4: must be green on every PR — these are the only deterministic gates.
-- Layer 5: runs from the Claude in Chrome checklist on PRs touching `@codeflow/react`; its output is an **evidence report** (screenshots + pass/fail per item) for a human reviewer to decide on. It is **not** an automatic blocking gate (agent-driven testing is not deterministic, the same reason layer 6 does not block CI; "the agent misread the scenario" and "the product is broken" need a human to tell apart).
+- Layer 5: runs from the Claude in Chrome checklist on PRs touching `@codeflow-team/react`; its output is an **evidence report** (screenshots + pass/fail per item) for a human reviewer to decide on. It is **not** an automatic blocking gate (agent-driven testing is not deterministic, the same reason layer 6 does not block CI; "the agent misread the scenario" and "the product is broken" need a human to tell apart).
 - Layer 6: scheduled + at releases; reports trends, with a warning threshold (e.g. L1 rate < 90% → investigate).
 - **Bug-fixing rule**: every real bug found (including from review or production) → write a fixture/test reproducing it **first**, then fix it. The corpus only grows, it never shrinks.
 

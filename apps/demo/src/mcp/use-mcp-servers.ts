@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createRegistry, type RegistryLookup } from "@codeflow/core";
+import { createRegistry, type RegistryLookup } from "@codeflow-team/core";
 import type { ExampleRegistry, FlowExample } from "../examples-source.js";
 import { registryFor } from "../examples-source.js";
 import { registryInstance } from "../registry.js";

@@ -295,7 +295,7 @@ interface FunctionLibraryStore {
 type SemanticAnalyzer = (ctx: AnalyzeContext, node: AstNode) => WorkflowNode | null;
 type NodePatcher = (ctx: PatchContext, node: WorkflowNode,
                     changes: Record<string, unknown>) => TextPatch[];
-type NodeRenderer = unknown;  // React component type — defined in @codeflow/react,
+type NodeRenderer = unknown;  // React component type — defined in @codeflow-team/react,
                               // core only holds an opaque reference
 
 // Default capabilities per node type:

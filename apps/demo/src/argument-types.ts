@@ -30,7 +30,7 @@ import type {
   SourceMapping,
   WorkflowGraph,
   WorkflowNode,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 /** What a literal argument is, judged from its source text alone. */
 type LiteralKind = "string" | "number" | "boolean" | "null" | "array" | "object";

@@ -68,7 +68,7 @@ async function main() {
     process.exit(1);
   }
 
-  const cf = await import("@codeflow/core");
+  const cf = await import("@codeflow-team/core");
   // The suite is type-stripped by Node; the adapter comes from dist so the
   // script measures the same build a host would install.
   const adapter = await import("../dist/index.js");

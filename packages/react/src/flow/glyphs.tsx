@@ -12,7 +12,7 @@
 
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import type { WorkflowNode } from "@codeflow/core";
+import type { WorkflowNode } from "@codeflow-team/core";
 import { stringData } from "../graph/index.js";
 import { nodeVisual, REGISTRY_ICONS } from "./visual.js";
 

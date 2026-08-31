@@ -6,7 +6,7 @@
  * provider is what makes a second tooltip open instantly instead of waiting out
  * the delay again; `<App>` itself calls `useToast()`, so neither can live inside
  * it. They used to live in `main.tsx`, which imported them straight from
- * `@codeflow/react` — and that single import is what turned every edit in the
+ * `@codeflow-team/react` — and that single import is what turned every edit in the
  * library into a full page reload.
  *
  * React Fast Refresh stops an HMR update at the first module in the importer
@@ -21,7 +21,7 @@
  */
 
 import type { ReactNode } from "react";
-import { ToastHost, TooltipProvider } from "@codeflow/react";
+import { ToastHost, TooltipProvider } from "@codeflow-team/react";
 import { App } from "./App.js";
 
 export function Root(): ReactNode {

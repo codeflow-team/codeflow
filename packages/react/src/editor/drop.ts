@@ -15,7 +15,7 @@
  * behaviour.
  */
 
-import type { FieldValue, ScopeBinding, WorkflowGraph } from "@codeflow/core";
+import type { FieldValue, ScopeBinding, WorkflowGraph } from "@codeflow-team/core";
 import type { InspectorField } from "../inspector/fields.js";
 import {
   changesFor,

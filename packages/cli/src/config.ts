@@ -23,7 +23,7 @@ import {
   type RegistryInit,
   type RegistryLookup,
   type ToolDefinition,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 import { CliError } from "./errors.js";
 
 /** Config file names, in resolution order. */

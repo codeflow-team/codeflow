@@ -1,7 +1,7 @@
 /** Inspector model — 06-patch-engine.md §1. */
 
 import { describe, expect, it } from "vitest";
-import { createRegistry } from "@codeflow/core";
+import { createRegistry } from "@codeflow-team/core";
 import { resolveInspectorFields } from "../src/inspector/fields.js";
 import { canonicalGraph, node, tryGraph } from "./fixtures.js";
 

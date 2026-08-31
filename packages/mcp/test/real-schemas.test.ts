@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
-import { createRegistry, generateToolsDts, schemaToTs } from "@codeflow/core";
+import { createRegistry, generateToolsDts, schemaToTs } from "@codeflow-team/core";
 
 import { mcpToolsToDefinitions, mcpToolToDefinition } from "../src/adapter.js";
 import { slugifyNamespace } from "../src/names.js";

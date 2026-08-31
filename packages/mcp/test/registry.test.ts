@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createCodeFlow, createRegistry } from "@codeflow/core";
+import { createCodeFlow, createRegistry } from "@codeflow-team/core";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import {

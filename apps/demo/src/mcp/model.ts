@@ -25,8 +25,8 @@
  *    (06 §5) — that is not a bug to hide, it is the mechanism working.
  */
 
-import type { FunctionDefinition, ToolDefinition } from "@codeflow/core";
-import { slugifyNamespace } from "@codeflow/mcp";
+import type { FunctionDefinition, ToolDefinition } from "@codeflow-team/core";
+import { slugifyNamespace } from "@codeflow-team/mcp";
 import type { ExampleRegistry } from "../examples-source.js";
 
 export type McpTransport = "stdio" | "http" | "sse";

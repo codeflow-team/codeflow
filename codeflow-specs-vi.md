@@ -247,7 +247,7 @@ packages/
 └── react/
 ```
 
-## 7.1 `@codeflow/core`
+## 7.1 `@codeflow-team/core`
 
 Domain model độc lập framework.
 
@@ -265,7 +265,7 @@ Không được phụ thuộc React.
 
 ---
 
-## 7.2 `@codeflow/parser`
+## 7.2 `@codeflow-team/parser`
 
 Chịu trách nhiệm:
 
@@ -281,7 +281,7 @@ Mục tiêu ban đầu:
 
 ---
 
-## 7.3 `@codeflow/analyzer`
+## 7.3 `@codeflow-team/analyzer`
 
 Chịu trách nhiệm:
 
@@ -296,7 +296,7 @@ Chịu trách nhiệm:
 
 ---
 
-## 7.4 `@codeflow/mapper`
+## 7.4 `@codeflow-team/mapper`
 
 Chịu trách nhiệm:
 
@@ -309,7 +309,7 @@ Chịu trách nhiệm:
 
 ---
 
-## 7.5 `@codeflow/patcher`
+## 7.5 `@codeflow-team/patcher`
 
 Chịu trách nhiệm:
 
@@ -322,7 +322,7 @@ Chịu trách nhiệm:
 
 ---
 
-## 7.6 `@codeflow/registry`
+## 7.6 `@codeflow-team/registry`
 
 Chịu trách nhiệm:
 
@@ -336,7 +336,7 @@ Chịu trách nhiệm:
 
 ---
 
-## 7.7 `@codeflow/mcp`
+## 7.7 `@codeflow-team/mcp`
 
 Adapter tùy chọn.
 
@@ -350,7 +350,7 @@ Core không được bắt buộc phụ thuộc MCP.
 
 ---
 
-## 7.8 `@codeflow/layout`
+## 7.8 `@codeflow-team/layout`
 
 Chịu trách nhiệm:
 
@@ -362,7 +362,7 @@ Implementation ban đầu: ELK.js.
 
 ---
 
-## 7.9 `@codeflow/ui`
+## 7.9 `@codeflow-team/ui`
 
 React-based workflow UI.
 
@@ -382,7 +382,7 @@ Implementation ban đầu: React Flow.
 
 ---
 
-## 7.10 `@codeflow/code-editor`
+## 7.10 `@codeflow-team/code-editor`
 
 Developer-oriented source editor.
 
@@ -398,7 +398,7 @@ Chịu trách nhiệm:
 
 ---
 
-## 7.11 `@codeflow/react`
+## 7.11 `@codeflow-team/react`
 
 React integration layer.
 
@@ -1078,7 +1078,7 @@ Dùng cho:
 
 # 25. UI Components
 
-`@codeflow/ui` cung cấp:
+`@codeflow-team/ui` cung cấp:
 
 ```tsx
 <WorkflowCanvas />
@@ -1298,7 +1298,7 @@ interface LayoutEngine {
 Implementation ban đầu:
 
 ```text
-@codeflow/layout
+@codeflow-team/layout
        ↓
      ELK.js
 ```
@@ -1364,7 +1364,7 @@ Ví dụ:
 ```ts
 import {
   createCodeFlow
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 const flow = createCodeFlow({
   language: "typescript"

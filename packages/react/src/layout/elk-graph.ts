@@ -10,7 +10,7 @@
  * (03 §8) — this module only produces ELK input.
  */
 
-import type { EdgeKind, WorkflowGraph } from "@codeflow/core";
+import type { EdgeKind, WorkflowGraph } from "@codeflow-team/core";
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
 import { buildIndex, isSlotEdge, type GraphIndex } from "../graph/index.js";
 import type { DisclosureMode } from "../flow/summary.js";

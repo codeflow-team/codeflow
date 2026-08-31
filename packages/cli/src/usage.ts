@@ -21,7 +21,7 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { TsMorphParser, type TsSyntaxTree } from "@codeflow/core";
+import { TsMorphParser, type TsSyntaxTree } from "@codeflow-team/core";
 import type { Workspace } from "./config.js";
 
 /** Files `codeflow check` treats as flows — 10-ai-codegen.md §2. */

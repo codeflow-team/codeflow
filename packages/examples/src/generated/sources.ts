@@ -1,7 +1,7 @@
 /**
  * Flow sources — GENERATED from `flows/*.flow.ts`. Do not edit by hand.
  *
- * Regenerate with `pnpm --filter @codeflow/examples embed`.
+ * Regenerate with `pnpm --filter @codeflow-team/examples embed`.
  */
 
 export const SOURCES: Record<string, string> = {

@@ -33,8 +33,8 @@ import {
   type RegistryLookup,
   type SourceMapping,
   type WorkflowGraph,
-} from "@codeflow/core";
-import { computePatch } from "@codeflow/core";
+} from "@codeflow-team/core";
+import { computePatch } from "@codeflow-team/core";
 import { buildIndex, diagnosticsByNode, nodeAtOffset } from "../graph/index.js";
 import { buildDataLinks, resolveDataEdgeMode, type DataEdgeMode } from "../flow/data-links.js";
 import { autoCollapse, buildCollapseView, expandFor, isSameFlow } from "../flow/collapse.js";

@@ -3,7 +3,7 @@
  *
  * ## Why it lives here and not in the library
  *
- * `@codeflow/core` must never execute a flow: that is non-goal #1 (00 §5) and
+ * `@codeflow-team/core` must never execute a flow: that is non-goal #1 (00 §5) and
  * invariant I7 (11-testing.md), and `packages/core/test/no-execution.test.ts`
  * fails loudly if anyone changes their mind. Execution belongs to a runtime
  * (09 §1), and the *demo* needs one to show what tracing is for — so the demo

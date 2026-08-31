@@ -14,8 +14,8 @@
  */
 
 import { useMemo, type ReactNode } from "react";
-import type { Diagnostic } from "@codeflow/core";
-import { Badge, cn } from "@codeflow/react";
+import type { Diagnostic } from "@codeflow-team/core";
+import { Badge, cn } from "@codeflow-team/react";
 import type { GenerationRound } from "./generate-flow.js";
 
 export function RoundCard({ round, compact }: { round: GenerationRound; compact?: boolean }): ReactNode {

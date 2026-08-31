@@ -9,7 +9,7 @@
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createCodeFlow, type Registry } from "@codeflow/core";
+import { createCodeFlow, type Registry } from "@codeflow-team/core";
 import type { FileFunctionLibraryStore } from "../library/file-store.js";
 import { agentMarkdown } from "../agent-md.js";
 import { loadWorkspace, registryFromConfig, type Workspace } from "../config.js";

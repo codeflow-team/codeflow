@@ -1,5 +1,5 @@
 /**
- * `@codeflow/cli` — the Node-only half of CodeFlow (02-architecture.md §2).
+ * `@codeflow-team/cli` — the Node-only half of CodeFlow (02-architecture.md §2).
  *
  * Split from core because it needs fs: core has to stay browser-safe. Everything
  * here is also usable programmatically, so a host app can run the same generate

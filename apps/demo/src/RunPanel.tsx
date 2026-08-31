@@ -18,10 +18,10 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Badge, Button, Hint, NodeGlyph, cn, useCodeFlow } from "@codeflow/react";
-import type { WorkflowNode } from "@codeflow/core";
+import { Badge, Button, Hint, NodeGlyph, cn, useCodeFlow } from "@codeflow-team/react";
+import type { WorkflowNode } from "@codeflow-team/core";
 import { ChevronRight, CircleAlert, CircleCheck, FolderOpen, LoaderCircle, Play, Square, X } from "lucide-react";
-import type { TraceMatch } from "@codeflow/core";
+import type { TraceMatch } from "@codeflow-team/core";
 import { TRACE_MATCH_HINT, type RunSnapshot } from "./run.js";
 
 export interface RunPanelProps {

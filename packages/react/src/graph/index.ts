@@ -5,8 +5,8 @@
  * (00 §2.1), and the UI layer only ever derives view state from it (03 §8).
  */
 
-import type { Diagnostic, NodeType, WorkflowEdge, WorkflowGraph, WorkflowNode } from "@codeflow/core";
-import { rangeLength } from "@codeflow/core";
+import type { Diagnostic, NodeType, WorkflowEdge, WorkflowGraph, WorkflowNode } from "@codeflow-team/core";
+import { rangeLength } from "@codeflow-team/core";
 
 /** Node types that always own a subgraph — the only containers the analyzer emits. */
 export const CONTAINER_NODE_TYPES: readonly NodeType[] = ["loop", "try"];
@@ -124,14 +124,14 @@ export function isSlotEdge(edge: WorkflowEdge, index: GraphIndex): boolean {
 /* -------------------------------------------------------------------------- */
 
 /**
- * `rangeLength` and `nodeAtOffset` now live in `@codeflow/core` (`src/run/`).
+ * `rangeLength` and `nodeAtOffset` now live in `@codeflow-team/core` (`src/run/`).
  *
  * They moved because the same rule answers two questions — "which step is the
  * caret in" (07 §2) and "which step is the runtime in" (09 §1) — and two copies
  * of an innermost-owner rule would eventually disagree. They are re-exported
- * here so every existing import of `@codeflow/react` keeps working.
+ * here so every existing import of `@codeflow-team/react` keeps working.
  */
-export { nodeAtOffset } from "@codeflow/core";
+export { nodeAtOffset } from "@codeflow-team/core";
 export { rangeLength };
 
 /**

@@ -1,4 +1,4 @@
-# `@codeflow/examples`
+# `@codeflow-team/examples`
 
 Thirteen flow files and the registries they are written against. This is the demo's gallery and the analyzer's stress corpus at the same time — which is deliberate: an example nobody tests is an example nobody can trust.
 
@@ -9,18 +9,18 @@ See the [root README](../../README.md) for what CodeFlow is.
 Prepared for npm as v0.1.0; until the first release lands, use the workspace copy:
 
 ```jsonc
-"dependencies": { "@codeflow/examples": "workspace:*" }
+"dependencies": { "@codeflow-team/examples": "workspace:*" }
 ```
 
-Its only runtime dependency is `@codeflow/core`.
+Its only runtime dependency is `@codeflow-team/core`.
 
 ## Use
 
 Two exports carry everything: `EXAMPLES` is the gallery (metadata plus source), `REGISTRIES` is what each one needs to be analyzed, and `registryFor` joins them so a caller never has to know the key.
 
 ```js
-import { EXAMPLES, registryFor } from "@codeflow/examples";
-import { createCodeFlow, createRegistry } from "@codeflow/core";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
+import { createCodeFlow, createRegistry } from "@codeflow-team/core";
 
 const example = EXAMPLES.find((e) => e.id === "repo-triage-bot");
 const { tools, functions } = registryFor(example);
@@ -101,7 +101,7 @@ The four stress flows (261–345 lines) exist because problems only appear at sc
 ## Tests
 
 ```bash
-pnpm --filter @codeflow/examples test   # 130 tests
+pnpm --filter @codeflow-team/examples test   # 130 tests
 ```
 
 Every library function's `code` is compiled with the real TypeScript compiler as the single `lib.ts` the runner writes, and then **executed** — including its failure paths. A library function that is never run is a library function that does not work.

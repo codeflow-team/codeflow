@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { CodeFlowError, type FunctionDefinition } from "@codeflow/core";
+import { CodeFlowError, type FunctionDefinition } from "@codeflow-team/core";
 import { FileFunctionLibraryStore } from "../src/library/file-store.js";
 import { CliError } from "../src/errors.js";
 import { cleanup, tempDir, write } from "./helpers.js";

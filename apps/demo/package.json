@@ -15,10 +15,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@codeflow/core": "workspace:*",
-    "@codeflow/examples": "workspace:*",
-    "@codeflow/mcp": "workspace:*",
-    "@codeflow/react": "workspace:*",
+    "@codeflow-team/core": "workspace:*",
+    "@codeflow-team/examples": "workspace:*",
+    "@codeflow-team/mcp": "workspace:*",
+    "@codeflow-team/react": "workspace:*",
     "@monaco-editor/react": "^4.7.0",
     "@xyflow/react": "^12.8.6",
     "lucide-react": "^1.33.0",

@@ -1,21 +1,21 @@
 /**
  * Shared scaffolding for the stress suite.
  *
- * The corpus under test is `@codeflow/examples` — thirteen flows, nine of them
+ * The corpus under test is `@codeflow-team/examples` — thirteen flows, nine of them
  * written against tool schemas captured from real MCP servers, four of them
  * between 260 and 350 lines. Where the golden fixtures cover *constructs* one
  * at a time and the hardening suite covers *hazards*, this suite covers
  * **scale**: what happens when twenty of those constructs are in one file, four
  * levels deep, with a hundred nodes hanging off them.
  *
- * `@codeflow/examples` is resolved from source through an alias in
+ * `@codeflow-team/examples` is resolved from source through an alias in
  * `vitest.config.ts` (and `paths` in `tsconfig.json`). Core cannot depend on it
  * the ordinary way — examples depends on core, and a devDependency back would
  * make the turbo build graph cyclic.
  */
 
 import { expect } from "vitest";
-import { EXAMPLES, registryFor, type FlowExample } from "@codeflow/examples";
+import { EXAMPLES, registryFor, type FlowExample } from "@codeflow-team/examples";
 
 import { createCodeFlow, type CodeFlowSession } from "../../src/session.js";
 import { createRegistry, type Registry } from "../../src/registry/index.js";

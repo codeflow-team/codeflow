@@ -1,7 +1,7 @@
 # Releasing
 
-Five packages publish from this repository: `@codeflow/core`, `@codeflow/react`,
-`@codeflow/cli`, `@codeflow/mcp` and `@codeflow/examples`. The demo app does not
+Five packages publish from this repository: `@codeflow-team/core`, `@codeflow-team/react`,
+`@codeflow-team/cli`, `@codeflow-team/mcp` and `@codeflow-team/examples`. The demo app does not
 publish.
 
 A release is **a version bump merged to `main`**. There is no tag step and no
@@ -11,47 +11,22 @@ not there yet. A commit that bumps nothing publishes nothing.
 
 ---
 
-## 0. Before the first release: settle the scope
+## 0. The scope, and why it is what it is
 
-**This is the one thing that has to be decided by a person, and nothing else can
-happen until it is.**
+On npm a scope belongs to an organisation (or user) of the *same* name. The
+obvious scope for this project, `@codeflow`, is **taken by someone else** — the
+`codeflow` organisation already exists and is not ours. The organisation we own
+is `codeflow-team`, so the packages are `@codeflow-team/*`.
 
-On npm a scope is owned by an organisation (or user) of the *same name*. The
-packages here are named `@codeflow/*`, so publishing them requires an npm
-organisation called exactly **`codeflow`**. The organisation linked from the npm
-settings page for this project is **`codeflow-team`**, which owns the scope
-`@codeflow-team` — not `@codeflow`.
+The GitHub organisation and the npm organisation are separate namespaces that
+happen to agree here: the repository is `codeflow-team/codeflow` and the npm
+scope is `@codeflow-team`. Nothing under that scope is published yet.
 
-Nothing under `@codeflow/` is published today (checked against the registry:
-zero packages in that scope), but "no packages" is not "name is free" — an
-organisation can exist and have published nothing.
-
-Two ways forward:
-
-**A. Claim the `codeflow` organisation** (nothing in the repo changes)
-
-1. Go to <https://www.npmjs.com/org/create> and try to create an organisation
-   named `codeflow`. The free plan is enough for public packages.
-2. If it is available, you are done — every name in this repository already
-   matches. Add yourself, and add `codeflow-team` members as needed.
-3. If it is taken, use option B.
-
-**B. Rename the scope to `@codeflow-team`** (a mechanical change, ~200 lines)
-
-Every package name, every internal import, the `.npmrc` registry line, the CI
-consumer smoke test and the READMEs refer to `@codeflow/…`. The rename is one
-pass and is entirely mechanical:
-
-```bash
-# From the repository root. Review the diff before committing.
-grep -rl '@codeflow/' --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.git . \
-  | xargs sed -i '' 's|@codeflow/|@codeflow-team/|g'
-sed -i '' 's|@codeflow:registry|@codeflow-team:registry|' .npmrc
-pnpm install && pnpm build && pnpm test
-```
-
-Ask before running it — it touches the public API surface of every package, and
-it is much cheaper to do before the first publish than after.
+This was settled before the first publish deliberately. A scope rename touches
+every package name, every internal import, the `.npmrc` registry line, the CI
+consumer smoke test and every README — mechanical, but it is the public API of
+five packages, and it costs a major version and a deprecation notice once
+anything is on the registry instead of a single commit before.
 
 ---
 
@@ -65,8 +40,8 @@ package needs a token; after that it should not.
    (Classic "automation" tokens were removed from npm in November 2025. If a
    guide mentions them, it means this.)
 2. Configure it:
-   - **Packages and scopes**: read *and write*, limited to the `@codeflow` scope
-     (or `@codeflow-team`, per step 0).
+   - **Packages and scopes**: read *and write*, limited to the `@codeflow-team`
+     scope.
    - **Expiration**: short. This token exists to bootstrap five packages; a week
      is plenty.
    - **Bypass 2FA**: enabled — a CI job cannot answer a 2FA prompt.
@@ -84,7 +59,7 @@ and npm substitutes it from the environment.
 
 > Why not commit that line, as npm's own CI/CD guide suggests? Because pnpm
 > discards an entire `.npmrc` whose env placeholder it cannot resolve, which
-> would take the `@codeflow:registry` line down with it for every contributor
+> would take the `@codeflow-team:registry` line down with it for every contributor
 > without an `NPM_TOKEN`. See the comment in [`.npmrc`](.npmrc).
 
 ---
@@ -147,7 +122,7 @@ before publishing anything.
 
 ### If a publish fails halfway
 
-Nothing is transactional: if `@codeflow/core` published and `@codeflow/react`
+Nothing is transactional: if `@codeflow-team/core` published and `@codeflow-team/react`
 failed, core stays published. Fix the cause and push again — the loop skips
 every version already on the registry, so re-running is safe and idempotent.
 Do not `npm unpublish`; bump the patch version instead.

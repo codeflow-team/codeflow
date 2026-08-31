@@ -2,7 +2,7 @@
  * What survives a reload.
  *
  * QA BUG-1 had two halves. The first was a Fast Refresh boundary in
- * `@codeflow/react` that turned every library rebuild into `full-reload`; that
+ * `@codeflow-team/react` that turned every library rebuild into `full-reload`; that
  * is fixed at the source. The second half is the product's, and no boundary fix
  * closes it: the app kept everything in React state, so one stray F5 — or a
  * crash, or a closed laptop — threw away the conversation and the flow the user

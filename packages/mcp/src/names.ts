@@ -12,7 +12,7 @@
  * kept on the definition (`mcp.toolName`) — nothing about the MCP identity is
  * lost, it just stops being the thing TypeScript has to parse.
  *
- * The identifier rules mirror `@codeflow/core`'s `validateToolName`; they are
+ * The identifier rules mirror `@codeflow-team/core`'s `validateToolName`; they are
  * re-stated instead of imported so the adapter keeps a **type-only** dependency
  * on core (02 §2 — core must never depend on MCP, and this direction stays thin).
  */

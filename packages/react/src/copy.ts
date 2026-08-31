@@ -13,7 +13,7 @@
  * engine's own, unedited.
  */
 
-import type { CodeFlowErrorCode } from "@codeflow/core";
+import type { CodeFlowErrorCode } from "@codeflow-team/core";
 
 const SPEC_REF = /\s*\((?:\d{2}\s*§[\w.§\s,–-]*)\)/g;
 

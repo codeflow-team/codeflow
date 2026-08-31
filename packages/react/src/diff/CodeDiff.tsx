@@ -8,7 +8,7 @@
  */
 
 import type { ReactNode } from "react";
-import type { TextPatch } from "@codeflow/core";
+import type { TextPatch } from "@codeflow-team/core";
 import { cn } from "../ui/cn.js";
 
 export interface CodeDiffProps {

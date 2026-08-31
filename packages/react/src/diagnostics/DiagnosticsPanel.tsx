@@ -11,7 +11,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import { CircleCheck, Info, OctagonAlert, TriangleAlert } from "lucide-react";
-import type { Diagnostic, WorkflowNode } from "@codeflow/core";
+import type { Diagnostic, WorkflowNode } from "@codeflow-team/core";
 import { useCodeFlow } from "../context/hooks.js";
 import { diagnosticsByNode } from "../graph/index.js";
 import { diagnosticHeadline, splitSpecRefs } from "../copy.js";

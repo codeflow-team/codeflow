@@ -1,5 +1,5 @@
 /**
- * @codeflow/react — UI layer (07-ui.md).
+ * @codeflow-team/react — UI layer (07-ui.md).
  *
  * Phase 6a covered the read half: provider + state, React Flow canvas with
  * hierarchical ELK layout, the three disclosure levels, inspector, Monaco code
@@ -13,7 +13,7 @@
  *
  * Host apps must also import the stylesheets:
  *   import "@xyflow/react/dist/style.css";
- *   import "@codeflow/react/styles.css";
+ *   import "@codeflow-team/react/styles.css";
  */
 
 export { CodeFlowProvider } from "./context/provider.js";

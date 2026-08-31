@@ -1,8 +1,8 @@
 /**
- * `@codeflow/mcp` — the optional MCP adapter (05-registry.md §3, 02 §2).
+ * `@codeflow-team/mcp` — the optional MCP adapter (05-registry.md §3, 02 §2).
  *
  * ```ts
- * import { registerMcpServer } from "@codeflow/mcp";
+ * import { registerMcpServer } from "@codeflow-team/mcp";
  *
  * await registerMcpServer(registry, client, { namespace: "github" });
  * // → registry now holds github.getIssue, github.listPRs, … and

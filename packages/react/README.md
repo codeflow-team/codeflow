@@ -1,4 +1,4 @@
-# `@codeflow/react`
+# `@codeflow-team/react`
 
 The UI layer. A React Flow canvas with hierarchical ELK layout (loops and `try` blocks are real containers, not decorations), an inspector that edits through the patch engine, a Monaco panel with two-way selection sync, a diff preview, a diagnostics panel, three progressive-disclosure levels and a light/dark design system.
 
@@ -12,14 +12,14 @@ Prepared for npm as v0.1.0; until the first release lands, use the workspace cop
 
 ```jsonc
 // package.json
-"dependencies": { "@codeflow/react": "workspace:*" }
+"dependencies": { "@codeflow-team/react": "workspace:*" }
 ```
 
 React 18 or 19 is a peer dependency. Two stylesheets must be imported by the host app:
 
 ```ts
 import "@xyflow/react/dist/style.css";
-import "@codeflow/react/styles.css";
+import "@codeflow-team/react/styles.css";
 ```
 
 ## The shape of a host app
@@ -28,8 +28,8 @@ The host owns the source text and the graph; the provider owns everything else. 
 
 ```tsx
 import { useEffect, useState } from "react";
-import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow/core";
-import { CodeFlowProvider, WorkflowCanvas, NodeInspector } from "@codeflow/react";
+import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow-team/core";
+import { CodeFlowProvider, WorkflowCanvas, NodeInspector } from "@codeflow-team/react";
 
 const session = createCodeFlow({ registry: createRegistry({ tools: [] }) });
 
@@ -82,7 +82,7 @@ Plus the controls a host needs to build its own chrome: `DisclosureToggle`, `Dat
 ## Tests
 
 ```bash
-pnpm --filter @codeflow/react test   # 155 tests
+pnpm --filter @codeflow-team/react test   # 155 tests
 ```
 
 ## License

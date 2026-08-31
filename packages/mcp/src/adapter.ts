@@ -24,7 +24,7 @@
  * không cần phân biệt" (05 §3). That is the point of the adapter.
  */
 
-import type { Schema } from "@codeflow/core";
+import type { Schema } from "@codeflow-team/core";
 import { humanize, slugifyMethod, slugifyNamespace, uniqueMethod } from "./names.js";
 import type {
   McpAdapterOptions,

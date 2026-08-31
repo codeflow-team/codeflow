@@ -18,7 +18,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createCodeFlow, createRegistry } from "@codeflow/core";
+import { createCodeFlow, createRegistry } from "@codeflow-team/core";
 
 import { EXAMPLES, REGISTRIES, registryFor } from "../src/index.js";
 import type { FlowExample } from "../src/types.js";

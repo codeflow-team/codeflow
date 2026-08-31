@@ -18,7 +18,7 @@
  * Pure and DOM-free — this is the unit-test surface of the editing path.
  */
 
-import type { FieldValue } from "@codeflow/core";
+import type { FieldValue } from "@codeflow-team/core";
 import type { InspectorField } from "./fields.js";
 
 /** Control the inspector renders for a field. */

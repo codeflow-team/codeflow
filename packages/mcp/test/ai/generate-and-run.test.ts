@@ -26,7 +26,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as cf from "@codeflow/core";
+import * as cf from "@codeflow-team/core";
 import * as adapter from "../../src/adapter.js";
 
 import {

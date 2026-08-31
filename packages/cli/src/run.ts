@@ -8,7 +8,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CodeFlowError } from "@codeflow/core";
+import { CodeFlowError } from "@codeflow-team/core";
 import { flagBoolean, flagString, parseArgs } from "./args.js";
 import { check, checkToJson, formatCheck } from "./commands/check.js";
 import { generate } from "./commands/generate.js";

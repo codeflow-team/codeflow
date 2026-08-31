@@ -28,7 +28,7 @@
  * Pure and DOM-free, like the rest of `flow/`.
  */
 
-import type { WorkflowGraph } from "@codeflow/core";
+import type { WorkflowGraph } from "@codeflow-team/core";
 import type { GraphIndex } from "../graph/index.js";
 
 /**

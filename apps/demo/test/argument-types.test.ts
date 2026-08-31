@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow/core";
+import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow-team/core";
 import { argumentTypeProblems, withArgumentTypes } from "../src/argument-types.js";
 
 const registry = createRegistry({

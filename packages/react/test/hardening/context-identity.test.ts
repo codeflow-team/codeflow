@@ -1,7 +1,7 @@
 /**
  * The context object must keep its identity when its module is executed twice.
  *
- * Real incident: with the dev server up, rebuilding `@codeflow/core` invalidated
+ * Real incident: with the dev server up, rebuilding `@codeflow-team/core` invalidated
  * `provider.js`; Fast Refresh re-executed it, `createContext` produced a second
  * object, and every consumer of the still-mounted provider read the `null`
  * default and threw `useCodeFlow must be used inside <CodeFlowProvider>` —

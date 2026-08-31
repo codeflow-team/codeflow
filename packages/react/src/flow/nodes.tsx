@@ -12,7 +12,7 @@
 import { useCallback, type ReactNode } from "react";
 import { Handle, NodeResizer, Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { ChevronDown, ChevronRight, Shrink, Trash2 } from "lucide-react";
-import type { Diagnostic, WorkflowNode } from "@codeflow/core";
+import type { Diagnostic, WorkflowNode } from "@codeflow-team/core";
 import { CONTAINER_SLOTS, worstSeverity } from "../graph/index.js";
 import { useOptionalCodeFlow } from "../context/hooks.js";
 import { cn } from "../ui/cn.js";

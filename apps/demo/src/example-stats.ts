@@ -9,7 +9,7 @@
  * blocks the frame.
  */
 
-import { createCodeFlow, type RegistryLookup, type WorkflowGraph } from "@codeflow/core";
+import { createCodeFlow, type RegistryLookup, type WorkflowGraph } from "@codeflow-team/core";
 import type { FlowExample } from "./examples-source.js";
 import { registryInstanceFor } from "./registry.js";
 

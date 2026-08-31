@@ -32,7 +32,7 @@ UI-side hardening lives in `packages/react/test/hardening/`:
 `node-at-offset.test.ts`, `inspector-a11y.test.ts`, `changed-nodes.test.ts`.
 
 Totals: **179 passing + 2 `todo`** here, **24 passing + 1 `todo`** in
-`@codeflow/react`.
+`@codeflow-team/react`.
 
 ---
 
@@ -302,7 +302,7 @@ several statements, and refuses text that would not parse.
 |---|---|
 | `control-flow.test.ts` → "known over-approximation: the finally's single successor…" | After `return` inside a `catch`, control leaves the function; the flat model draws one exit from the `finally` and it lands on the trailing `return`. Fixing it needs terminal-aware exits out of a `finally`, which is beyond the MVP model of 04 §2.7 — the same section already scopes nested-`try` terminals to their own `finally`. |
 | `degradation.test.ts` → "`$code` that drops a binding a later node still reads" | The candidate parses and obeys the flow contract, and core cannot type-check it: the project runs ts-morph with `noLib`/`noResolve` because the analysis path never needs a checker (04 §1.2), and 06 §4 makes the type check conditional on a host that has one. A host with a checker gets the guarantee today; closing it inside core is a design decision above this suite. |
-| `react/.../changed-nodes.test.ts` → "DOM-level: … `is-changed`" | Driving the provider's state needs a DOM. `@codeflow/react` runs its tests in `environment: "node"` and jsdom is not a dependency (adding one was out of scope for this pass). The rule the provider applies is tested against real `PatchResult` data instead, and the browser checklist (11 §3.5) covers the rendering. |
+| `react/.../changed-nodes.test.ts` → "DOM-level: … `is-changed`" | Driving the provider's state needs a DOM. `@codeflow-team/react` runs its tests in `environment: "node"` and jsdom is not a dependency (adding one was out of scope for this pass). The rule the provider applies is tested against real `PatchResult` data instead, and the browser checklist (11 §3.5) covers the rendering. |
 
 Two further limits are **behaviour, not gaps**, and are asserted as such rather
 than listed as debt: `as const` / `satisfies` arguments are shown but not

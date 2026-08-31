@@ -23,7 +23,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { WorkflowEdge, WorkflowGraph, WorkflowNode } from "@codeflow/core";
+import type { WorkflowEdge, WorkflowGraph, WorkflowNode } from "@codeflow-team/core";
 import {
   FOLD_ABOVE,
   ancestorsOf,

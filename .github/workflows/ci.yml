@@ -96,14 +96,14 @@ jobs:
           cat > "$RUNNER_TEMP/make-consumer.mjs" <<'JS'
           // Derive the file: specifiers from whatever was packed, so a version
           // bump never breaks this job. `overrides` forces the nested
-          // @codeflow/core dependency of the other packages onto the local
+          // @codeflow-team/core dependency of the other packages onto the local
           // tarball instead of the registry.
           import { readdirSync, writeFileSync } from "node:fs";
           import { join } from "node:path";
           const dir = process.argv[2];
           const deps = {};
           for (const f of readdirSync(dir).filter((f) => f.endsWith(".tgz"))) {
-            const name = "@codeflow/" + f.replace(/^codeflow-/, "").replace(/-\d.*$/, "");
+            const name = "@codeflow-team/" + f.replace(/^codeflow-/, "").replace(/-\d.*$/, "");
             deps[name] = `file:./${f}`;
           }
           writeFileSync(
@@ -115,7 +115,7 @@ jobs:
                 type: "module",
                 dependencies: { ...deps, react: "^19.2.0", "react-dom": "^19.2.0" },
                 devDependencies: { typescript: "^5.7.2", "@types/react": "^19", "@types/react-dom": "^19" },
-                overrides: { "@codeflow/core": deps["@codeflow/core"] },
+                overrides: { "@codeflow-team/core": deps["@codeflow-team/core"] },
               },
               null,
               2,
@@ -125,13 +125,13 @@ jobs:
           node "$RUNNER_TEMP/make-consumer.mjs" "$RUNNER_TEMP/consumer"
           cd "$RUNNER_TEMP/consumer" && npm install --no-audit --no-fund
 
-      - name: Import @codeflow/core and analyze a flow (ESM)
+      - name: Import @codeflow-team/core and analyze a flow (ESM)
         working-directory: ${{ runner.temp }}/consumer
         run: |
           cat > smoke.mjs <<'JS'
-          import { createCodeFlow, createRegistry } from "@codeflow/core";
-          import { EXAMPLES, registryFor } from "@codeflow/examples";
-          import { mcpToolsToDefinitions } from "@codeflow/mcp";
+          import { createCodeFlow, createRegistry } from "@codeflow-team/core";
+          import { EXAMPLES, registryFor } from "@codeflow-team/examples";
+          import { mcpToolsToDefinitions } from "@codeflow-team/mcp";
 
           const example = EXAMPLES[0];
           const { tools, functions } = registryFor(example);
@@ -147,7 +147,7 @@ jobs:
           if (defs[0].name !== "fs.readFile") throw new Error(`unexpected slug: ${defs[0].name}`);
 
           // The documented subpath exports must resolve from a consumer's position.
-          for (const spec of ["@codeflow/react", "@codeflow/react/styles.css", "@codeflow/react/tokens.css"]) {
+          for (const spec of ["@codeflow-team/react", "@codeflow-team/react/styles.css", "@codeflow-team/react/tokens.css"]) {
             console.log(spec, "->", import.meta.resolve(spec));
           }
           JS
@@ -158,9 +158,9 @@ jobs:
         run: |
           mkdir -p src
           cat > src/consumer.ts <<'TS'
-          import { createCodeFlow, createRegistry, type CodeFlowSession, type ToolDefinition, type WorkflowGraph } from "@codeflow/core";
-          import { mcpToolsToDefinitions, type McpTool } from "@codeflow/mcp";
-          import { EXAMPLES, registryFor, type FlowExample } from "@codeflow/examples";
+          import { createCodeFlow, createRegistry, type CodeFlowSession, type ToolDefinition, type WorkflowGraph } from "@codeflow-team/core";
+          import { mcpToolsToDefinitions, type McpTool } from "@codeflow-team/mcp";
+          import { EXAMPLES, registryFor, type FlowExample } from "@codeflow-team/examples";
 
           const raw: McpTool[] = [{ name: "read_file", inputSchema: { type: "object", properties: {} } }];
           const tools: ToolDefinition[] = mcpToolsToDefinitions(raw, { namespace: "fs" });
@@ -173,7 +173,7 @@ jobs:
           export function first(): FlowExample { const e = EXAMPLES[0]!; void registryFor(e); return e; }
           TS
           cat > src/consumer-react.tsx <<'TSX'
-          import * as cfr from "@codeflow/react";
+          import * as cfr from "@codeflow-team/react";
           export const exportCount: number = Object.keys(cfr).length;
           TSX
           write_tsconfig() {

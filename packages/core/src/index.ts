@@ -1,5 +1,5 @@
 /**
- * @codeflow/core — domain model, registry and typed-API codegen.
+ * @codeflow-team/core — domain model, registry and typed-API codegen.
  *
  * Browser-safe by construction: nothing in this package imports a Node API.
  * Node-only pieces (file-based function library store, fs/watch) live in the CLI.

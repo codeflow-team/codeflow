@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createRegistry, generateToolsDts } from "@codeflow/core";
+import { createRegistry, generateToolsDts } from "@codeflow-team/core";
 import {
   compose,
   defaultNamespace,

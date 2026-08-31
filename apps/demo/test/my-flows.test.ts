@@ -9,8 +9,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { validateFlowSource } from "@codeflow/core";
-import { REGISTRIES } from "@codeflow/examples";
+import { validateFlowSource } from "@codeflow-team/core";
+import { REGISTRIES } from "@codeflow-team/examples";
 import { registryInstance } from "../src/registry.js";
 import {
   MCP_REGISTRY,

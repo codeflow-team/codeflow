@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import { createRegistry, isGeneratedArtifactStale, readGeneratedRegistryHash } from "@codeflow/core";
+import { createRegistry, isGeneratedArtifactStale, readGeneratedRegistryHash } from "@codeflow-team/core";
 import { generate } from "../src/commands/generate.js";
 import { init } from "../src/commands/init.js";
 import { loadConfigFile } from "../src/config.js";
@@ -279,7 +279,7 @@ export default createRegistry({
   });
 });
 
-/** Absolute specifier for `@codeflow/core`, so a temp workspace outside the repo can import it. */
+/** Absolute specifier for `@codeflow-team/core`, so a temp workspace outside the repo can import it. */
 function coreEntry(): string {
   return new URL("../../core/dist/index.js", import.meta.url).href;
 }

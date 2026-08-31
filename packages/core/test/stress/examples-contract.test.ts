@@ -1,5 +1,5 @@
 /**
- * The contract `@codeflow/examples` publishes, checked from the consumer side.
+ * The contract `@codeflow-team/examples` publishes, checked from the consumer side.
  *
  * A UI renders this package without reading its source: it takes `EXAMPLES`,
  * puts `title`/`summary`/`highlights` on a card, and hands `source` +

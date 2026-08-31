@@ -12,7 +12,7 @@
  */
 
 import { useMemo, type ReactNode } from "react";
-import { Badge, Button, useCodeFlow } from "@codeflow/react";
+import { Badge, Button, useCodeFlow } from "@codeflow-team/react";
 import { LayoutGrid, Sparkles } from "lucide-react";
 import type { FlowExample } from "./examples-source.js";
 

@@ -16,7 +16,7 @@ Everything except the AI chat works with no configuration.
 
 ## What is in it
 
-- **Gallery** (`⌘O`) — the thirteen flows from [`@codeflow/examples`](../../packages/examples/README.md), grouped and searchable, each card listing what the flow shows off.
+- **Gallery** (`⌘O`) — the thirteen flows from [`@codeflow-team/examples`](../../packages/examples/README.md), grouped and searchable, each card listing what the flow shows off.
 - **Canvas** — three disclosure levels (Simple / Details / Code), containers that fold, a step list for long flows, a diagnostics popover, and light/dark.
 - **Inspector** — edit a field, preview the exact diff, apply it. Delete with a dependency check, swap a tool, edit an opaque code region, insert a step from the command palette (`⌘K`).
 - **Code drawer** — Monaco, synced both ways with the canvas. Type in it and the diagram re-reads the file.
@@ -51,7 +51,7 @@ The worker connects over stdio to a short allowlist of MCP servers, and the rule
 
 Everything else is stubbed, and the UI says so per tool: Playwright downloads and drives a browser, DuckDuckGo/DeepWiki/Context7 need the public internet, and `github`/`slack` have no server at all — they are the specs' illustrations.
 
-**This is not isolation.** The worker has no network of its own and writes only inside a throwaway directory, which is enough to prove a flow really runs. A real deployment needs a V8 isolate or a container. Execution is also deliberately absent from `@codeflow/core` — `packages/core/test/no-execution.test.ts` fails if anyone changes their mind about that.
+**This is not isolation.** The worker has no network of its own and writes only inside a throwaway directory, which is enough to prove a flow really runs. A real deployment needs a V8 isolate or a container. Execution is also deliberately absent from `@codeflow-team/core` — `packages/core/test/no-execution.test.ts` fails if anyone changes their mind about that.
 
 ## Scripts
 

@@ -31,7 +31,7 @@ import {
   sampleFromSchema,
   type Schema,
   type ScopeBinding,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 /**
  * Where a row's value came from.

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow/core";
+import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow-team/core";
 import {
   changesFor,
   editorSpecFor,

@@ -78,7 +78,7 @@ The first version does **not**:
 4. **Stable identity** — node identity survives formatting, added lines and unrelated changes. (What exactly is guaranteed: see [03-data-model.md](03-data-model.md).)
 5. **Make uncertainty visible** — when unsure, mark unknown/custom; never infer.
 6. **Runtime independence** — core depends on no workflow execution engine.
-6b. **Tool agnosticism** — core defines, ships and hardcodes no specific tool/MCP/integration. Core only has the frame (`ToolDefinition`, registry, codegen); every concrete tool is registered by the host app at runtime or comes from an optional adapter (`@codeflow/mcp`). With an empty registry every call becomes an unknown/code node and the system is still correct. Every tool name in these docs (`github.*`, `slack.*`) is an example only.
+6b. **Tool agnosticism** — core defines, ships and hardcodes no specific tool/MCP/integration. Core only has the frame (`ToolDefinition`, registry, codegen); every concrete tool is registered by the host app at runtime or comes from an optional adapter (`@codeflow-team/mcp`). With an empty registry every call becomes an unknown/code node and the system is still correct. Every tool name in these docs (`github.*`, `slack.*`) is an example only.
 7. **No second expression language** — any "friendly expression syntax" in the UI must be a 1-1 display syntax for a real TypeScript expression ([06-patch-engine.md](06-patch-engine.md)).
 
 ## 7. Core moat

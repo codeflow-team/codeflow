@@ -1,7 +1,7 @@
 /**
  * The demo runner's execution thread.
  *
- * This is the half of the feature `@codeflow/core` is forbidden to contain
+ * This is the half of the feature `@codeflow-team/core` is forbidden to contain
  * (00 §5, I7): it dynamically imports a module built from the user's flow and
  * calls it. It lives in a worker thread so the dev server can kill it — a
  * `while (true)` in a generated flow must cost one `terminate()`, not a
@@ -27,7 +27,7 @@
 
 import { parentPort, workerData } from "node:worker_threads";
 
-import { slugifyMethod } from "@codeflow/mcp";
+import { slugifyMethod } from "@codeflow-team/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";

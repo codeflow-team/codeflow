@@ -50,18 +50,18 @@ pnpm + Turborepo monorepo. Four published packages, plus an examples package and
 
 ```text
 packages/
-├── core/      @codeflow/core   — browser-safe, no Node APIs
-├── react/     @codeflow/react
-├── mcp/       @codeflow/mcp
-├── cli/       @codeflow/cli    — bin `codeflow`; Node-only: init, generate, check
-└── examples/  @codeflow/examples — example flow corpus used at real scale
+├── core/      @codeflow-team/core   — browser-safe, no Node APIs
+├── react/     @codeflow-team/react
+├── mcp/       @codeflow-team/mcp
+├── cli/       @codeflow-team/cli    — bin `codeflow`; Node-only: init, generate, check
+└── examples/  @codeflow-team/examples — example flow corpus used at real scale
 apps/
 └── demo/      the demo app the UI e2e checklist runs against
 ```
 
 `cli` is a separate package because it needs fs/watch (Node APIs) — those must not be pulled into core, which has to run in a browser. The CLI provides: `codeflow init` (scaffold a workspace), `codeflow generate` (emit `generated/*.d.ts` from the config/registry, plus `prompts/flow-style.md`; `--agent-md` also prints the `CLAUDE.md`/`AGENTS.md` section that points an agent at them), and `codeflow check` (walk the `flows/` directory, analyze each flow, report diagnostics workspace-wide — this is the mechanism that catches cross-flow breakage when a tool or a library function changes or disappears).
 
-### `@codeflow/core`
+### `@codeflow-team/core`
 
 The whole engine, no React dependency, runs in both Node and the browser:
 
@@ -75,7 +75,7 @@ The whole engine, no React dependency, runs in both Node and the browser:
 
 Internally it is split into modules along exactly those lines (`core/src/{model,parser,analyzer,mapper,patcher,registry}`), but **not into separate packages** — these parts change APIs together, constantly, in the early phase, and splitting them would only create friction. After 1.0, once the APIs settle, they can be split off gradually (parser, analyzer, patcher...) without changing the public API.
 
-### `@codeflow/react`
+### `@codeflow-team/react`
 
 The UI layer:
 
@@ -85,7 +85,7 @@ The UI layer:
 - Monaco code view / custom-code editor / diff view;
 - providers, hooks, state sync with core.
 
-### `@codeflow/mcp`
+### `@codeflow-team/mcp`
 
 An optional adapter: MCP tool discovery → `ToolDefinition` → registry. Core does not depend on MCP.
 
@@ -113,7 +113,7 @@ In the MVP, `update` is a full re-parse. The contract does not change when the i
 The `flow` object that appears in examples throughout the specs (`flow.analyze`, `flow.patchNode`, `flow.validate`, `flow.buildGenerationContext`) is a **session**:
 
 ```ts
-import { createCodeFlow } from "@codeflow/core";
+import { createCodeFlow } from "@codeflow-team/core";
 
 const flow = createCodeFlow({
   registry,                    // required — the analyzer needs the registry (04 §1)

@@ -1,7 +1,7 @@
 name: Deploy demo
 
 # The demo is a static bundle: analyze, the graph, the inspector and the patch
-# engine are all `@codeflow/core`, which is browser-safe by design, so the only
+# engine are all `@codeflow-team/core`, which is browser-safe by design, so the only
 # thing a host has to do is serve files. The two server-shaped features degrade
 # explicitly in this build — see apps/demo/src/deployment.ts.
 on:

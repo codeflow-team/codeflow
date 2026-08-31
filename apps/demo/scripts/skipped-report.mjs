@@ -10,8 +10,8 @@
  * shape the runner cannot rewrite safely or a gap worth closing.
  */
 
-import { analyzeSource, createRegistry, nodeRanges } from "@codeflow/core";
-import { EXAMPLES, registryFor } from "@codeflow/examples";
+import { analyzeSource, createRegistry, nodeRanges } from "@codeflow-team/core";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
 const { instrument } = await import(new URL("../server/instrument.ts", import.meta.url).href);
 for (const ex of EXAMPLES) {
   const { tools, functions } = registryFor(ex);

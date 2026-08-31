@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { WorkflowGraph } from "@codeflow/core";
+import type { WorkflowGraph } from "@codeflow-team/core";
 import type { DisclosureMode } from "../flow/summary.js";
 import type { LayoutDirection } from "./elk-graph.js";
 import type { CollapseView } from "../flow/collapse.js";

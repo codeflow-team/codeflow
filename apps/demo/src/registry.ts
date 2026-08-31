@@ -11,7 +11,7 @@
  * examples package (or, until it lands, to the local fallback).
  */
 
-import { createRegistry, type RegistryLookup } from "@codeflow/core";
+import { createRegistry, type RegistryLookup } from "@codeflow-team/core";
 import { REGISTRIES, registryFor, type ExampleRegistry, type FlowExample } from "./examples-source.js";
 
 const cache = new Map<string, RegistryLookup>();

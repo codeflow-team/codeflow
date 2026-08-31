@@ -19,7 +19,7 @@ import {
   type FunctionLibraryStore,
   type RemoveFunctionOptions,
   type SaveFunctionOptions,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 import {
   DEFAULT_MODULE_PATH,
   kebabCase,

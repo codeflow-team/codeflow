@@ -101,7 +101,7 @@ jobs:
             #
             # Not the repository's own .npmrc: pnpm discards an entire .npmrc it
             # cannot resolve an env placeholder in, which would take the
-            # `@codeflow:registry` line down with it for every contributor who
+            # `@codeflow-team:registry` line down with it for every contributor who
             # has no NPM_TOKEN. Verified, not assumed.
             #
             # `NPM_CONFIG_USERCONFIG` is honoured in case something upstream
@@ -122,7 +122,7 @@ jobs:
 
           published=0
           skipped=""
-          # Order matters: the other four depend on @codeflow/core, so it has to
+          # Order matters: the other four depend on @codeflow-team/core, so it has to
           # be on the registry before they are installable. Within one run that
           # is just this loop's order.
           for p in core react cli mcp examples; do

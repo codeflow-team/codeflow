@@ -38,7 +38,7 @@ import type {
   createRegistry,
   renderDiagnosticsFeedback,
   renderSystemPrompt,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 import type { mcpToolsToDefinitions } from "../../src/adapter.js";
 import type { McpTool } from "../../src/types.js";
@@ -48,7 +48,7 @@ export interface McpAdapterModule {
   mcpToolsToDefinitions: typeof mcpToolsToDefinitions;
 }
 
-/** The slice of `@codeflow/core` the suite needs, from `src` (vitest) or `dist` (runner). */
+/** The slice of `@codeflow-team/core` the suite needs, from `src` (vitest) or `dist` (runner). */
 export interface CodeFlowModule {
   createRegistry: typeof createRegistry;
   createCodeFlow: typeof createCodeFlow;

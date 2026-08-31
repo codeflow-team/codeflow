@@ -4,10 +4,10 @@
  * Source: `packages/mcp/test/real-schemas/everything.json` (a verbatim
  * `tools/list` payload from the real server), run through
  * `mcpToolsToDefinitions` with namespace `"everything"`.
- * Regenerate with `pnpm --filter @codeflow/examples embed`.
+ * Regenerate with `pnpm --filter @codeflow-team/examples embed`.
  */
 
-import type { ToolDefinition } from "@codeflow/core";
+import type { ToolDefinition } from "@codeflow-team/core";
 
 export const EVERYTHING_TOOLS: ToolDefinition[] = [
     {

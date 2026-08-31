@@ -10,8 +10,8 @@
  * browser in the way.
  */
 
-import { analyzeSource, createRegistry, nodeRanges } from "@codeflow/core";
-import { EXAMPLES, registryFor } from "@codeflow/examples";
+import { analyzeSource, createRegistry, nodeRanges } from "@codeflow-team/core";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
 const { startRun } = await import(new URL("/Users/lucas/code/codeflow/apps/demo/server/runner.ts", import.meta.url).href);
 const ex = EXAMPLES.find(e=>e.id===process.argv[2]);
 const { tools, functions } = registryFor(ex);

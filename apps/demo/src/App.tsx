@@ -14,7 +14,7 @@
  * debounced re-analyze instead — the same path an AI or an editor outside
  * CodeFlow would take. So does anything the chat panel writes.
  *
- * Examples come from `examples-source.ts`, which is the `@codeflow/examples`
+ * Examples come from `examples-source.ts`, which is the `@codeflow-team/examples`
  * contract (or the local stand-in for it); each one names the registry it is
  * analyzed against, so switching flows switches sessions.
  *
@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createCodeFlow, traceIdentity, type PatchResult, type WorkflowGraph, type WorkflowNode } from "@codeflow/core";
+import { createCodeFlow, traceIdentity, type PatchResult, type WorkflowGraph, type WorkflowNode } from "@codeflow-team/core";
 import {
   Badge,
   Button,
@@ -46,7 +46,7 @@ import {
   useTheme,
   useToast,
   type RunView,
-} from "@codeflow/react";
+} from "@codeflow-team/react";
 import {
   ChevronDown,
   CircleAlert,
@@ -1373,7 +1373,7 @@ pnpm dev`}
           <p className="m-0 text-ink-faint">
             What you are looking at is not a mock-up of the product with the interesting part
             missing: analyze, the graph, the inspector, editing and the byte-for-byte diff are all{" "}
-            <code className="font-mono text-[11px]">@codeflow/core</code>, which is browser-safe by
+            <code className="font-mono text-[11px]">@codeflow-team/core</code>, which is browser-safe by
             design and is running here. Only executing a flow against real MCP servers needs a
             machine.
           </p>

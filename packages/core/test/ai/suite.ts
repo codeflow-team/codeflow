@@ -26,7 +26,7 @@ import type {
   Registry,
 } from "../../src/index.js";
 
-/** The slice of `@codeflow/core` the suite needs, from `src` or from `dist`. */
+/** The slice of `@codeflow-team/core` the suite needs, from `src` or from `dist`. */
 export interface CodeFlowModule {
   createRegistry: typeof createRegistry;
   createCodeFlow: typeof createCodeFlow;

@@ -15,7 +15,7 @@
  * set and drawing a diagram that never existed.
  */
 
-import { createRegistry, type RegistryLookup } from "@codeflow/core";
+import { createRegistry, type RegistryLookup } from "@codeflow-team/core";
 import { REGISTRIES, type ExampleRegistry, type FlowExample } from "./examples-source.js";
 import { registryInstance } from "./registry.js";
 import { activeRegistry, type McpServersState } from "./mcp/use-mcp-servers.js";

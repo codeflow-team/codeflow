@@ -23,8 +23,8 @@ import {
   useCodeFlow,
   worstSeverity,
   type DisclosureMode,
-} from "@codeflow/react";
-import type { WorkflowNode } from "@codeflow/core";
+} from "@codeflow-team/react";
+import type { WorkflowNode } from "@codeflow-team/core";
 import { ListTree, Search, X } from "lucide-react";
 
 export interface OutlinePanelProps {

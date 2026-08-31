@@ -14,12 +14,12 @@ First public release. Everything below already existed and was tested before
 this tag; `0.1.0` is the point at which it was licensed, packaged and published,
 not the point at which it was written.
 
-Published packages — `@codeflow/core`, `@codeflow/react`, `@codeflow/cli`,
-`@codeflow/mcp`, `@codeflow/examples`. `apps/demo` is not published.
+Published packages — `@codeflow-team/core`, `@codeflow-team/react`, `@codeflow-team/cli`,
+`@codeflow-team/mcp`, `@codeflow-team/examples`. `apps/demo` is not published.
 
 ### Added
 
-- **`@codeflow/core`** — the whole read/write loop over a TypeScript flow file:
+- **`@codeflow-team/core`** — the whole read/write loop over a TypeScript flow file:
   - parser and analyzer covering the supported constructs, including
     `try`/`catch`/`finally`, `while`, and jump statements;
   - a workflow graph with deterministic, stable node identity and provenance,
@@ -31,18 +31,18 @@ Published packages — `@codeflow/core`, `@codeflow/react`, `@codeflow/cli`,
   - typed API codegen: a registry becomes `tools.d.ts` and `lib.d.ts`.
   - Browser-safe by construction: nothing in the package imports a Node API,
     and the core never executes the code it reads (invariant I7).
-- **`@codeflow/react`** — the canvas: React Flow nodes with nested ELK
+- **`@codeflow-team/react`** — the canvas: React Flow nodes with nested ELK
   hierarchical layout, three disclosure levels, a node inspector that edits
   through the patch engine, a Monaco code panel with two-way selection sync,
   diff preview, conflict handling, a diagnostics panel, and light/dark themes.
   Ships `styles.css` and `tokens.css`.
-- **`@codeflow/cli`** — `codeflow init`, `codeflow generate`, `codeflow check`,
+- **`@codeflow-team/cli`** — `codeflow init`, `codeflow generate`, `codeflow check`,
   over a `codeflow.config.ts` workspace, with a file-backed function library in
   `lib/` and a usage index.
-- **`@codeflow/mcp`** — MCP JSON Schema to `ToolDefinition`, with safe name
+- **`@codeflow-team/mcp`** — MCP JSON Schema to `ToolDefinition`, with safe name
   slugging, cursor paging and inline `$ref` resolution. No runtime dependency on
   the MCP SDK; it is an optional peer.
-- **`@codeflow/examples`** — 11 example flows (four of them 261–345 lines) and
+- **`@codeflow-team/examples`** — 11 example flows (four of them 261–345 lines) and
   the registries they run against, built from 65 tool schemas captured from
   eight real MCP servers.
 
@@ -92,13 +92,13 @@ missing feature:
 
 ### Requirements
 
-- Node.js 20 or newer for `@codeflow/core`, `@codeflow/react`, `@codeflow/mcp`
-  and `@codeflow/examples`.
-- **Node.js 22.18+ or 23.6+ for `@codeflow/cli`**, which loads
+- Node.js 20 or newer for `@codeflow-team/core`, `@codeflow-team/react`, `@codeflow-team/mcp`
+  and `@codeflow-team/examples`.
+- **Node.js 22.18+ or 23.6+ for `@codeflow-team/cli`**, which loads
   `codeflow.config.ts` with Node's own type stripping rather than adding a build
   dependency to your project. Earlier versions fail with
   `ERR_UNKNOWN_FILE_EXTENSION`.
-- `@codeflow/react` needs React 18.2+ or 19 as a peer.
+- `@codeflow-team/react` needs React 18.2+ or 19 as a peer.
 
 ### License
 

@@ -1,6 +1,6 @@
-# `@codeflow/cli`
+# `@codeflow-team/cli`
 
-The Node-only half of CodeFlow. It owns everything that touches the filesystem — the workspace scaffold, the generated type declarations, the function library stored in `lib/`, and a workspace-wide check you can put in CI — so that [`@codeflow/core`](../core/README.md) can stay browser-safe.
+The Node-only half of CodeFlow. It owns everything that touches the filesystem — the workspace scaffold, the generated type declarations, the function library stored in `lib/`, and a workspace-wide check you can put in CI — so that [`@codeflow-team/core`](../core/README.md) can stay browser-safe.
 
 Every command is also a plain function, so a host app can run the same generate pass without shelling out.
 
@@ -11,7 +11,7 @@ See the [root README](../../README.md) for what CodeFlow is.
 Prepared for npm as v0.1.0. Until the first release lands, the binary is `packages/cli/dist/cli.js` after `pnpm build`, and the package is added as a dependency the workspace way:
 
 ```jsonc
-"dependencies": { "@codeflow/cli": "workspace:*" }
+"dependencies": { "@codeflow-team/cli": "workspace:*" }
 ```
 
 Needs Node 22.18+ or 23.6+ — `codeflow.config.ts` is loaded with Node's own type-stripping rather than a bundler, so the CLI adds no build dependency to your project.
@@ -74,7 +74,7 @@ ok — 1 flow checked, 0 warnings
 | `defineConfig` | Typed `codeflow.config.ts` authoring. |
 
 ```js
-import { check, formatCheck } from "@codeflow/cli";
+import { check, formatCheck } from "@codeflow-team/cli";
 
 const result = await check({ cwd: process.cwd() });
 console.log(formatCheck(result).join("\n"));   // formatCheck returns lines
@@ -90,7 +90,7 @@ process.exit(result.ok ? 0 : 1);
 ## Tests
 
 ```bash
-pnpm --filter @codeflow/cli test   # 63 tests
+pnpm --filter @codeflow-team/cli test   # 63 tests
 ```
 
 ## License

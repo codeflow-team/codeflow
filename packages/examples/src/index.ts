@@ -1,5 +1,5 @@
 /**
- * `@codeflow/examples` — the flows CodeFlow is demonstrated and stress-tested
+ * `@codeflow-team/examples` — the flows CodeFlow is demonstrated and stress-tested
  * with, plus the registries they are written against.
  *
  * Two exports carry everything: `EXAMPLES` is the gallery (metadata + source),
@@ -7,8 +7,8 @@
  * so a caller never has to know the key.
  *
  * ```ts
- * import { EXAMPLES, registryFor } from "@codeflow/examples";
- * import { createCodeFlow, createRegistry } from "@codeflow/core";
+ * import { EXAMPLES, registryFor } from "@codeflow-team/examples";
+ * import { createCodeFlow, createRegistry } from "@codeflow-team/core";
  *
  * const example = EXAMPLES.find((e) => e.id === "repo-triage-bot")!;
  * const { tools, functions } = registryFor(example);
@@ -16,7 +16,7 @@
  * const graph = await session.analyze(example.source, { file: `${example.id}.flow.ts` });
  * ```
  *
- * The only runtime dependency is `@codeflow/core`. The MCP schemas the
+ * The only runtime dependency is `@codeflow-team/core`. The MCP schemas the
  * registries are built from were converted once, at authoring time, by
  * `scripts/generate-tools.mjs` — see `src/tools/`.
  */

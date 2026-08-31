@@ -263,7 +263,7 @@ export const EXAMPLES: FlowExample[] = SEEDS.map((seed) => {
   const source = SOURCES[seed.id];
   if (source === undefined) {
     throw new Error(
-      `No source embedded for example "${seed.id}" — add flows/${seed.id}.flow.ts and run \`pnpm --filter @codeflow/examples embed\`.`,
+      `No source embedded for example "${seed.id}" — add flows/${seed.id}.flow.ts and run \`pnpm --filter @codeflow-team/examples embed\`.`,
     );
   }
   return { ...seed, lines: countLines(source), source };

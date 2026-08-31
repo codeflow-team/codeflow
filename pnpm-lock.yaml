@@ -23,16 +23,16 @@ importers:
 
   apps/demo:
     dependencies:
-      '@codeflow/core':
+      '@codeflow-team/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@codeflow/examples':
+      '@codeflow-team/examples':
         specifier: workspace:*
         version: link:../../packages/examples
-      '@codeflow/mcp':
+      '@codeflow-team/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
-      '@codeflow/react':
+      '@codeflow-team/react':
         specifier: workspace:*
         version: link:../../packages/react
       '@monaco-editor/react':
@@ -84,7 +84,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@codeflow/core':
+      '@codeflow-team/core':
         specifier: workspace:^
         version: link:../core
     devDependencies:
@@ -110,11 +110,11 @@ importers:
 
   packages/examples:
     dependencies:
-      '@codeflow/core':
+      '@codeflow-team/core':
         specifier: workspace:^
         version: link:../core
     devDependencies:
-      '@codeflow/mcp':
+      '@codeflow-team/mcp':
         specifier: workspace:*
         version: link:../mcp
       typescript:
@@ -126,7 +126,7 @@ importers:
 
   packages/mcp:
     dependencies:
-      '@codeflow/core':
+      '@codeflow-team/core':
         specifier: workspace:^
         version: link:../core
     devDependencies:
@@ -142,7 +142,7 @@ importers:
       '@base-ui-components/react':
         specifier: 1.0.0-rc.0
         version: 1.0.0-rc.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@codeflow/core':
+      '@codeflow-team/core':
         specifier: workspace:^
         version: link:../core
       '@monaco-editor/react':

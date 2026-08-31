@@ -23,8 +23,8 @@
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
 
-import { analyzeSource, createRegistry, nodeRanges } from "@codeflow/core";
-import { EXAMPLES, registryFor } from "@codeflow/examples";
+import { analyzeSource, createRegistry, nodeRanges } from "@codeflow-team/core";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
 
 import { instrument } from "../server/instrument.ts";
 import { execute, rangesFor, type Outcome } from "./harness.ts";

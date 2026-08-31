@@ -30,7 +30,7 @@
  * needs the parts a `FlowExample` has no field for.
  */
 
-import type { ConformanceLevel } from "@codeflow/core";
+import type { ConformanceLevel } from "@codeflow-team/core";
 import { REGISTRIES, type FlowExample } from "./examples-source.js";
 
 /** `registryChoice` when the flow was written against the visitor's MCP servers. */
@@ -181,7 +181,7 @@ export function saveMyFlows(flows: readonly MyFlow[]): StorageOutcome {
 /* the shape the app already reads                                             */
 /* -------------------------------------------------------------------------- */
 
-/** A trailing newline is not a line — the same rule `@codeflow/examples` uses. */
+/** A trailing newline is not a line — the same rule `@codeflow-team/examples` uses. */
 export function countLines(source: string): number {
   return source.replace(/\n$/, "").split("\n").length;
 }

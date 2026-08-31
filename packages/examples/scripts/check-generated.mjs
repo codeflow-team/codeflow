@@ -47,7 +47,7 @@ if (stale.length > 0) {
       "Generated files are stale:",
       ...stale.map((file) => `  ${file}`),
       "",
-      "Regenerate with: pnpm --filter @codeflow/examples embed",
+      "Regenerate with: pnpm --filter @codeflow-team/examples embed",
     ].join("\n"),
   );
   process.exit(1);

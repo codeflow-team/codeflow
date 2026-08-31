@@ -12,8 +12,8 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
-import type { RegistryLookup } from "@codeflow/core";
-import { Badge, Button, Input, Kbd, Modal, Notice, cn } from "@codeflow/react";
+import type { RegistryLookup } from "@codeflow-team/core";
+import { Badge, Button, Input, Kbd, Modal, Notice, cn } from "@codeflow-team/react";
 import {
   BookOpen,
   Boxes,

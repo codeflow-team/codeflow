@@ -1,5 +1,5 @@
 {
-  "name": "@codeflow/cli",
+  "name": "@codeflow-team/cli",
   "version": "0.1.0",
   "description": "The `codeflow` command — scaffold a flow workspace, generate typed tool/library declarations from codeflow.config.ts, and check flows against the contract.",
   "keywords": [
@@ -54,7 +54,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@codeflow/core": "workspace:^"
+    "@codeflow-team/core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

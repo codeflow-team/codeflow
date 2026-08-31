@@ -23,7 +23,7 @@
  */
 
 import type { ReactNode } from "react";
-import type { Schema } from "@codeflow/core";
+import type { Schema } from "@codeflow-team/core";
 
 /**
  * Everything a renderer is told about the value it is about to draw.

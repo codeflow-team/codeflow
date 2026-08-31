@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow/core";
+import { createCodeFlow, createRegistry, type WorkflowGraph } from "@codeflow-team/core";
 import { nodeAtOffset } from "../../src/graph/index.js";
 
 const SOURCE = `import type { Tools } from "../generated/tools";

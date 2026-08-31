@@ -31,7 +31,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import type { WorkflowNode } from "@codeflow/core";
+import type { WorkflowNode } from "@codeflow-team/core";
 import { useCodeFlow } from "../context/hooks.js";
 import { nodeCaption } from "../flow/summary.js";
 import type { DataLink, NodeDataLinks } from "../flow/data-links.js";

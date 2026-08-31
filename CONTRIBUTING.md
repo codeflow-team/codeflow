@@ -11,7 +11,7 @@ rest of it is.
 
 ### 1. The core never executes user code — invariant I7
 
-`@codeflow/core` reads a flow file, understands it, and writes bytes back into
+`@codeflow-team/core` reads a flow file, understands it, and writes bytes back into
 it. It never runs it. No `eval`, no `new Function`, no dynamic `import()` of
 user source, anywhere in `packages/core`. See
 [`docs/11-testing.md`](docs/11-testing.md) §2, invariant I7.
@@ -56,7 +56,7 @@ cd codeflow
 pnpm install
 ```
 
-One caveat worth knowing before you file a bug about it: **`@codeflow/cli` needs
+One caveat worth knowing before you file a bug about it: **`@codeflow-team/cli` needs
 Node 22.18+ or 23.6+**, not 20. It loads `codeflow.config.ts` with Node's native
 TypeScript type stripping so that a CodeFlow workspace needs no build step of
 its own; on an older Node the config import fails with
@@ -100,13 +100,13 @@ node packages/core/scripts/ai-eval.mjs
 
 ```text
 packages/
-  core/       @codeflow/core      model, registry, parser, analyzer, patch engine,
+  core/       @codeflow-team/core      model, registry, parser, analyzer, patch engine,
                                   graph diff, codegen. Browser-safe. No Node APIs.
-  react/      @codeflow/react     the canvas: React Flow + ELK layout, inspector,
+  react/      @codeflow-team/react     the canvas: React Flow + ELK layout, inspector,
                                   Monaco panel, diagnostics, styles.css/tokens.css
-  cli/        @codeflow/cli       the `codeflow` binary: init / generate / check
-  mcp/        @codeflow/mcp       MCP tool schemas -> ToolDefinition
-  examples/   @codeflow/examples  11 example flows + the registries they need
+  cli/        @codeflow-team/cli       the `codeflow` binary: init / generate / check
+  mcp/        @codeflow-team/mcp       MCP tool schemas -> ToolDefinition
+  examples/   @codeflow-team/examples  11 example flows + the registries they need
 apps/
   demo/       (private)           the app at localhost:5173; also the e2e target
 docs/                             the design specs, numbered 00-11
@@ -115,7 +115,7 @@ e2e/                              browser e2e reports and evidence
 
 The dependency direction is one way: `core` depends on nothing in the workspace,
 everything else depends on `core`, and nothing depends on `react`, `cli` or
-`demo`. `core`'s stress suite reads `@codeflow/examples` *from source* through a
+`demo`. `core`'s stress suite reads `@codeflow-team/examples` *from source* through a
 path mapping rather than depending on it, because a real dependency would make
 the build graph cyclic.
 
@@ -130,8 +130,8 @@ long as it is deliberate.
 Vitest everywhere. Per package:
 
 ```bash
-pnpm --filter @codeflow/core test
-pnpm --filter @codeflow/core test -- --watch
+pnpm --filter @codeflow-team/core test
+pnpm --filter @codeflow-team/core test -- --watch
 ```
 
 The layers, from [`docs/11-testing.md`](docs/11-testing.md) §3:
@@ -182,9 +182,9 @@ Two things to know if you ever publish by hand:
 - Use **`pnpm pack` / `pnpm publish`, never `npm pack` / `npm publish` from a
   package directory.** Only pnpm rewrites the `workspace:^` specifiers into real
   version ranges; npm would upload a manifest that says
-  `"@codeflow/core": "workspace:^"`, which no consumer can install.
+  `"@codeflow-team/core": "workspace:^"`, which no consumer can install.
 - The release workflow needs a repository secret named `NPM_TOKEN` (an npm
-  automation token with publish rights on the `@codeflow` scope).
+  automation token with publish rights on the `@codeflow-team` scope).
 
 If manual version bumps become tedious, `pnpm -r exec npm version patch` is the
 next step up, and [changesets](https://github.com/changesets/changesets) after

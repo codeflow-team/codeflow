@@ -29,17 +29,17 @@ Demo preload ví dụ canonical: xem graph → click node → sửa channel tron
 
 | Package | Nội dung | Specs |
 |---|---|---|
-| `@codeflow/core` | model + registry + codegen tools.d.ts/lib.d.ts · parser/analyzer (mọi construct MVP kể cả try/catch/while/jump) · stable identity + provenance · graph diff · patch engine transactional byte-for-byte · validate L0/L1/L2 + GenerationContext | 03,04,05,06,10 |
-| `@codeflow/react` | React Flow canvas + ELK nested · inspector editing đầy đủ · palette · Monaco sync 2 chiều · diff preview · conflict flow · diagnostics · 3 mức disclosure · dark/light | 07 |
-| `@codeflow/cli` | init/generate/check · FileFunctionLibraryStore trên lib/ · usage index | 02,05,10 |
-| `@codeflow/mcp` | MCP JSON Schema → ToolDefinition (slugging tên an toàn, cursor paging, zero runtime dep) | 05 §3 |
+| `@codeflow-team/core` | model + registry + codegen tools.d.ts/lib.d.ts · parser/analyzer (mọi construct MVP kể cả try/catch/while/jump) · stable identity + provenance · graph diff · patch engine transactional byte-for-byte · validate L0/L1/L2 + GenerationContext | 03,04,05,06,10 |
+| `@codeflow-team/react` | React Flow canvas + ELK nested · inspector editing đầy đủ · palette · Monaco sync 2 chiều · diff preview · conflict flow · diagnostics · 3 mức disclosure · dark/light | 07 |
+| `@codeflow-team/cli` | init/generate/check · FileFunctionLibraryStore trên lib/ · usage index | 02,05,10 |
+| `@codeflow-team/mcp` | MCP JSON Schema → ToolDefinition (slugging tên an toàn, cursor paging, zero runtime dep) | 05 §3 |
 | `apps/demo` | app demo đầy đủ vòng xem + sửa | — |
 
 ## 🚀 Update ~15:00 — QUY MÔ THẬT: flow vài trăm dòng, gallery, chat AI, eval lớn (commits `3d5484d` → `fa5bab4`)
 
-**Tests: 1005 → 1505.** 6 package (thêm `@codeflow/examples`), demo có test riêng.
+**Tests: 1005 → 1505.** 6 package (thêm `@codeflow-team/examples`), demo có test riêng.
 
-### Flow stress-test thật (`@codeflow/examples`)
+### Flow stress-test thật (`@codeflow-team/examples`)
 11 example, 4 cái **261–345 dòng**, dùng **65 tool MCP thật** từ 8 server. Flow lớn nhất: 345 dòng → **101 node, 286 edge, analyze 21.6ms** (ngân sách specs 500ms → dư 20×). Tỉ lệ node có nghĩa **79%**, toàn bộ diagnostic là `info` (code node hợp lệ), 0 error/warning.
 → Bug thật: `isFieldValue` chỉ kiểm `kind` không kiểm payload → sai encoding thì **ghi `undefined` đè giá trị user rồi báo thành công**. Đã fix.
 
@@ -126,7 +126,7 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 - E2e Sonnet chạy đủ 12 mục checklist theo 11 §3.5: **12/12 PASS, không bug chặn release**. Report: `e2e/report.md`, 31 screenshots ở `e2e/screenshots/` (19MB, để ngoài git).
 - ⚠️ **Claude in Chrome không dùng được cho subagent khi m ngủ**: extension yêu cầu chọn 1 trong 3 browser đang kết nối qua hộp thoại tương tác → agent fallback sang chrome-devtools MCP (vẫn Chrome thật, evidence đầy đủ). Nếu m muốn chạy đúng qua Claude in Chrome extension: lúc m thức, bảo t chạy lại — chỉ cần m chọn browser 1 lần.
 - 2 ghi nhận phụ vào backlog (không block): cursor cột 1 chọn container cha thay vì statement; inspector inputs thiếu id/name (a11y).
-- **Gap cuối đang đóng** (agent Opus đang chạy): `@codeflow/mcp` adapter (MVP scope 08 §1) + `codeflow check` (đang là stub). Xong 2 cái này là MVP đủ 100% theo specs.
+- **Gap cuối đang đóng** (agent Opus đang chạy): `@codeflow-team/mcp` adapter (MVP scope 08 §1) + `codeflow check` (đang là stub). Xong 2 cái này là MVP đủ 100% theo specs.
 
 ## Update ~04:50 — Phase 6b (EDITING UI) nghiệm thu ✅ (commit `5f76f38`) → thả Phase 7 e2e
 
@@ -160,7 +160,7 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 
 ## Update ~02:15 — Phase 6a (REACT UI + DEMO) nghiệm thu ✅ (commit `b10d54c`)
 
-- `@codeflow/react` xong: canvas React Flow v12 + ELK hierarchical (loop/try là container thật), inspector với `{{ }}` display, Monaco sync 2 chiều, diagnostics panel, 3 mức progressive disclosure, light/dark. 37 tests + build sạch (t verify lại).
+- `@codeflow-team/react` xong: canvas React Flow v12 + ELK hierarchical (loop/try là container thật), inspector với `{{ }}` display, Monaco sync 2 chiều, diagnostics panel, 3 mức progressive disclosure, light/dark. 37 tests + build sạch (t verify lại).
 - **Demo app**: `pnpm dev` → http://localhost:5173 — preload sẵn ví dụ canonical, có thêm example try/catch và example degradation (unknown/code/hidden-call). Đây là app cho e2e Claude in Chrome.
 - Agent đã tự verify TRONG BROWSER THẬT (Chrome DevTools): graph khớp 07 §6 từng node, sync chọn node↔highlight code chạy cả 2 chiều, và tự tìm+fix 1 bug thật (Monaco cursor listener bắt stale graph).
 - Editing đang DISABLED có chủ đích (tooltip "Editing lands with the patch engine") — sẽ wire ở Phase 6b sau khi Phase 4 xong.
@@ -179,14 +179,14 @@ File này là nhật ký ngắn các quyết định t tự đưa ra trong lúc 
 
 ## Update ~00:45 — CLI nghiệm thu ✅ (commit `2e06ca0`)
 
-- `@codeflow/cli` xong: FileFunctionLibraryStore trên `lib/` (metadata nằm trong header comment của chính file — không có bản sao thứ hai), `codeflow generate` (load `codeflow.config.ts` bằng Node 24 type-stripping, không thêm dep), `codeflow init` scaffold workspace mẫu. 46/46 tests, tsc sạch.
+- `@codeflow-team/cli` xong: FileFunctionLibraryStore trên `lib/` (metadata nằm trong header comment của chính file — không có bản sao thứ hai), `codeflow generate` (load `codeflow.config.ts` bằng Node 24 type-stripping, không thêm dep), `codeflow init` scaffold workspace mẫu. 46/46 tests, tsc sạch.
 - **CLI agent bắt được 1 bug thật trong specs** (có từ draft GPT v0.1): `files.some(isAuthChange)` (ví dụ canonical) mâu thuẫn signature `isAuthChange(files: File[])` — callback của `.some` nhận 1 phần tử. **T quyết: đổi thành per-file predicate `isAuthChange(file: File)`** (giữ nguyên ví dụ canonical + quy tắc sugar, chỉ sửa definition 05 §4 + templates/tests CLI). Đã sửa, test lại xanh.
 - Deviation đáng chú ý của CLI (đều hợp lý, chi tiết trong transcript): scaffold tsconfig dùng `moduleResolution: "Bundler"` (vì flow contract import không đuôi); `rename` trong file-store có sửa tên declaration trong chính file function (để workspace còn type-check) nhưng KHÔNG sửa flow đang import (đúng specs); vitest chưa vào devDeps của cli (cấm sửa lockfile khi agent khác đang chạy) — **TODO: `pnpm install` bổ sung sau khi Phase 2 xong**.
 
 ## Trạng thái lúc m đi ngủ (2026-08-23 ~00:30)
 
 - ✅ **Phase 0**: môi trường OK; model AI `stealth/ox-alpha` (OpenRouter) đã test — chạy được, cost = 0. Key lưu ở `.env` (đã gitignore). Lưu ý: là reasoning model → khi gọi phải để `max_tokens` cao.
-- ✅ **Phase 1 nghiệm thu**: monorepo 4 packages; `@codeflow/core` có model types + registry + codegen; 106/106 tests xanh, tsc sạch, browser-safe. T đã smoke-test codegen bằng tay từ dist — đúng shape specs.
+- ✅ **Phase 1 nghiệm thu**: monorepo 4 packages; `@codeflow-team/core` có model types + registry + codegen; 106/106 tests xanh, tsc sạch, browser-safe. T đã smoke-test codegen bằng tay từ dist — đúng shape specs.
 - 🔄 **Phase 2 đang chạy** (Opus): analyzer + 27 fixture cases khó (code→workflow).
 - 🔄 **CLI đang chạy** (Opus, song song, phạm vi tách biệt): FileFunctionLibraryStore + `codeflow generate/init`.
 

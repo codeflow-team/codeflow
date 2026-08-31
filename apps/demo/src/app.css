@@ -1,13 +1,13 @@
 /*
  * Demo shell.
  *
- * Component styling lives in `@codeflow/react/styles.css`; this file is the
+ * Component styling lives in `@codeflow-team/react/styles.css`; this file is the
  * app's own chrome, built with the same tokens so nothing has a second palette.
  * Preflight lives here rather than in the library — a component library has no
  * business resetting its host's page, but an app does own one.
  */
 
-/* Must be the first statement — see the note in `@codeflow/react`'s styles.css. */
+/* Must be the first statement — see the note in `@codeflow-team/react`'s styles.css. */
 @layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);

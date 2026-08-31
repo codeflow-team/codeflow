@@ -19,7 +19,7 @@ import type {
   TraceMatch,
   WorkflowGraph,
   WorkflowNode,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 import type { GraphIndex } from "../graph/index.js";
 import type { PreviewRenderer } from "../editor/preview.js";
 import type { DisclosureMode } from "../flow/summary.js";

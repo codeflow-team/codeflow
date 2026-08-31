@@ -1,11 +1,11 @@
 /**
  * Async ELK run (07 §1: "chạy async", §7: "layout không block interaction").
  *
- * `elkjs` is imported lazily so importing `@codeflow/react` for the pure
+ * `elkjs` is imported lazily so importing `@codeflow-team/react` for the pure
  * adapters — or unit-testing them — never pulls in the layout engine.
  */
 
-import type { WorkflowGraph } from "@codeflow/core";
+import type { WorkflowGraph } from "@codeflow-team/core";
 import type { ELK as ElkInstance } from "elkjs/lib/elk-api.js";
 import { collectLayout, toElkGraph, type ElkGraphOptions, type LayoutBox } from "./elk-graph.js";
 

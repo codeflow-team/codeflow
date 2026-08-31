@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import * as cf from "@codeflow/core";
+import * as cf from "@codeflow-team/core";
 import * as adapter from "../../src/adapter.js";
 
 import {

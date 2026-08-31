@@ -34,7 +34,7 @@ import {
   type Diagnostic,
   type RegistryLookup,
   type WorkflowGraph,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 import { callModel, splitAnswer, type AiMode, type ChatMessage } from "./ai.js";
 import { argumentTypeProblems } from "./argument-types.js";
 

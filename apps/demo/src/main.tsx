@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 
 import "./monaco.js";
 import "@xyflow/react/dist/style.css";
-import "@codeflow/react/styles.css";
+import "@codeflow-team/react/styles.css";
 import "./app.css";
 
 import { Root } from "./Root.js";

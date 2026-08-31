@@ -22,7 +22,7 @@ import {
   type GraphChange,
   type PatchResult,
   type WorkflowGraph,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 
 const SOURCE = `import type { Tools } from "../generated/tools";
 
@@ -147,7 +147,7 @@ describe("the canvas highlights only what actually changed", () => {
   it.todo(
     "DOM-level: after `patchNode` resolves, the canvas node for the edited step carries `is-changed` " +
       "and its unedited siblings do not. Needs a DOM to run the provider's state updates; jsdom is not " +
-      "a dependency of @codeflow/react and adding one is out of scope for this pass. Until then the " +
+      "a dependency of @codeflow-team/react and adding one is out of scope for this pass. Until then the " +
       "browser checklist (11 §3.5) covers it and the rule above covers the data it reads.",
   );
 });

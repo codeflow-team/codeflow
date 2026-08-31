@@ -4,10 +4,10 @@
  * Source: `packages/mcp/test/real-schemas/context7.json` (a verbatim
  * `tools/list` payload from the real server), run through
  * `mcpToolsToDefinitions` with namespace `"context7"`.
- * Regenerate with `pnpm --filter @codeflow/examples embed`.
+ * Regenerate with `pnpm --filter @codeflow-team/examples embed`.
  */
 
-import type { ToolDefinition } from "@codeflow/core";
+import type { ToolDefinition } from "@codeflow-team/core";
 
 export const CONTEXT7_TOOLS: ToolDefinition[] = [
     {

@@ -1,5 +1,5 @@
 /**
- * The contract `@codeflow/examples` publishes to whoever renders it.
+ * The contract `@codeflow-team/examples` publishes to whoever renders it.
  *
  * A gallery needs two things from an example: something to put on a card
  * (`title`, `summary`, `highlights`) and something to feed the analyzer
@@ -9,7 +9,7 @@
  * built, so a card and the code behind it can never disagree.
  */
 
-import type { FunctionDefinition, ToolDefinition } from "@codeflow/core";
+import type { FunctionDefinition, ToolDefinition } from "@codeflow-team/core";
 
 export type ExampleCategory =
   /** One construct at a time — the shape of a flow, nothing clever. */

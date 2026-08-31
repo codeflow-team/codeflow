@@ -2,7 +2,7 @@
 /**
  * AI conformance eval runner — 11-testing.md §3.6.
  *
- *   pnpm --filter @codeflow/core build   # the script runs against dist
+ *   pnpm --filter @codeflow-team/core build   # the script runs against dist
  *   node scripts/ai-eval.mjs             # all six intents
  *   node scripts/ai-eval.mjs --intent bounded-retry --repeat 3
  *

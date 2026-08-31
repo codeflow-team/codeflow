@@ -59,7 +59,7 @@ export interface NodeDefinition {
   inputSchema?: Schema;
   outputSchema?: Schema;
   editableFields?: EditableFieldInput[];
-  /** Custom React component — registered on the @codeflow/react side. */
+  /** Custom React component — registered on the @codeflow-team/react side. */
   renderer?: NodeRenderer;
   analyzer?: SemanticAnalyzer;
   patcher?: NodePatcher;

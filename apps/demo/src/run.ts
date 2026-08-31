@@ -27,8 +27,8 @@ import {
   type RunEvent,
   type TraceMatch,
   type WorkflowGraph,
-} from "@codeflow/core";
-import { nodeRanges } from "@codeflow/core";
+} from "@codeflow-team/core";
+import { nodeRanges } from "@codeflow-team/core";
 import type { ExampleRegistry } from "./examples-source.js";
 import type { RunServerSpec } from "./mcp/model.js";
 

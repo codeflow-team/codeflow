@@ -6,7 +6,7 @@
  * Pure: the React component only renders what this returns.
  */
 
-import type { EditableField, EditableFieldEditor, RegistryLookup, Schema, WorkflowNode } from "@codeflow/core";
+import type { EditableField, EditableFieldEditor, RegistryLookup, Schema, WorkflowNode } from "@codeflow-team/core";
 import { stringData } from "../graph/index.js";
 import { formatFieldValue, type FieldDisplay } from "./expression.js";
 

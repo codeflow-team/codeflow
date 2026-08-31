@@ -20,7 +20,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { summarizeRun } from "@codeflow/core";
+import { summarizeRun } from "@codeflow-team/core";
 
 import { instrument } from "../server/instrument.ts";
 import { execute, graphFor, instrumentFor, iterationsOf, nodeIdOf, rangesFor } from "./harness.ts";

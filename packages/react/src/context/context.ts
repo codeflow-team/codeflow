@@ -5,7 +5,7 @@
  *
  * 1. `provider.tsx` exports hooks, constants and types alongside the provider
  *    component, so React Fast Refresh cannot treat it as a refresh boundary and
- *    re-executes it on any dependency update (a `@codeflow/core` rebuild while
+ *    re-executes it on any dependency update (a `@codeflow-team/core` rebuild while
  *    the dev server runs is enough).
  * 2. A re-executed module produces a *new* context object. A provider mounted
  *    from the previous instance then publishes on the old object while consumers

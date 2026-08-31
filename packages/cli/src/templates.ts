@@ -12,15 +12,15 @@
  * emit a `.d.ts` naming a type that exists nowhere in the workspace.
  */
 
-import type { FunctionDefinition } from "@codeflow/core";
+import type { FunctionDefinition } from "@codeflow-team/core";
 
 export const CONFIG_TEMPLATE = `// CodeFlow workspace config. The CLI runs this file as a build script (like
 // vite.config.ts) to learn which tools exist; \`codeflow generate\` turns the
 // result into generated/tools.d.ts and generated/lib.d.ts.
 //
 // It is deliberately dependency-free so a fresh workspace type-checks on its own.
-// Once @codeflow/cli is installed, type it for editor support:
-//   import type { CodeflowConfig } from "@codeflow/cli";
+// Once @codeflow-team/cli is installed, type it for editor support:
+//   import type { CodeflowConfig } from "@codeflow-team/cli";
 //   const config: CodeflowConfig = { … };
 
 // Shared shapes, referenced by several tools below.

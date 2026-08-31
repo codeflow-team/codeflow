@@ -1,5 +1,5 @@
 {
-  "name": "@codeflow/core",
+  "name": "@codeflow-team/core",
   "version": "0.1.0",
   "description": "Analyze a TypeScript agent flow into a workflow graph and patch it back byte-for-byte — domain model, tool registry, typed API codegen. Browser-safe, never executes the code it reads.",
   "keywords": [

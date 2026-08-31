@@ -77,7 +77,7 @@ The same codegen applies to the **function library**: from the `FunctionDefiniti
 
 **A tool changed or removed while a flow uses it** — same mechanism: a deleted tool turns the call into an `unknown` node (capabilities of `unknown`: [03-data-model.md](03-data-model.md) §11); a tool whose schema changed makes analysis validate `editableFields` against the new `inputSchema` (a field that no longer exists is dropped from the inspector + a diagnostic), and old arguments that no longer fit the new schema produce a diagnostic on the node; scan the whole workspace with `codeflow check`.
 
-## 3. MCP Adapter (`@codeflow/mcp`)
+## 3. MCP Adapter (`@codeflow-team/mcp`)
 
 ```text
 MCP Server → tool discovery → MCP schema → ToolDefinition → registry → codegen
@@ -167,7 +167,7 @@ interface NodeDefinition {
   inputSchema?: Schema;
   outputSchema?: Schema;
   editableFields?: EditableFieldInput[];
-  renderer?: NodeRenderer;            // custom React component (registered on the @codeflow/react side)
+  renderer?: NodeRenderer;            // custom React component (registered on the @codeflow-team/react side)
   analyzer?: SemanticAnalyzer;
   patcher?: NodePatcher;
 }

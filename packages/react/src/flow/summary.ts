@@ -5,7 +5,7 @@
  * measures it at, so ELK never lays out a box the component then overflows.
  */
 
-import type { WorkflowNode } from "@codeflow/core";
+import type { WorkflowNode } from "@codeflow-team/core";
 import { formatFieldValue } from "../inspector/expression.js";
 import { stringData } from "../graph/index.js";
 import { MAX_TAKES_ROWS, takesLines, type NodeDataLinks } from "./data-links.js";

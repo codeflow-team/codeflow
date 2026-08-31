@@ -20,7 +20,7 @@
  */
 
 import type { ComponentType } from "react";
-import type { RegistryLookup, WorkflowNode } from "@codeflow/core";
+import type { RegistryLookup, WorkflowNode } from "@codeflow-team/core";
 import type { DisclosureMode } from "./summary.js";
 import { measureNode, type Measurer } from "../layout/measure.js";
 

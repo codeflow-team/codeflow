@@ -12,11 +12,11 @@
  *     therefore stdio, SSE, and every endpoint that refuses cross-origin
  *     requests.
  *
- * Both ends run the same mapping — `mcpToolsToDefinitions` from `@codeflow/mcp`
+ * Both ends run the same mapping — `mcpToolsToDefinitions` from `@codeflow-team/mcp`
  * (05 §3). There is one adapter in this repo and neither path re-implements it.
  */
 
-import { mcpToolsToDefinitions, type McpTool } from "@codeflow/mcp";
+import { mcpToolsToDefinitions, type McpTool } from "@codeflow-team/mcp";
 import { IS_PUBLIC_BUILD } from "../deployment.js";
 import type { McpDiscovery, McpToolRecord, McpTransport } from "./model.js";
 

@@ -2,18 +2,18 @@
  * Freeze the real MCP schemas into static `ToolDefinition[]` modules.
  *
  * `packages/mcp/test/real-schemas/*.json` are verbatim `tools/list` payloads
- * captured from eight real MCP servers. `@codeflow/mcp` knows how to turn one
+ * captured from eight real MCP servers. `@codeflow-team/mcp` knows how to turn one
  * into a `ToolDefinition`; running that conversion here — at authoring time,
  * once — rather than at import time means:
  *
- *   - `@codeflow/examples` ships with `@codeflow/core` as its only runtime
+ *   - `@codeflow-team/examples` ships with `@codeflow-team/core` as its only runtime
  *     dependency (a UI gallery does not want an MCP adapter in its bundle);
  *   - the definitions are reviewable in a diff instead of computed behind a
  *     function call, so a change in the adapter shows up as a change in this
  *     package rather than as a silent shift in what the examples type-check
  *     against.
  *
- * Regenerate with `pnpm --filter @codeflow/examples embed`. The output is
+ * Regenerate with `pnpm --filter @codeflow-team/examples embed`. The output is
  * committed; `packages/core/test/stress/examples-package.test.ts` re-runs the
  * conversion and fails if the committed files have drifted.
  */
@@ -43,10 +43,10 @@ export function moduleSourceFor(server) {
  * Source: \`packages/mcp/test/real-schemas/${server.file}\` (a verbatim
  * \`tools/list\` payload from the real server), run through
  * \`mcpToolsToDefinitions\` with namespace \`"${server.namespace}"\`.
- * Regenerate with \`pnpm --filter @codeflow/examples embed\`.
+ * Regenerate with \`pnpm --filter @codeflow-team/examples embed\`.
  */
 
-import type { ToolDefinition } from "@codeflow/core";
+import type { ToolDefinition } from "@codeflow-team/core";
 
 export const ${server.constant}: ToolDefinition[] = ${body};
 `,

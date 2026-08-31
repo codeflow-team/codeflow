@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { mcpToolsToDefinitions } from "@codeflow/mcp";
+import { mcpToolsToDefinitions } from "@codeflow-team/mcp";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const SCHEMA_DIR = join(HERE, "..", "..", "mcp", "test", "real-schemas");

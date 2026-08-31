@@ -12,7 +12,7 @@
  * a plausible guess (I6).
  */
 
-import type { WorkflowGraph, WorkflowNode } from "@codeflow/core";
+import type { WorkflowGraph, WorkflowNode } from "@codeflow-team/core";
 
 /** Verbatim source of the node's own range — exactly what `$code` replaces. */
 export function nodeRegionText(graph: WorkflowGraph, node: WorkflowNode): string {

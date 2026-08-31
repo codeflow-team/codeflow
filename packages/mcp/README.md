@@ -1,6 +1,6 @@
-# `@codeflow/mcp`
+# `@codeflow-team/mcp`
 
-The optional MCP adapter: it turns what an MCP server reports from `tools/list` into `ToolDefinition`s that [`@codeflow/core`](../core/README.md) can register, generate types for, and project into nodes.
+The optional MCP adapter: it turns what an MCP server reports from `tools/list` into `ToolDefinition`s that [`@codeflow-team/core`](../core/README.md) can register, generate types for, and project into nodes.
 
 Once a tool is in the registry, nothing downstream can tell it came from MCP rather than from a local function or a REST SDK. That is the whole point of the adapter.
 
@@ -11,7 +11,7 @@ See the [root README](../../README.md) for what CodeFlow is.
 Prepared for npm as v0.1.0; until the first release lands, use the workspace copy:
 
 ```jsonc
-"dependencies": { "@codeflow/mcp": "workspace:*" }
+"dependencies": { "@codeflow-team/mcp": "workspace:*" }
 ```
 
 Zero runtime dependencies beyond core, which it uses **for types only**. `@modelcontextprotocol/sdk` is an *optional* peer: nothing here opens a connection or owns a transport. An SDK `Client` is accepted, and so is any object with a `listTools()`.
@@ -23,7 +23,7 @@ Zero runtime dependencies beyond core, which it uses **for types only**. `@model
 The one-liner. Discovers every tool the server has (following `nextCursor` until it runs out) and registers them all.
 
 ```ts
-import { registerMcpServer } from "@codeflow/mcp";
+import { registerMcpServer } from "@codeflow-team/mcp";
 
 await registerMcpServer(registry, client, { namespace: "github" });
 // → registry now holds github.getIssue, github.listPRs, …
@@ -32,15 +32,15 @@ await registerMcpServer(registry, client, { namespace: "github" });
 
 ### `discoverMcpTools(client, options)` / `registerMcpTools(registry, definitions)`
 
-The same thing in two halves, so you can inspect, filter or persist the definitions before they reach the registry. That split is how [`@codeflow/examples`](../examples/README.md) froze 65 real schemas into the repository — the examples run offline against captured schemas rather than against live servers.
+The same thing in two halves, so you can inspect, filter or persist the definitions before they reach the registry. That split is how [`@codeflow-team/examples`](../examples/README.md) froze 65 real schemas into the repository — the examples run offline against captured schemas rather than against live servers.
 
 ### `mcpToolsToDefinitions(tools, options)`
 
 Pure mapping, no client involved. Feed it the raw `tools` array:
 
 ```js
-import { createRegistry, generateToolsDts } from "@codeflow/core";
-import { mcpToolsToDefinitions, registerMcpTools } from "@codeflow/mcp";
+import { createRegistry, generateToolsDts } from "@codeflow-team/core";
+import { mcpToolsToDefinitions, registerMcpTools } from "@codeflow-team/mcp";
 
 // Exactly what an MCP server returns from `tools/list`.
 const listed = [
@@ -97,7 +97,7 @@ Both were found by running 65 live schemas from 8 servers through the pipeline, 
 ## Tests
 
 ```bash
-pnpm --filter @codeflow/mcp test   # 155 tests, all offline
+pnpm --filter @codeflow-team/mcp test   # 155 tests, all offline
 ```
 
 ## License

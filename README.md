@@ -16,7 +16,7 @@ n8n, Zapier and friends make the **graph** the truth and generate code from it. 
 
 ## Quick start
 
-The packages are prepared to publish as `@codeflow/core`, `@codeflow/react`, `@codeflow/cli`, `@codeflow/mcp` and `@codeflow/examples` (v0.1.0, AGPL-3.0-or-later). Until that first release lands, work in the repository:
+The packages are prepared to publish as `@codeflow-team/core`, `@codeflow-team/react`, `@codeflow-team/cli`, `@codeflow-team/mcp` and `@codeflow-team/examples` (v0.1.0, AGPL-3.0-or-later). Until that first release lands, work in the repository:
 
 ```bash
 pnpm install
@@ -30,8 +30,8 @@ Requires Node 20+ (the CLI needs 22.18+ or 23.6+, where Node strips TypeScript t
 Analyzing a flow takes three calls — a registry of the tools that exist, a session, and `analyze`:
 
 ```js
-import { createCodeFlow, createRegistry } from "@codeflow/core";
-import { EXAMPLES, registryFor } from "@codeflow/examples";
+import { createCodeFlow, createRegistry } from "@codeflow-team/core";
+import { EXAMPLES, registryFor } from "@codeflow-team/examples";
 
 // Any flow file works; the examples package ships thirteen of them.
 const example = EXAMPLES.find((e) => e.id === "canonical");
@@ -131,11 +131,11 @@ Dark theme is a first-class palette, not an inverted filter:
 
 | Package | What it is for |
 |---|---|
-| [`@codeflow/core`](packages/core/README.md) | The library. Registry, typed-API codegen, analyzer, stable node identity, graph diff, minimal patch engine, AI generation context and the L0/L1/L2 validator. Browser-safe: nothing in it imports a Node API. |
-| [`@codeflow/react`](packages/react/README.md) | The UI. React Flow canvas with hierarchical ELK layout, inspector, Monaco panel with two-way selection sync, diff preview, diagnostics, three disclosure levels, light and dark. |
-| [`@codeflow/cli`](packages/cli/README.md) | The Node half. `codeflow init` / `generate` / `check`, and the file-based function library over `lib/`. |
-| [`@codeflow/mcp`](packages/mcp/README.md) | Optional adapter. MCP `tools/list` → `ToolDefinition`, with safe name slugging and cursor paging. Zero runtime dependencies; the MCP SDK is an optional peer. |
-| [`@codeflow/examples`](packages/examples/README.md) | Thirteen flows and the registries they are written against, plus twelve everyday library functions — 65 tool schemas captured from 8 real MCP servers. The stress corpus and the demo gallery in one package. |
+| [`@codeflow-team/core`](packages/core/README.md) | The library. Registry, typed-API codegen, analyzer, stable node identity, graph diff, minimal patch engine, AI generation context and the L0/L1/L2 validator. Browser-safe: nothing in it imports a Node API. |
+| [`@codeflow-team/react`](packages/react/README.md) | The UI. React Flow canvas with hierarchical ELK layout, inspector, Monaco panel with two-way selection sync, diff preview, diagnostics, three disclosure levels, light and dark. |
+| [`@codeflow-team/cli`](packages/cli/README.md) | The Node half. `codeflow init` / `generate` / `check`, and the file-based function library over `lib/`. |
+| [`@codeflow-team/mcp`](packages/mcp/README.md) | Optional adapter. MCP `tools/list` → `ToolDefinition`, with safe name slugging and cursor paging. Zero runtime dependencies; the MCP SDK is an optional peer. |
+| [`@codeflow-team/examples`](packages/examples/README.md) | Thirteen flows and the registries they are written against, plus twelve everyday library functions — 65 tool schemas captured from 8 real MCP servers. The stress corpus and the demo gallery in one package. |
 | [`apps/demo`](apps/demo/README.md) | The demo app: gallery, canvas, inspector, AI chat, and the MCP-backed runner. |
 
 ---
@@ -144,7 +144,7 @@ Dark theme is a first-class palette, not an inverted filter:
 
 Every number here comes from something in this repository that you can re-run.
 
-**Speed.** The largest example is 345 lines → 101 nodes, 114 control edges, 172 data edges. Cold analysis of it takes **21 ms** (fastest of five samples; median 22 ms) against the 500 ms budget the specs set, and a warm re-analysis after an edit takes **26 ms** against a 100 ms budget. Reproduce with `pnpm --filter @codeflow/core exec vitest run test/stress/performance.test.ts`, which prints the whole table.
+**Speed.** The largest example is 345 lines → 101 nodes, 114 control edges, 172 data edges. Cold analysis of it takes **21 ms** (fastest of five samples; median 22 ms) against the 500 ms budget the specs set, and a warm re-analysis after an edit takes **26 ms** against a 100 ms budget. Reproduce with `pnpm --filter @codeflow-team/core exec vitest run test/stress/performance.test.ts`, which prints the whole table.
 
 **Tests.** `pnpm test` runs **1,640 passing tests** across 68 files — core 1,185, react 155, mcp 155, cli 63, examples 30, demo 52 — plus 3 skipped (they need a live AI key) and 10 `it.todo` that mark known gaps rather than hiding them. 206 of those cases are adversarial hardening cases, and they exist because they each caught a real bug: a brace-less `if` body whose deletion silently swallowed the next statement, a quoted key that let a patch append a second `channel` property, a BOM that shifted every offset by one character.
 

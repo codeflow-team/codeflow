@@ -81,7 +81,7 @@ CodeFlow supplies the context; how it is delivered is up to the host:
 
 1. **Direct prompt assembly** — the host app calls the LLM API itself: concatenate `ctx.promptSections` into the system prompt and attach `ctx.files` as fenced code blocks. This is for products with their own chat loop.
 2. **File-based, for an agent harness** (Claude Code, Cursor, …) — the workspace layout in §2 *is* the context: the agent reads `generated/*.d.ts` and `prompts/flow-style.md` as ordinary files, and a section in the workspace's `CLAUDE.md`/`AGENTS.md` points the agent at them. `codeflow generate --agent-md` emits that section.
-3. **MCP** — `@codeflow/mcp` exposes CodeFlow itself as an MCP server: a `codeflow://context` resource (returning the GenerationContext) and a `codeflow.validate(source)` tool (returning diagnostics). Any MCP-capable agent can then generate and self-validate flow code without a dedicated host app.
+3. **MCP** — `@codeflow-team/mcp` exposes CodeFlow itself as an MCP server: a `codeflow://context` resource (returning the GenerationContext) and a `codeflow.validate(source)` tool (returning diagnostics). Any MCP-capable agent can then generate and self-validate flow code without a dedicated host app.
 
 ## 4. Scoping the context — keep it small so the AI stays accurate
 

@@ -14,7 +14,7 @@
  * Pure and DOM-free so it can be unit-tested without a browser.
  */
 
-import type { Diagnostic, WorkflowGraph, WorkflowNode } from "@codeflow/core";
+import type { Diagnostic, WorkflowGraph, WorkflowNode } from "@codeflow-team/core";
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
 import {
   SLOT_PORTS,

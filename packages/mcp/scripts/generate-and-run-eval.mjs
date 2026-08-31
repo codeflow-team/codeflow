@@ -89,7 +89,7 @@ async function main() {
     process.exit(1);
   }
 
-  const cf = await import("@codeflow/core");
+  const cf = await import("@codeflow-team/core");
   const adapter = await import("../dist/index.js");
   const suite = await import("../test/ai/generate-and-run-suite.ts");
 

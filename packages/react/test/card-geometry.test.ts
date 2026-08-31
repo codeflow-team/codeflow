@@ -23,7 +23,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { WorkflowNode } from "@codeflow/core";
+import type { WorkflowNode } from "@codeflow-team/core";
 import { measureNode } from "../src/layout/measure.js";
 import { hasNodeBody, nodeSummaryRows, developerLines } from "../src/flow/summary.js";
 import type { NodeDataLinks } from "../src/flow/data-links.js";

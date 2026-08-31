@@ -4,7 +4,7 @@
  * stays unit-testable.
  */
 
-import type { WorkflowNode } from "@codeflow/core";
+import type { WorkflowNode } from "@codeflow-team/core";
 import {
   developerLines,
   nodeCaption,

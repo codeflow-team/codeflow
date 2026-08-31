@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { WorkflowNode } from "@codeflow/core";
+import type { WorkflowNode } from "@codeflow-team/core";
 import { buildDataLinks, resolveDataEdgeMode, takesLines } from "../src/flow/data-links.js";
 import { nodeTitle, plainCondition, takesRows, rowsForMode } from "../src/flow/summary.js";
 import { buildIndex } from "../src/graph/index.js";

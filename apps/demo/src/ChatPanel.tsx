@@ -33,7 +33,7 @@ import {
   type RegistryLookup,
   type TextPatch,
   type WorkflowGraph,
-} from "@codeflow/core";
+} from "@codeflow-team/core";
 import {
   Badge,
   Button,
@@ -42,7 +42,7 @@ import {
   Segmented,
   cn,
   useCodeFlow,
-} from "@codeflow/react";
+} from "@codeflow-team/react";
 import {
   Check,
   CircleStop,

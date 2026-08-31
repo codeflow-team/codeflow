@@ -1,5 +1,5 @@
 {
-  "name": "@codeflow/react",
+  "name": "@codeflow-team/react",
   "version": "0.1.0",
   "description": "React canvas for CodeFlow graphs — React Flow nodes with ELK hierarchical layout, node inspector, Monaco code panel and diagnostics, wired to the core patch engine.",
   "keywords": [
@@ -60,7 +60,7 @@
   },
   "dependencies": {
     "@base-ui-components/react": "1.0.0-rc.0",
-    "@codeflow/core": "workspace:^",
+    "@codeflow-team/core": "workspace:^",
     "@monaco-editor/react": "^4.7.0",
     "@xyflow/react": "^12.8.6",
     "class-variance-authority": "^0.7.1",

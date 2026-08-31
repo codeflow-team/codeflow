@@ -21,7 +21,7 @@
  */
 
 import { useId, type ReactNode } from "react";
-import { Badge, Button, Field, FieldHint, FieldLabel, Hint, Input, Modal, Notice, Select, Textarea, cn } from "@codeflow/react";
+import { Badge, Button, Field, FieldHint, FieldLabel, Hint, Input, Modal, Notice, Select, Textarea, cn } from "@codeflow-team/react";
 import { CircleAlert, FolderOpen, Info, Play, Plus, RotateCcw, Sparkles, Trash2, User } from "lucide-react";
 import {
   WORKSPACE_TOKEN,

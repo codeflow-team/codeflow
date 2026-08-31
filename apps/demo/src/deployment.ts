@@ -10,7 +10,7 @@
  *    there is no key to hold and no process to spawn.
  *
  * Everything the product is *about* — analyze, graph, inspect, patch, diff,
- * Monaco round-trip — is `@codeflow/core`, which is browser-safe by design and
+ * Monaco round-trip — is `@codeflow-team/core`, which is browser-safe by design and
  * therefore identical in both. Only the two server-shaped features differ, and
  * 07-ui.md §5 is explicit that a feature which cannot work must say so rather
  * than fail quietly. This module is where that difference is named once, so the

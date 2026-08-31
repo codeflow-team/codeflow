@@ -80,7 +80,7 @@
 
 import ts from "typescript";
 
-/** One node's source range, as `@codeflow/core`'s `nodeRanges` produces it. */
+/** One node's source range, as `@codeflow-team/core`'s `nodeRanges` produces it. */
 export interface ProbeRange {
   nodeId: string;
   start: number;

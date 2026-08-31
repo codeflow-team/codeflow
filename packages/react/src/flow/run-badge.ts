@@ -18,7 +18,7 @@
  * the run never said (07 §5).
  */
 
-import type { NodeRunState } from "@codeflow/core";
+import type { NodeRunState } from "@codeflow-team/core";
 
 export type RunBadgeKind =
   /** The one step executing right now. */

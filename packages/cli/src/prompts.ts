@@ -11,7 +11,7 @@
  * its copy without the CLI stomping on it.
  */
 
-import { FLOW_STYLE_PROMPT } from "@codeflow/core";
+import { FLOW_STYLE_PROMPT } from "@codeflow-team/core";
 
 export const FLOW_STYLE_FILENAME = "flow-style.md";
 

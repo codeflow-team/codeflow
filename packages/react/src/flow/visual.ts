@@ -69,7 +69,7 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
-import type { WorkflowNode } from "@codeflow/core";
+import type { WorkflowNode } from "@codeflow-team/core";
 
 /** Node types this UI knows how to draw. */
 export type NodeVisualType =

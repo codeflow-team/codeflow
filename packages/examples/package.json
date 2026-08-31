@@ -1,7 +1,7 @@
 {
   "name": "@codeflow/examples",
   "version": "0.1.0",
-  "description": "Ready-to-analyze CodeFlow example flows (11, up to 345 lines) plus the registries they run against — 65 tool definitions converted from real MCP server schemas at authoring time.",
+  "description": "Ready-to-analyze CodeFlow example flows (13, up to 345 lines) plus the registries they run against — 65 tool definitions converted from real MCP server schemas at authoring time, and 12 everyday library functions that really run.",
   "keywords": [
     "codeflow",
     "examples",

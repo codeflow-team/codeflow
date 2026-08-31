@@ -177,8 +177,8 @@ const EXPECTED: Expectation[] = [
 ];
 
 describe("the corpus itself", () => {
-  it("has eleven examples across five categories", () => {
-    expect(EXAMPLES).toHaveLength(11);
+  it("has thirteen examples across five categories", () => {
+    expect(EXAMPLES).toHaveLength(13);
     expect(new Set(EXAMPLES.map((example) => example.category)).size).toBe(5);
   });
 
@@ -193,11 +193,11 @@ describe("the corpus itself", () => {
     for (const example of long) expect(example.lines, example.id).toBeLessThanOrEqual(500);
   });
 
-  it("has seven flows written against real MCP schemas", () => {
+  it("has nine flows written against real MCP schemas", () => {
     // The `sample` registry is the specs' own github/slack one; everything else
     // comes from a captured `tools/list` payload.
     const realMcp = EXAMPLES.filter((example) => example.registryId !== "sample");
-    expect(realMcp).toHaveLength(7);
+    expect(realMcp).toHaveLength(9);
   });
 });
 

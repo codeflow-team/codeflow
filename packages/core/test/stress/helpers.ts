@@ -1,7 +1,7 @@
 /**
  * Shared scaffolding for the stress suite.
  *
- * The corpus under test is `@codeflow/examples` — eleven flows, seven of them
+ * The corpus under test is `@codeflow/examples` — thirteen flows, nine of them
  * written against tool schemas captured from real MCP servers, four of them
  * between 260 and 350 lines. Where the golden fixtures cover *constructs* one
  * at a time and the hardening suite covers *hazards*, this suite covers

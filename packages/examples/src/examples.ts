@@ -3,12 +3,14 @@
  *
  * Four of these are the flows the demo app shipped with — the specs' canonical
  * example and its three companions, carried over unchanged apart from one type
- * annotation. The other seven are new, and all seven are written against tool
- * schemas captured from real MCP servers: `@modelcontextprotocol/server-filesystem`,
- * `server-memory`, `server-everything`, `@playwright/mcp`, DuckDuckGo, DeepWiki,
- * Context7 and sequential-thinking. Nothing is padded: every one is a scenario
- * somebody would actually automate, and the hard cases are hard because that is
- * what the scenario needs, not because a test wanted them.
+ * annotation. Seven more are written against tool schemas captured from real MCP
+ * servers: `@modelcontextprotocol/server-filesystem`, `server-memory`,
+ * `server-everything`, `@playwright/mcp`, DuckDuckGo, DeepWiki, Context7 and
+ * sequential-thinking. The last two are built out of the `common` registry's
+ * everyday library steps, which is what a node editor spends most of its time
+ * configuring. Nothing is padded: every one is a scenario somebody would
+ * actually automate, and the hard cases are hard because that is what the
+ * scenario needs, not because a test wanted them.
  *
  * `source` comes from `flows/*.flow.ts` via `scripts/embed-flows.mjs`, so the
  * code in the gallery is the code in the repository, byte for byte.
@@ -56,7 +58,43 @@ const SEEDS: ExampleSeed[] = [
     registryId: "sample",
   },
 
+  {
+    id: "everyday-order-digest",
+    title: "Order digest",
+    category: "basics",
+    summary: "Reads a JSON document off disk and writes back a one-paragraph digest of the orders in it.",
+    description:
+      "Parses an orders document, pulls the order list out of it, keeps the ones in the status the caller asked about, ranks them by value and writes a short digest back to the repository. Seven of the everyday library steps in under seventy lines, one per statement, with no control flow beyond two guards — the flow to open first when the question is what a node in the editor actually configures.",
+    highlights: [
+      "seven library steps in a row: parse, split out, filter, sort, limit, aggregate, format",
+      "`extractJson` fails honestly — a file that is not JSON returns a reason, not a zero",
+      "`filterRecords` takes the condition as a real TypeScript arrow, edited in the expression editor",
+      "`formatText` fills `{{ count }}` / `{{ revenue }}` from an object literal — the drag-and-drop target",
+      "two early returns, one per way the input can be unusable",
+    ],
+    registryId: "common",
+  },
+
   /* --------------------------- control-flow --------------------------- */
+  {
+    id: "ticket-triage-agent",
+    title: "Support ticket triage",
+    category: "control-flow",
+    summary: "Triages a support queue one ticket at a time, with an agent step inside the loop.",
+    description:
+      "Prepares a queue once — parse, split out, de-duplicate, sort, cap — and then walks it, giving every ticket its own due date, its own prompt and its own agent answer before folding the result back onto the record. The per-iteration shape is the point: this is what the canvas has to show once per pass rather than once. The agent calls no model; it is CodeFlow's offline stand-in, and every answer says so in its own first line.",
+    highlights: [
+      "a `for…of` loop whose body is four configured steps, one agent call per ticket",
+      "`runAgentStep` is a labelled stand-in — `simulated: true` travels with every record",
+      "`formatText` builds the prompt per ticket, which is where a value gets dragged in",
+      "`setFields` folds the verdict, the model and the due date back onto the ticket",
+      "`dateTimeStep` returns `ok: false` on an unreadable timestamp, and the loop `continue`s",
+      "collecting is a named local function, so the step stays on the canvas",
+      "a template literal in the `content` argument, shown as `{{ triaged.length }}` in the inspector",
+      "try/catch around the write only, with its own early return",
+    ],
+    registryId: "common",
+  },
   {
     id: "try-catch",
     title: "Card charge with fallback",

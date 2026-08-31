@@ -294,6 +294,121 @@ export default async function flow(input: {}, tools: any) {
 }
 `,
   },
+  /*
+   * From here down: the shapes the *value* markers touch. A closing marker that
+   * is handed a binding (`__cf.f(id, rows)`) and a pass marker that is handed
+   * the loop's item (`__cf.pass(id, ticket)`) both read a name that is already
+   * in scope — but "reading a name is free" is a claim, and this file exists to
+   * make claims run rather than be believed.
+   */
+  {
+    name: "a destructuring declaration, whose names the closing marker reassembles",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  const { first, second } = await tools.pair.load({});
+  const [head, , third] = [1, 2, 3];
+  return { first, second, head, third };
+}
+`,
+  },
+  {
+    // The one shape where reading the binding would have been a trap: awaiting
+    // it to see what it settles to would move the program. It is left alone,
+    // and the value it later settles to is read by the statement that awaits it.
+    name: "a promise bound now and awaited later",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  const pending = tools.slow.load({});
+  const other = await tools.fast.load({});
+  const settled = await pending;
+  return [settled.of, other.of];
+}
+`,
+  },
+  {
+    name: "a classic `for`, whose counter the pass marker reads",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  const seen: number[] = [];
+  await tools.setup.begin({});
+  for (let i = 0; i < 3; i++) {
+    seen.push(i);
+  }
+  return seen;
+}
+`,
+  },
+  {
+    name: "`for await…of` over a destructured item the pass marker reads",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  async function* pages() { yield { n: 1, tag: "a" }; yield { n: 2, tag: "b" }; }
+  const seen: string[] = [];
+  for await (const { n, tag } of pages()) {
+    const r = await tools.page.load({ n });
+    seen.push(tag + r.ok);
+  }
+  return seen;
+}
+`,
+  },
+  {
+    name: "`do…while`, which binds no item at all",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  let n = 0;
+  do {
+    const step = n + 1;
+    n = step;
+  } while (n < 3);
+  return n;
+}
+`,
+  },
+  {
+    // A `var` beside a `const` in one region: the `const` is read, the `var` is
+    // left alone, and neither is moved.
+    name: "a `var` and a `const` declared in the same region",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  var legacy = 1;
+  const kept = legacy + 1;
+  await tools.report.write({ legacy, kept });
+  return { legacy, kept };
+}
+`,
+  },
+  {
+    // The loop item is the *loop's* binding, fresh per pass, and reading it at
+    // the top of the body must not disturb a `continue` that skips the rest.
+    name: "a loop item read by the pass marker, with a `continue` in the body",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  const kept: number[] = [];
+  for (const item of [1, 2, 3, 4]) {
+    if (item % 2 === 0) continue;
+    const doubled = item * 2;
+    kept.push(doubled);
+  }
+  return kept;
+}
+`,
+  },
+  {
+    // The marker takes the *name*, not a property of what the name holds, so a
+    // getter on the value is not touched by the insertion itself. (Shortening
+    // the value for display is a separate step and does read properties —
+    // `step-value.test.ts` pins that cost where it actually lives.)
+    name: "a binding whose value has a counting getter, untouched by the marker",
+    source: `
+export default async function flow(input: {}, tools: any) {
+  let reads = 0;
+  const box = { get peek() { reads = reads + 1; return "looked"; } };
+  await tools.report.write({ reads });
+  return reads;
+}
+`,
+  },
   {
     name: "switch with fallthrough",
     source: `
@@ -426,6 +541,13 @@ describe("instrument() over every published example", () => {
       // reason the UI can show. Silence is what 07 §5 forbids.
       const accounted = new Set([...result.probed, ...result.skipped.map((entry) => entry.nodeId)]);
       expect(accounted.size).toBe(ranges.length);
+
+      // Same rule for values: a node either reports what it produced or says
+      // why it cannot. "No value" must never be left to mean both "this step
+      // declares nothing" and "this step produced nothing" (07 §5).
+      const valued = [...result.valued, ...result.unvalued.map((entry) => entry.nodeId)];
+      expect(new Set(valued).size).toBe(ranges.length);
+      expect(valued.length).toBe(ranges.length);
 
       const diagnostics = ts.transpileModule(result.code, {
         compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },

@@ -30,6 +30,7 @@ import {
   traceMatches,
   type RunEmit,
   type RunEvent,
+  type RunPhase,
   type RunTrace,
 } from "../src/run/index.js";
 import { loadFixture } from "./harness/fixture.js";
@@ -380,5 +381,71 @@ describe("traceMatches — is this trace about this graph?", () => {
     const trace = { ...base, ...traceIdentity(graph) };
     expect(traceMatches(trace, edited)).toBe("stale");
     expect(edited.source.contentHash).not.toBe(graph.source.contentHash);
+  });
+});
+
+/**
+ * `pass` — a container reporting another lap, which is not a lifecycle event.
+ *
+ * A loop that runs three times started once and finished once. Reporting each
+ * pass as a `started` made `runs` read 4, and the canvas drew `×4` next to a
+ * three-pass loop. `pass` carries the iteration and the item without claiming
+ * the node ran again.
+ */
+describe("the pass phase", () => {
+  const loop = (phase: RunPhase, at: number, iteration?: number[], preview?: unknown): RunEvent => ({
+    nodeId: "loop",
+    phase,
+    at,
+    ...(iteration === undefined ? {} : { iteration }),
+    ...(preview === undefined ? {} : { preview }),
+  });
+
+  it("does not count as a run", () => {
+    const state = summarizeRun([
+      loop("started", 0),
+      loop("pass", 1, [0], { id: "T-1" }),
+      loop("pass", 2, [1], { id: "T-2" }),
+      loop("pass", 3, [2], { id: "T-3" }),
+      loop("finished", 4),
+    ]).get("loop")!;
+    expect(state.runs).toBe(1);
+    expect(state.status).toBe("ok");
+    expect(state.iterations?.length).toBe(3);
+  });
+
+  it("carries each pass's own item", () => {
+    const state = summarizeRun([
+      loop("started", 0),
+      loop("pass", 1, [0], { id: "T-1" }),
+      loop("pass", 2, [1], { id: "T-2" }),
+      loop("finished", 3),
+    ]).get("loop")!;
+    expect(state.iterations?.map((entry) => entry.preview)).toEqual([{ id: "T-1" }, { id: "T-2" }]);
+  });
+
+  it("leaves no pass reading as still running once the loop is over", () => {
+    const state = summarizeRun([
+      loop("started", 0),
+      loop("pass", 1, [0]),
+      loop("pass", 2, [1]),
+      loop("finished", 3),
+    ]).get("loop")!;
+    expect(state.iterations?.map((entry) => entry.status)).toEqual(["ok", "ok"]);
+  });
+
+  it("shows the pass under way while the loop is still going", () => {
+    const state = summarizeRun([loop("started", 0), loop("pass", 1, [0]), loop("pass", 2, [1])]).get("loop")!;
+    expect(state.iterations?.map((entry) => entry.status)).toEqual(["ok", "running"]);
+    expect(state.status).toBe("running");
+  });
+
+  it("does not add to the node's own duration", () => {
+    const state = summarizeRun([
+      loop("started", 0),
+      { nodeId: "loop", phase: "pass", at: 1, iteration: [0], durationMs: 999 },
+      { nodeId: "loop", phase: "finished", at: 2, durationMs: 10 },
+    ]).get("loop")!;
+    expect(state.totalMs).toBe(10);
   });
 });

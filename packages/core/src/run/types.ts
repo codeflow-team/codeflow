@@ -21,12 +21,20 @@
  * that gap is precisely the interval a UI should render as "running". They
  * nest, so at any instant the innermost unfinished step is the one executing.
  *
+ * `pass` is the odd one, and it is deliberately not a lifecycle transition: it
+ * reports that a container began *another* pass, carrying that pass's
+ * `iteration` and, when the runtime can see it, the item the pass is about. A
+ * loop that runs three times started once and finished once — so `pass` must
+ * never move `runs` or `status`, or a three-pass loop reads as having run four
+ * times. It exists because "which pass is this" is a fact with nowhere else to
+ * live: an emit explicitly must not touch the lifecycle, and a `started` does.
+ *
  * `failed` replaces the `finished` a step never got to. `skipped` is for a step
  * the runtime knows it will never report on — a statement it could not probe
  * without changing the program's meaning, say — and exists so a UI can say
  * "not traced" instead of the lie "not reached" (07 §5 forbids the lie).
  */
-export type RunPhase = "started" | "finished" | "failed" | "skipped";
+export type RunPhase = "started" | "finished" | "failed" | "skipped" | "pass";
 
 /**
  * Which pass through the surrounding loops this event belongs to.

@@ -113,6 +113,19 @@ export function NewFlowDialog(props: NewFlowDialogProps): ReactNode {
   const [elapsed, setElapsed] = useState(0);
   const [written, setWritten] = useState<{ chars: number; thinking: number }>({ chars: 0, thinking: 0 });
   const [error, setError] = useState<string | null>(null);
+  /*
+   * The error notice sits at the bottom of a dialog taller than the viewport —
+   * a registry picker, a prompt box and a round log above it. A tester driving
+   * this dialog reported it as a *silent* failure: the request 404'd, the
+   * message was rendered, and nothing about the screen they were looking at
+   * changed. An error you have to go and find is one nobody reads (07 §5), so
+   * it brings itself into view.
+   */
+  const errorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (error === null) return;
+    errorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [error]);
   const [importNote, setImportNote] = useState<string | null>(null);
   /** Measured context size per registry choice — see the effect below. */
   const [tokens, setTokens] = useState<Record<string, number>>({});
@@ -550,9 +563,11 @@ export function NewFlowDialog(props: NewFlowDialogProps): ReactNode {
         )}
 
         {error === null ? null : (
-          <Notice tone="danger" title="That did not work" data-testid="new-flow-error">
-            {error}
-          </Notice>
+          <div ref={errorRef}>
+            <Notice tone="danger" title="That did not work" data-testid="new-flow-error">
+              {error}
+            </Notice>
+          </div>
         )}
         {importNote === null ? null : (
           <Notice tone="warn" title="Import">{importNote}</Notice>

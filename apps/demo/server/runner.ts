@@ -34,7 +34,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
-import { instrument, type ProbeRange, type SkippedProbe } from "./instrument.ts";
+import { instrument, type ProbeRange, type SkippedProbe, type UnvaluedProbe } from "./instrument.ts";
 import { resolveWorkspaceToken, synthesizeInput } from "./input.ts";
 import { planFor, stubReason, userPlan, type McpServerPlan, type UserServerSpec } from "./mcp-servers.ts";
 import { stdioAllowed, stdioDisabledReason } from "./mcp-discover.ts";
@@ -91,6 +91,10 @@ export type RunFrame =
       uncounted: string[];
       /** True when nothing in this run may carry an iteration at all. */
       blind: boolean;
+      /** Steps whose markers carry the value they produced — see `instrument()`. */
+      valued: string[];
+      /** Steps that will report no value of their own, and why. */
+      unvalued: UnvaluedProbe[];
       note: string;
     }
   | { type: "input"; input: unknown }
@@ -425,6 +429,8 @@ export function startRun(request: RunRequest, workerEntry: string, emit: (frame:
       counted: built.counted,
       uncounted: built.uncounted,
       blind: built.blind,
+      valued: built.valued,
+      unvalued: built.unvalued,
       note: "Demo runner — a worker thread on the dev server, not a production sandbox (09 §1).",
     });
 

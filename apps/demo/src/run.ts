@@ -49,6 +49,20 @@ export interface SkippedProbe {
 }
 
 /**
+ * A step that will report no value of its own, and why.
+ *
+ * The counterpart of `SkippedProbe` for values: a step can be traced perfectly
+ * and still have nothing to show, because it declares no binding. Without this
+ * list "no value" would mean both "the step produced nothing" and "nothing was
+ * recorded", and 07 §5 forbids leaving the two indistinguishable.
+ */
+export interface UnvaluedProbe {
+  nodeId: string;
+  reason: string;
+  detail: string;
+}
+
+/**
  * One thing a node said mid-step, as the runner sends it.
  *
  * Core's `RunEmit` with `nodeId` widened to allow `null`: a tool called from a
@@ -114,6 +128,10 @@ export interface RunPlan {
   uncounted: string[];
   /** True when nothing in this run carries an iteration at all. */
   blind: boolean;
+  /** Steps whose markers carry the value they produced. */
+  valued: string[];
+  /** Steps that will report no value of their own, and why. */
+  unvalued: UnvaluedProbe[];
   note: string;
 }
 
@@ -134,6 +152,14 @@ export interface RunSnapshot {
   nodes: Map<string, NodeRunState>;
   activeNodeId: string | null;
   untraced: Set<string>;
+  /**
+   * Nodes that were traced but declare no binding, so no value was recorded.
+   *
+   * `untraced` says the run watched nothing; this says it watched and there was
+   * nothing to keep. A tool call is the common case — it is reported from the
+   * call itself rather than from a name.
+   */
+  valueless: Set<string>;
   /**
    * Nodes the runtime was asked to report on at all.
    *
@@ -169,6 +195,7 @@ export const EMPTY_RUN: RunSnapshot = {
   nodes: new Map(),
   activeNodeId: null,
   untraced: new Set(),
+  valueless: new Set(),
   tracked: null,
   elapsedMs: 0,
 };
@@ -350,6 +377,11 @@ export function startRun(
     }),
     activeNodeId: openStack.length === 0 ? null : openStack[openStack.length - 1],
     untraced: new Set((plan?.skipped ?? []).map((entry) => entry.nodeId)),
+    // Traced, but with nothing of its own to show — a step that declares no
+    // binding. Kept apart from `untraced` because the two say different things
+    // to a reader: "not watched" versus "watched, and it produced nothing a
+    // name could hold".
+    valueless: new Set((plan?.unvalued ?? []).map((entry) => entry.nodeId)),
     tracked:
       plan === null ? null : new Set([...plan.probed, ...plan.skipped.map((entry) => entry.nodeId)]),
     result,

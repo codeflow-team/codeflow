@@ -298,7 +298,14 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
           }
           const value = unwrap(raw);
           const shown = preview(value, job.maxPreviewChars);
-          if (frame !== undefined) frame.preview = { tool: binding.name, source: "mcp", value: shown };
+          if (frame !== undefined) {
+            frame.preview = { tool: binding.name, source: "mcp", value: shown };
+            // Kept raw and compared by identity, never shown: when the step's
+            // own binding turns out to be this very object, `probe.ts` leaves
+            // the envelope above in place so the provenance badge survives.
+            frame.toolValue = value;
+            frame.hasToolValue = true;
+          }
           emit({ tool: binding.name, mode: "mcp", ms: Date.now() - began, ok: true });
           return value;
         } catch (cause) {
@@ -311,7 +318,11 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
       // No server: answer from the declared output schema, and say so.
       const value = binding.outputSchema === undefined ? undefined : sampleFromSchema(binding.outputSchema, method);
       const shown = preview(value, job.maxPreviewChars);
-      if (frame !== undefined) frame.preview = { tool: binding.name, source: "sample", value: shown };
+      if (frame !== undefined) {
+        frame.preview = { tool: binding.name, source: "sample", value: shown };
+        frame.toolValue = value;
+        frame.hasToolValue = true;
+      }
       emit({ tool: binding.name, mode: "stub", ms: Date.now() - began, ok: true });
       return value;
     };

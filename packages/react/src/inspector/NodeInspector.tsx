@@ -1127,8 +1127,22 @@ function RunSection({ nodeId }: { nodeId: string }): ReactNode {
     );
   }
 
+  /*
+   * `RunEvent.preview` is `unknown` by contract — core refuses to have an
+   * opinion about what a runtime sends. The demo runner wraps a *tool* result
+   * as `{ tool, source, value }` so the LIVE/sample badge survives, and sends
+   * anything else bare.
+   *
+   * `"value" in preview` threw `TypeError: Cannot use 'in' operator` the moment
+   * a step produced a string or a number, which unmounted React and blanked the
+   * page. It was unreachable while only tool calls reported values; the instant
+   * the runner started recording ordinary step values it fired on the first
+   * text-producing step. The type assertion above is what hid it — the value is
+   * `unknown`, and the check has to earn the narrowing rather than assume it.
+   */
   const preview = state.preview as { tool?: string; source?: string; value?: unknown } | undefined;
-  const value = preview !== undefined && "value" in preview ? preview.value : state.preview;
+  const enveloped = typeof preview === "object" && preview !== null && "value" in preview;
+  const value = enveloped ? preview.value : state.preview;
   const text =
     value === undefined
       ? null

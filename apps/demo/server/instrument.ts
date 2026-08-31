@@ -71,6 +71,78 @@
  * `probe.ts` says why omitting beats guessing; core's `IterationPath` says the
  * same thing from the other side.
  *
+ * ## The value a step produced
+ *
+ * A marker *after* a statement cannot see what the statement produced — that is
+ * the structural reason a run used to have a value for tool calls and for
+ * nothing else. But at the moment the closing marker runs, whatever the
+ * statement declared **is in scope**, so the marker can simply be handed it:
+ *
+ * ```ts
+ * __cf.s("n7"); const rows = limitRecords(rows, 10, "first"); __cf.f("n7", rows);
+ * ```
+ *
+ * This is deliberately the cheapest thing that could work. It adds an argument
+ * to a call that was already there: no wrapper around the expression, no thunk,
+ * no `await`, no extra microtask, no change to where the `await` in the
+ * statement sits. Reading an already-initialised binding has no observable
+ * effect of its own, so the program is the program.
+ *
+ * `const x = await f()` is the case worth being explicit about, because it is
+ * the one that *looks* like it might reorder: it does not. The closing marker is
+ * emitted after the whole statement, and a statement containing `await` does not
+ * complete until the await has resumed — so by the time `__cf.f("n7", x)` runs,
+ * `x` holds the settled value and the suspension it went through is already
+ * over. The marker observes the result; it cannot advance it.
+ *
+ * The same trick names the item of a loop, on the marker that is already at the
+ * top of every pass:
+ *
+ * ```ts
+ * for (const ticket of queue) { __cf.pass("n12", ticket); … }
+ * ```
+ *
+ * Binding names come from the **AST**, not from `WorkflowNode.outputs`. The
+ * marker inserts an *identifier reference*, so what it needs is the name as the
+ * source spells it, and only the source is authoritative about that: a graph
+ * port may carry a different string on purpose — for a loop over a destructuring
+ * pattern the analyzer sets the port id to the *property* name and the label to
+ * the binding (`analyzer/emit.ts`, loop outputs) — and inserting the wrong one
+ * of the two would be a `ReferenceError` inside the user's flow. Reading the
+ * statement the marker is being attached to cannot disagree with itself.
+ *
+ * ### Where a value is *not* recorded, and why
+ *
+ * Every range ends up on exactly one of `valued` / `unvalued`, for the same
+ * reason every range ends up on `probed` or `skipped`: silence is what 07 §5
+ * forbids, and "this step declares nothing to show" has to be tellable from
+ * "this step produced nothing".
+ *
+ *  - a statement that declares nothing — `await tools.slack.send(…)`, an
+ *    assignment, an `if`, a `return`. A tool call is already covered from the
+ *    other side, by the tools proxy in `worker.ts`;
+ *  - a **decision** — an `if`, a `switch`. Its value is its test expression, and
+ *    the only way to read that after the fact is to write it a second time; a
+ *    condition is allowed to have side effects, so evaluating it twice to put a
+ *    `true` on screen would be the instrumenter breaking its own contract for
+ *    decoration;
+ *  - a `var` (or `using`) declaration. Reading it after the fact would be safe
+ *    enough, but a `var` binding is *not* the step's: it exists before the
+ *    statement runs and outlives the block, so a value shown against that step
+ *    would be claiming ownership the language does not give it. It is also the
+ *    one declaration form every other rule in this file refuses to touch;
+ *  - anything not probed at all — a labelled statement, a hoisted body, an
+ *    unknown parent. No marker, no value, and it says so with `not-probed`;
+ *  - a `return`/`break`/`continue`/`throw`, whose markers both go *in front* of
+ *    the statement (see below): there is nothing after it to read, and it
+ *    declares nothing either way.
+ *
+ * A binding whose value is a **promise the statement did not await** is a
+ * runtime question, not a syntactic one, so it is handled at the other end:
+ * `probe.ts` detects the thenable and records that it did not observe a value,
+ * rather than storing `Promise { <pending> }` or awaiting it and changing the
+ * program.
+ *
  * ## Line numbers
  *
  * Every edit is inline — no inserted newlines, imports blanked with spaces
@@ -99,6 +171,31 @@ export interface SkippedProbe {
   nodeId: string;
   reason: SkipReason;
   /** Human-readable, shown in the UI next to the node. */
+  detail: string;
+}
+
+/** Why a probed node will never report the value it produced. */
+export type NoValueReason =
+  /** The statement declares no binding — an `await tools.x.y()`, an assignment. */
+  | "no-binding"
+  /**
+   * A decision step, whose value is its test expression.
+   *
+   * Reading it would mean writing that expression a second time, and a
+   * condition is allowed to have side effects (`if (queue.shift())`). Running
+   * the user's code twice to put a `true` on screen is exactly the trade this
+   * instrumenter refuses everywhere else.
+   */
+  | "would-re-evaluate"
+  /** A `var`/`using` declaration: the binding is not the step's to show. */
+  | "var-declaration"
+  /** Not probed at all — see the matching entry in `skipped`. */
+  | "not-probed";
+
+export interface UnvaluedProbe {
+  nodeId: string;
+  reason: NoValueReason;
+  /** Human-readable, so a UI can say why instead of showing nothing. */
   detail: string;
 }
 
@@ -138,6 +235,22 @@ export interface InstrumentResult {
    * indistinguishable from a different number, and only one of the two is safe.
    */
   blind: boolean;
+  /**
+   * Node ids whose markers carry the value the step produced.
+   *
+   * A statement's declared binding (`__cf.f(id, rows)`), a loop's item
+   * (`__cf.pass(id, ticket)`), or a `Promise.all` element, whose settled value
+   * `__cf.p` already observes.
+   */
+  valued: string[];
+  /**
+   * Node ids that will report no value of their own, and why.
+   *
+   * Together with `valued` this covers every range, so a UI can say "this step
+   * declares nothing to show" instead of leaving "no value" to mean both that
+   * and "it produced nothing".
+   */
+  unvalued: UnvaluedProbe[];
 }
 
 interface Edit {
@@ -207,6 +320,95 @@ function loopBodyOf(statement: ts.Statement): ts.Statement | undefined {
   return undefined;
 }
 
+/* -------------------------------------------------------------------------- */
+/* what a statement declares                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Every name a binding pattern introduces, in source order.
+ *
+ * `const rows` → `["rows"]`; `const { a, b: { c }, ...rest }` → `["a","c","rest"]`;
+ * `const [x, , y]` → `["x","y"]`. Holes contribute nothing because they bind
+ * nothing, and a default (`{ a = 1 }`) contributes its name and not its default.
+ */
+function bindingNamesOf(name: ts.BindingName, out: string[]): void {
+  if (ts.isIdentifier(name)) {
+    out.push(name.text);
+    return;
+  }
+  for (const element of name.elements) {
+    if (ts.isOmittedExpression(element)) continue;
+    bindingNamesOf(element.name, out);
+  }
+}
+
+/**
+ * The names a `const`/`let` list binds, or `null` for anything else.
+ *
+ * `var` and `using` are `null` on purpose — see the header. The flag test is
+ * the same one `hoists()` uses, so the two rules cannot drift apart: a
+ * declaration form that is not lexical is not one this file reasons about.
+ */
+function lexicalNamesOf(list: ts.VariableDeclarationList): string[] | null {
+  if ((list.flags & (ts.NodeFlags.Let | ts.NodeFlags.Const)) === 0) return null;
+  // `using x = …` is `Using`, `await using x = …` is `Const | Using`; both
+  // dispose at the end of the block — a different lifetime from the statement,
+  // so they are left alone with `var`. (`AwaitUsing` is not a bit of its own:
+  // it is `Const | Using`, so testing against it would also reject `const`.)
+  if ((list.flags & ts.NodeFlags.Using) !== 0) return null;
+  const names: string[] = [];
+  for (const declaration of list.declarations) bindingNamesOf(declaration.name, names);
+  return names;
+}
+
+/**
+ * The expression a marker is handed for a set of names.
+ *
+ * One name is passed as itself, which is what the step produced. Several are
+ * reassembled into an object literal — `{ a, b }` — which is the honest
+ * reconstruction of what a destructuring statement bound: it names exactly the
+ * bindings that came out of it, and claims nothing about whatever else was on
+ * the right-hand side.
+ */
+function referenceFor(names: readonly string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+  return `{ ${names.join(", ")} }`;
+}
+
+/**
+ * What the item of one pass through this loop is called, if anything.
+ *
+ * `for…of` / `for…in` name the item directly; a classic `for` names its
+ * counter, which is the same fact about a pass. `while`/`do…while` bind
+ * nothing, and a loop that assigns into an existing member expression
+ * (`for (obj.k of …)`) has no reference this can safely insert either.
+ */
+function loopItemReference(statement: ts.Statement): string | null {
+  let inner: ts.Statement = statement;
+  while (ts.isLabeledStatement(inner)) inner = inner.statement;
+
+  if (ts.isForOfStatement(inner) || ts.isForInStatement(inner)) {
+    const initializer = inner.initializer;
+    if (ts.isVariableDeclarationList(initializer)) {
+      const names = lexicalNamesOf(initializer);
+      return names === null ? null : referenceFor(names);
+    }
+    // `for (item of items)` — an existing binding, assigned before the body
+    // runs, so reading it at the top of the pass is reading the item.
+    return ts.isIdentifier(initializer) ? initializer.text : null;
+  }
+
+  if (ts.isForStatement(inner)) {
+    const initializer = inner.initializer;
+    if (initializer === undefined || !ts.isVariableDeclarationList(initializer)) return null;
+    const names = lexicalNamesOf(initializer);
+    return names === null ? null : referenceFor(names);
+  }
+
+  return null;
+}
+
 function blankOut(source: string, start: number, end: number): string {
   // Keep newlines so every later line keeps its number.
   return source.slice(start, end).replace(/[^\n]/g, " ");
@@ -261,10 +463,17 @@ export function instrument(
   const droppedImports: string[] = [];
   const counted: string[] = [];
   const uncounted: string[] = [];
+  const valued: string[] = [];
+  const unvalued: UnvaluedProbe[] = [];
   let blind = false;
 
+  const noValue = (nodeId: string, reason: NoValueReason, detail: string): void => {
+    unvalued.push({ nodeId, reason, detail });
+  };
+
   /**
-   * Put `__cf.pass(nodeId)` at the top of `body`.
+   * Put `__cf.pass(nodeId)` — or `__cf.pass(nodeId, item)` — at the top of
+   * `body`.
    *
    * The braced case is an insertion after `{`. The unbraced case is the same
    * wrap the probe markers use — and is refused by the caller for the same
@@ -276,8 +485,11 @@ export function instrument(
    * lands *before* the inner step's opening marker, and its closing brace lands
    * *after* the inner step's closing one.
    */
-  const placePass = (nodeId: string, body: ts.Statement, depth: number): void => {
-    const marker = `${probe}.pass(${JSON.stringify(nodeId)});`;
+  const placePass = (nodeId: string, body: ts.Statement, depth: number, item: string | null): void => {
+    const marker =
+      item === null
+        ? `${probe}.pass(${JSON.stringify(nodeId)});`
+        : `${probe}.pass(${JSON.stringify(nodeId)}, ${item});`;
     if (ts.isBlock(body)) {
       const at = body.getStart(file) + 1;
       edits.push({ at, to: at, text: marker, rank: depth });
@@ -353,6 +565,9 @@ export function instrument(
         });
         edits.push({ at: range.end, to: range.end, text: ")", rank: -depth });
         probed.push(range.nodeId);
+        // `p` observes the promise it was handed settling, so this node reports
+        // its value without a binding to read.
+        valued.push(range.nodeId);
         continue;
       }
 
@@ -361,6 +576,7 @@ export function instrument(
         reason: "no-matching-statement",
         detail: "No statement matches this node's source range exactly.",
       });
+      noValue(range.nodeId, "not-probed", "This step has no marker at all, so nothing can read its value.");
       if (range.type === "loop") blind = true;
       continue;
     }
@@ -384,17 +600,21 @@ export function instrument(
      */
     const opaque = range.type === "parallel" || stubbornLoop;
     const open = opaque ? `${probe}.s(${id});${probe}.unknown(${id});` : `${probe}.s(${id});`;
-    const close = `${probe}.f(${id});`;
     if (opaque) uncounted.push(range.nodeId);
+
+    /** The item of one pass, when this range is a loop that names one. */
+    const loopItem = loopBody === undefined ? null : loopItemReference(first);
 
     /**
      * Called once the range is known to be probed: it has a frame at runtime,
-     * so a `pass` marker has something to count on.
+     * so a `pass` marker has something to count on. Answers whether it placed
+     * one, which is also whether the loop's item can be reported.
      */
-    const countLoop = (depth: number): void => {
-      if (loopBody === undefined || stubbornLoop) return;
-      placePass(range.nodeId, loopBody, depth);
+    const countLoop = (depth: number): boolean => {
+      if (loopBody === undefined || stubbornLoop) return false;
+      placePass(range.nodeId, loopBody, depth, loopItem);
       counted.push(range.nodeId);
+      return true;
     };
 
     /*
@@ -411,6 +631,96 @@ export function instrument(
         ts.isBreakStatement(first) ||
         ts.isContinueStatement(first) ||
         ts.isThrowStatement(first));
+
+    /*
+     * What this range declares, and therefore what its closing marker can be
+     * handed. A code node spans a run of sibling statements, so every lexical
+     * declaration in the run counts: what such a region produced is everything
+     * it left behind, not only its last line.
+     *
+     * `transfers` is excluded because both of its markers run *before* the
+     * statement — there is no "after" to read anything in.
+     */
+    const declared: string[] = [];
+    /** A `var`/`using`/function declaration was seen and deliberately passed over. */
+    let sawUnownedDeclaration = false;
+    if (!transfers) {
+      const siblings = (parent as { statements?: ts.NodeArray<ts.Statement> }).statements;
+      const from = siblings === undefined ? -1 : siblings.indexOf(first);
+      const to = siblings === undefined ? -1 : siblings.indexOf(last);
+      const region: readonly ts.Statement[] =
+        siblings === undefined || from === -1 || to === -1 ? [first] : siblings.slice(from, to + 1);
+      for (const statement of region) {
+        if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+          sawUnownedDeclaration = true;
+          continue;
+        }
+        if (!ts.isVariableStatement(statement)) continue;
+        const names = lexicalNamesOf(statement.declarationList);
+        if (names === null) {
+          sawUnownedDeclaration = true;
+          continue;
+        }
+        declared.push(...names);
+      }
+    }
+    const bindingRef = referenceFor(declared);
+    const close = bindingRef === null ? `${probe}.f(${id});` : `${probe}.f(${id}, ${bindingRef});`;
+
+    /**
+     * Put this range on `valued` or on `unvalued` — never on neither.
+     *
+     * `numbered` is whether a pass marker was placed, because a loop reports its
+     * item through that marker and through nothing else.
+     */
+    const accountValue = (numbered: boolean): void => {
+      if (bindingRef !== null || (numbered && loopItem !== null)) {
+        valued.push(range.nodeId);
+        return;
+      }
+      if (transfers) {
+        noValue(
+          range.nodeId,
+          "no-binding",
+          "A `return`/`break`/`continue`/`throw` declares nothing, and both of its markers run in front of it.",
+        );
+        return;
+      }
+      if (loopBody !== undefined && loopItem === null) {
+        noValue(
+          range.nodeId,
+          "no-binding",
+          "This loop names no item — a `while`, or a `for` whose head declares nothing this can read.",
+        );
+        return;
+      }
+      if (
+        first === last &&
+        // A `while`/`do` is a decision too, but it is a *loop* node here and
+        // the branch above has already answered for it.
+        (ts.isIfStatement(first) || ts.isSwitchStatement(first))
+      ) {
+        noValue(
+          range.nodeId,
+          "would-re-evaluate",
+          "A decision's value is its test, and reading it would mean evaluating that expression a second time — which a condition with a side effect would notice.",
+        );
+        return;
+      }
+      if (sawUnownedDeclaration) {
+        noValue(
+          range.nodeId,
+          "var-declaration",
+          "A `var`/`using`/function binding outlives the step, so a value shown against this step would claim ownership the language does not give it.",
+        );
+        return;
+      }
+      noValue(
+        range.nodeId,
+        "no-binding",
+        "This step declares no binding, so its closing marker has nothing in scope to read. A tool call is reported from the other side, by the call itself.",
+      );
+    };
 
     /*
      * Entering a `catch` is the runtime telling us an exception went past —
@@ -432,12 +742,13 @@ export function instrument(
       if (transfers) {
         edits.push({ at: start, to: start, text: open + close, rank: depth });
         probed.push(range.nodeId);
+        accountValue(false);
         continue;
       }
       edits.push({ at: start, to: start, text: open, rank: depth });
       edits.push({ at: end, to: end, text: close, rank: -depth });
       probed.push(range.nodeId);
-      countLoop(depth);
+      accountValue(countLoop(depth));
       continue;
     }
 
@@ -447,6 +758,7 @@ export function instrument(
         reason: "labelled-statement",
         detail: "Wrapping a labelled statement would break `continue`/`break` to its label.",
       });
+      noValue(range.nodeId, "not-probed", "This step has no marker at all, so nothing can read its value.");
       if (loopBody !== undefined) blind = true;
       continue;
     }
@@ -458,6 +770,7 @@ export function instrument(
           reason: "hoisted-declaration-body",
           detail: "A `var`/function declaration used as a body binds in the enclosing scope; a block would move it.",
         });
+        noValue(range.nodeId, "not-probed", "This step has no marker at all, so nothing can read its value.");
         if (loopBody !== undefined) blind = true;
         continue;
       }
@@ -469,7 +782,7 @@ export function instrument(
       });
       edits.push({ at: end, to: end, text: transfers ? "}" : `${close}}`, rank: -depth });
       probed.push(range.nodeId);
-      countLoop(depth);
+      accountValue(countLoop(depth));
       continue;
     }
 
@@ -478,6 +791,7 @@ export function instrument(
       reason: "unknown-parent",
       detail: `Statement sits directly inside a ${ts.SyntaxKind[parent.kind]}, which this runner will not rewrite.`,
     });
+    noValue(range.nodeId, "not-probed", "This step has no marker at all, so nothing can read its value.");
     if (loopBody !== undefined) blind = true;
   }
 
@@ -496,5 +810,5 @@ export function instrument(
   let out = source;
   for (const edit of edits) out = out.slice(0, edit.at) + edit.text + out.slice(edit.to);
 
-  return { code: out, probed, skipped, droppedImports, counted, uncounted, blind };
+  return { code: out, probed, skipped, droppedImports, counted, uncounted, blind, valued, unvalued };
 }

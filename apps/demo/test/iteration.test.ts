@@ -51,21 +51,35 @@ describe("iteration numbering", () => {
 
     const { events } = await execute(instrumentFor(NESTED).code, {});
 
-    // The outer loop is outside every loop, so it has no iteration of its own —
-    // absent, not `[]`, and certainly not `[0]`.
+    // The outer loop is outside every loop, so *its own* lifecycle carries no
+    // iteration — absent, not `[]`, and certainly not `[0]`. Between those two
+    // events sits one `pass` per lap, carrying that lap's own number.
+    //
+    // One event per pass, not a `started`/`finished` pair: a loop that runs
+    // twice started once and finished once, and reporting each lap as a
+    // `started` made `runs` read 3 and the canvas draw `×3` beside it. `pass`
+    // is a phase of its own for exactly that reason (core's run/types.ts), and
+    // `summarizeRun` closes a pass when the next one arrives or when the loop
+    // ends — so no second event is needed to say a lap is over.
     expect(iterationsOf(events, outer)).toEqual([
       { phase: "started", iteration: null },
+      { phase: "pass", iteration: [0] },
+      { phase: "pass", iteration: [1] },
       { phase: "finished", iteration: null },
     ]);
 
     // The inner loop belongs to a pass of the outer one. Both ends of one
     // occurrence carry the same number: the frame's iteration is captured when
     // it opens, so a loop's `finished` belongs to its parent's pass rather than
-    // to its own last pass.
+    // to its own last pass — and its own passes are numbered one level deeper.
     expect(iterationsOf(events, inner)).toEqual([
       { phase: "started", iteration: [0] },
+      { phase: "pass", iteration: [0, 0] },
+      { phase: "pass", iteration: [0, 1] },
       { phase: "finished", iteration: [0] },
       { phase: "started", iteration: [1] },
+      { phase: "pass", iteration: [1, 0] },
+      { phase: "pass", iteration: [1, 1] },
       { phase: "finished", iteration: [1] },
     ]);
 
@@ -155,11 +169,14 @@ export default async function flow(input: {}, tools: any) {
     const graph = graphFor(source);
     const { events } = await execute(built.code, {});
     const inner = iterationsOf(events, nodeIdOf(graph, "loop", 1));
-    expect(inner.filter((entry) => entry.phase === "started").map((entry) => entry.iteration)).toEqual([
-      [0],
-      [1],
-      [2],
-    ]);
+    // The inner loop's *own* starts — one per pass of the outer loop, so one
+    // level of numbering. Its own passes are a level deeper and are filtered
+    // out here; the test above pins those.
+    expect(
+      inner
+        .filter((entry) => entry.phase === "started" && (entry.iteration?.length ?? 0) === 1)
+        .map((entry) => entry.iteration),
+    ).toEqual([[0], [1], [2]]);
   });
 });
 
@@ -328,5 +345,36 @@ export default async function flow(input: {}, tools: any) {
     for (const loop of loops) {
       expect(built.blind || built.counted.includes(loop) || built.uncounted.includes(loop)).toBe(true);
     }
+  });
+});
+
+/**
+ * A three-pass loop ran once.
+ *
+ * The canvas draws `×N` from `NodeRunState.runs`, and `runs` counts `started`.
+ * While each pass was reported as a `started`, a three-pass loop read `×4` —
+ * the loop's own start plus one per lap. Core gained the `pass` phase for this;
+ * the number is asserted here, on a real instrumented run, because that is
+ * where a reader sees it.
+ */
+describe("what a loop's run count says", () => {
+  it("counts the loop once, however many passes it makes", async () => {
+    const source = `export default async function flow(input: unknown, tools: any) {
+  const items = [1, 2, 3];
+  for (const item of items) {
+    await tools.echo.say({ item });
+  }
+}
+`;
+    const graph = graphFor(source);
+    const loop = nodeIdOf(graph, "loop", 0);
+    const { events } = await execute(instrumentFor(source).code, {});
+    const state = summarizeRun(events).get(loop)!;
+
+    expect(state.runs).toBe(1);
+    expect(state.iterations?.length).toBe(3);
+    expect(state.iterations?.map((entry) => entry.iteration)).toEqual([[0], [1], [2]]);
+    // …and no pass is left claiming to be under way after the loop ended.
+    expect(state.iterations?.every((entry) => entry.status === "ok")).toBe(true);
   });
 });

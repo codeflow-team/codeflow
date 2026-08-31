@@ -236,7 +236,16 @@ export function summarizeRun(
   for (const event of events) {
     const current = out.get(event.nodeId) ?? blankState(event.nodeId, event.at);
     const next: NodeRunState = { ...current, lastAt: event.at };
-    if (event.phase === "started") {
+    if (event.phase === "pass") {
+      // Not a lifecycle transition: a container beginning another pass has not
+      // started or finished anything. Touching `runs` here made a three-pass
+      // loop report `×4` on the canvas — `runs` counts `started`, and a loop
+      // starts once. Only `lastAt` (above) and the per-pass entry below move.
+      //
+      // The pass before this one is over by definition, so it stops reading as
+      // still running.
+      closeOpenPasses(next);
+    } else if (event.phase === "started") {
       next.runs = current.runs + 1;
       next.status = "running";
     } else if (event.phase === "skipped") {
@@ -249,6 +258,8 @@ export function summarizeRun(
       }
       if (event.preview !== undefined) next.preview = event.preview;
       if (event.error !== undefined) next.error = event.error;
+      // The container is done, so its last pass is done with it.
+      closeOpenPasses(next);
     }
 
     if (event.iteration !== undefined) {
@@ -306,9 +317,26 @@ export function summarizeRun(
 
 /** Status implied by one lifecycle event, on its own. */
 function statusOf(event: RunEvent): RunNodeStatus {
-  if (event.phase === "started") return "running";
+  // A pass that has just been announced is under way; a later `pass`, or the
+  // container finishing, is what completes it.
+  if (event.phase === "started" || event.phase === "pass") return "running";
   if (event.phase === "skipped") return "skipped";
   return event.phase === "failed" ? "failed" : "ok";
+}
+
+/**
+ * Mark every pass of this node that is still open as completed.
+ *
+ * Called when the next pass begins and when the container itself ends. A pass
+ * left reading `running` after the loop is over states something the run did
+ * not: nothing is executing there any more.
+ */
+function closeOpenPasses(state: NodeRunState): void {
+  const iterations = state.iterations;
+  if (iterations === undefined) return;
+  for (let i = 0; i < iterations.length; i += 1) {
+    if (iterations[i].status === "running") iterations[i] = { ...iterations[i], status: "ok" };
+  }
 }
 
 /** Later events about the same iteration refine that iteration's entry. */

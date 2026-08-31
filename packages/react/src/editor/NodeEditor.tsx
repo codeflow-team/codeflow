@@ -456,7 +456,15 @@ function ScopePane({
         const originNode = origin === undefined ? null : index.nodeById.get(origin.nodeId) ?? null;
         // 07 §4: the *name* of the step, never its id.
         const originLabel = originNode?.label ?? null;
-        const observed = origin === undefined ? undefined : observedAt(run?.nodes.get(origin.nodeId), itemPath);
+        // A statement that bound several names reported one value for all of
+        // them; each binding takes its own share. Only asked for when the step
+        // really does declare more than one, so the single-binding case — every
+        // tool call — is untouched.
+        const multi = (originNode?.outputs.length ?? 0) > 1;
+        const observed =
+          origin === undefined
+            ? undefined
+            : observedAt(run?.nodes.get(origin.nodeId), itemPath, multi ? { field: binding.name } : {});
         // A loop item carries the array's item schema, derived by the analyzer
         // (`itemSchemaOf` in analyzer/emit.ts) rather than re-derived here: one
         // implementation, so the tree the UI offers and the names the patch

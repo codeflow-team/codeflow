@@ -175,9 +175,28 @@ export function previewOrigin(preview: unknown): { tool?: string; source?: strin
  * exactly; when the requested pass has no entry, the most recent pass that
  * carries a value is used, because that is what `preview` has always meant.
  */
+export interface ObservedAtOptions {
+  /**
+   * Which binding's value to pick out, when one statement declared several.
+   *
+   * `const triaged = []; let skipped = 0;` is one step, and the runtime records
+   * one value for it: `{ triaged: [], skipped: 0 }`, keyed by the names the
+   * statement bound. Handing that whole object to *every* binding of the step
+   * produced rows called `triaged.skipped` and `skipped.triaged` — draggable
+   * names for properties that do not exist, which is the mis-mapping I6 exists
+   * to prevent, on the one surface built for dragging.
+   *
+   * Keyed by the binding's **local name**, not by `ScopeOrigin.port`: for
+   * `const { data: rows } = f()` the port id is the property (`data`) while the
+   * recorded object uses the name the statement actually bound (`rows`).
+   */
+  field?: string;
+}
+
 export function observedAt(
   state: NodeRunState | null | undefined,
   iteration: readonly number[] | null,
+  options: ObservedAtOptions = {},
 ): { value: unknown } | undefined {
   if (state === null || state === undefined) return undefined;
 
@@ -190,12 +209,26 @@ export function observedAt(
     const chosen =
       wanted ?? [...iterations].reverse().find((entry) => entry.preview !== undefined);
     if (chosen !== undefined && chosen.preview !== undefined) {
-      return { value: unwrapPreview(chosen.preview) };
+      return { value: pickField(unwrapPreview(chosen.preview), options.field) };
     }
   }
 
   if (state.preview === undefined) return undefined;
-  return { value: unwrapPreview(state.preview) };
+  return { value: pickField(unwrapPreview(state.preview), options.field) };
+}
+
+/**
+ * One binding's share of a value recorded for a multi-binding statement.
+ *
+ * Only when the recorded value really is a plain object carrying that name: a
+ * step that declared several names but reported something else is not silently
+ * re-interpreted, it is handed over whole.
+ */
+function pickField(value: unknown, field: string | undefined): unknown {
+  if (field === undefined) return value;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  if (!(field in (value as Record<string, unknown>))) return value;
+  return (value as Record<string, unknown>)[field];
 }
 
 function sameIteration(a: readonly number[], b: readonly number[]): boolean {

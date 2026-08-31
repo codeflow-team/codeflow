@@ -22,7 +22,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ repository: string }"
+          "schema": {
+            "repository": "string"
+          }
         }
       ],
       "data": {
@@ -70,9 +72,15 @@
         }
       ],
       "data": {
+        "argumentPositions": {
+          "files": 0
+        },
+        "argumentStyle": "positional",
         "argumentText": "files",
-        "arguments": null,
-        "argumentsEditable": false,
+        "arguments": {
+          "files": "files"
+        },
+        "argumentsEditable": true,
         "argumentsHaveSpread": false,
         "awaited": false,
         "functionName": "filterAuthChanges",
@@ -121,6 +129,7 @@
         }
       ],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ pr: prs[0] }",
         "arguments": {
           "pr": "prs[0]"
@@ -172,6 +181,7 @@
         }
       ],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ repo }",
         "arguments": {
           "repo": "repo"
@@ -216,6 +226,7 @@
         }
       ],
       "data": {
+        "argumentStyle": "opaque",
         "argumentText": "input.repository",
         "arguments": null,
         "argumentsEditable": false,

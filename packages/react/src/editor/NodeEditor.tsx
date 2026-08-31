@@ -26,7 +26,7 @@
  */
 
 import { useCallback, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
-import { CornerDownLeft, Database, Info, Layers, Pin, Play } from "lucide-react";
+import { CornerDownLeft, Database, Eraser, Info, Layers, Pin, Play } from "lucide-react";
 import type { ScopeBinding, WorkflowNode } from "@codeflow-team/core";
 import { useCodeFlow } from "../context/hooks.js";
 import { humanFieldLabel, splitSpecRefs } from "../copy.js";
@@ -36,8 +36,10 @@ import { resolveInspectorFields, type InspectorField } from "../inspector/fields
 import {
   changesFor,
   editorSpecFor,
+  emptyFieldOutcome,
   encodeFieldValue,
   mergeChanges,
+  offersUnset,
   type FieldEditorKind,
 } from "../inspector/edit.js";
 import { CodeDiff } from "../diff/CodeDiff.js";
@@ -47,6 +49,7 @@ import { cn } from "../ui/cn.js";
 import { FieldHint, FieldLabel, Input, Textarea } from "../ui/input.js";
 import { Modal } from "../ui/dialog.js";
 import { Notice } from "../ui/notice.js";
+import { REVEAL_ON_HOVER } from "../ui/steady.js";
 import { canDrop, dropInto, type DropResult } from "./drop.js";
 import { PreviewValue } from "./PreviewValue.js";
 import {
@@ -91,9 +94,11 @@ interface DraftState {
   kind: Record<string, FieldEditorKind>;
   /** What the last drop did to this field, shown under it. */
   note: Record<string, string | null>;
+  /** Emptied fields the user asked to keep as empty text rather than remove (06 §3). */
+  keepEmpty: Record<string, boolean>;
 }
 
-const EMPTY_DRAFT: DraftState = { text: {}, checked: {}, kind: {}, note: {} };
+const EMPTY_DRAFT: DraftState = { text: {}, checked: {}, kind: {}, note: {}, keepEmpty: {} };
 
 function NodeEditorDialog({ node }: { node: WorkflowNode }): ReactNode {
   const {
@@ -160,7 +165,10 @@ function NodeEditorDialog({ node }: { node: WorkflowNode }): ReactNode {
     }
     const parts: Record<string, unknown>[] = [];
     for (const field of dirty) {
-      const encoded = encodeFieldValue(kindOf(field), textOf(field), checkedOf(field));
+      const encoded = encodeFieldValue(kindOf(field), textOf(field), checkedOf(field), {
+        field,
+        keepEmpty: draft.keepEmpty[field.name] === true,
+      });
       if (!encoded.ok) return { ok: false, message: encoded.message };
       parts.push(changesFor(field, encoded.value));
     }
@@ -220,6 +228,7 @@ function NodeEditorDialog({ node }: { node: WorkflowNode }): ReactNode {
         checked: current.checked,
         kind: { ...current.kind, [fieldName]: result.kind },
         note: { ...current.note, [fieldName]: result.note },
+        keepEmpty: { ...current.keepEmpty, [fieldName]: false },
       }));
       focused.current = { name: fieldName, caret: result.caret };
     },
@@ -343,13 +352,25 @@ function NodeEditorDialog({ node }: { node: WorkflowNode }): ReactNode {
                 key={field.name}
                 field={field}
                 kind={kindOf(field)}
+                spec={specs.get(field.name)?.value ?? ""}
                 text={textOf(field)}
                 checked={checkedOf(field)}
                 note={draft.note[field.name] ?? null}
+                keepEmpty={draft.keepEmpty[field.name] === true}
                 disabled={!editingEnabled || busy}
                 armed={dragging !== null && field.patch !== null && field.blockedReason === null}
                 onDrop={onDropField(field.name)}
                 onFocus={(caret) => { focused.current = { name: field.name, caret }; }}
+                onKeepEmpty={(value) => {
+                  setDraft((current) => ({ ...current, keepEmpty: { ...current.keepEmpty, [field.name]: value } }));
+                }}
+                onClear={() => {
+                  setDraft((current) => ({
+                    ...current,
+                    text: { ...current.text, [field.name]: "" },
+                    keepEmpty: { ...current.keepEmpty, [field.name]: false },
+                  }));
+                }}
                 onText={(value, caret) => {
                   focused.current = { name: field.name, caret };
                   setDraft((current) => ({ ...current, text: { ...current.text, [field.name]: value } }));
@@ -575,10 +596,23 @@ function ScopeRowItem({
             {row.note === undefined ? null : <span className="ml-1 text-ink-faint">({row.note})</span>}
           </span>
         )}
+        {/*
+          Always in the flow, revealed with opacity.
+
+          It used to be `hidden group-hover:inline-flex`, which put a flex item
+          into a baseline-aligned row the moment the pointer arrived: the row
+          grew a pixel, every row under it stepped down, and the pane jittered.
+          `self-center` keeps it out of the baseline calculation as well, so the
+          row is the same height whether or not this is visible (see
+          `ui/steady.ts`).
+        */}
         <button
           type="button"
           aria-label={`Insert ${row.path}`}
-          className="ml-auto hidden shrink-0 rounded px-1 text-[10px] text-accent group-hover:inline-flex"
+          className={cn(
+            "ml-auto inline-flex shrink-0 self-center rounded px-1 text-[10px] text-accent",
+            REVEAL_ON_HOVER,
+          )}
           onClick={() => { onUse(row); }}
         >
           <CornerDownLeft className="size-3" />
@@ -595,21 +629,28 @@ function ScopeRowItem({
 function DropField({
   field,
   kind,
+  spec,
   text,
   checked,
   note,
+  keepEmpty,
   disabled,
   armed,
   onDrop,
   onFocus,
   onText,
   onChecked,
+  onKeepEmpty,
+  onClear,
 }: {
   field: InspectorField;
   kind: FieldEditorKind;
+  /** The control's value before any draft — what "emptied" is measured against. */
+  spec: string;
   text: string;
   checked: boolean;
   note: string | null;
+  keepEmpty: boolean;
   disabled: boolean;
   /** True while something is being dragged and this field could take it. */
   armed: boolean;
@@ -617,10 +658,15 @@ function DropField({
   onFocus: (caret: number) => void;
   onText: (value: string, caret: number) => void;
   onChecked: (value: boolean) => void;
+  onKeepEmpty: (value: boolean) => void;
+  onClear: () => void;
 }): ReactNode {
   const blocked = field.patch === null || field.blockedReason !== null;
   const id = `cf-editor-${field.name.replace(/[^A-Za-z0-9_-]/g, "_")}`;
   const mono = kind === "expression" || kind === "code" || kind === "template";
+  const emptied = !blocked && spec.trim().length > 0 && text.trim().length === 0 && kind !== "checkbox";
+  const outcome = emptied ? emptyFieldOutcome(field, keepEmpty) : null;
+  const canUnset = !blocked && !disabled && offersUnset(field) && kind !== "checkbox" && text.trim().length > 0;
 
   return (
     <div
@@ -644,6 +690,23 @@ function DropField({
           <span className="font-mono text-[10.5px] font-normal text-ink-faint">{field.schema}</span>
         ) : null}
         {kind === "template" ? <Badge tone="accent">fills in a value</Badge> : null}
+        {field.position === null ? null : (
+          <Badge title="Passed by position, not by name — it cannot be removed on its own">
+            arg {String(field.position + 1)}
+          </Badge>
+        )}
+        {canUnset ? (
+          <button
+            type="button"
+            data-testid={`editor-clear-${field.name}`}
+            title="Remove this setting from the call — the property goes away, it is not saved as empty text"
+            className="ml-auto inline-flex items-center gap-1 rounded-md border-0 bg-transparent px-1 py-0.5 text-[11px] font-medium text-ink-faint outline-none transition-colors hover:text-danger focus-visible:ring-2 focus-visible:ring-ring/70"
+            onClick={onClear}
+          >
+            <Eraser className="size-3" />
+            Clear
+          </button>
+        ) : null}
       </FieldLabel>
 
       {kind === "checkbox" ? (
@@ -685,6 +748,26 @@ function DropField({
           onSelect={(event) => { onFocus(event.currentTarget.selectionStart ?? text.length); }}
           onChange={(event) => { onText(event.target.value, event.target.selectionStart ?? event.target.value.length); }}
         />
+      )}
+
+      {outcome === null ? null : (
+        <Notice
+          tone={outcome.kind === "refused" ? "warn" : outcome.kind === "blank" ? "info" : "muted"}
+          data-testid={`editor-empty-${field.name}`}
+          actions={
+            outcome.kind === "remove" ? (
+              <Button variant="secondary" size="xs" onClick={() => { onKeepEmpty(true); }}>
+                Keep it as empty text
+              </Button>
+            ) : outcome.kind === "blank" ? (
+              <Button variant="ghost" size="xs" onClick={() => { onKeepEmpty(false); }}>
+                Remove it instead
+              </Button>
+            ) : undefined
+          }
+        >
+          {splitSpecRefs(outcome.message).text}
+        </Notice>
       )}
 
       {field.blockedReason === null ? null : (

@@ -129,6 +129,30 @@ export function inputSchemaFieldNames(schema: Schema): string[] | null {
   return null;
 }
 
+/**
+ * Whether an input schema says a field is required — with a third answer.
+ *
+ * Only JSON Schema can state this, and only when it carries a `required` array.
+ * A named-fields map (`{ channel: "string" }`) and a TypeScript type ref have
+ * no notion of requiredness at all, and a JSON Schema with no `required` key
+ * has simply not said.
+ *
+ * The third answer is the point. Collapsing "unknown" into "optional" would let
+ * a UI stay silent while a user removes the one property a call cannot work
+ * without; collapsing it into "required" would cry on a correct edit until
+ * people learn to skip the warning, and then it is not there for the one that
+ * matters. Callers are expected to say something different in each case.
+ */
+export type Requiredness = "required" | "optional" | "unknown";
+
+export function fieldRequiredness(schema: Schema, field: string): Requiredness {
+  if (isTsTypeRef(schema) || isNamedFieldsSchema(schema)) return "unknown";
+  if (!isJsonSchema(schema)) return "unknown";
+  const required = schema["required"];
+  if (!Array.isArray(required)) return "unknown";
+  return required.includes(field) ? "required" : "optional";
+}
+
 /** `"channel"` ≡ `{ name: "channel" }` — 06 §1. */
 export function normalizeEditableField(input: EditableFieldInput): EditableField {
   if (typeof input === "string") {

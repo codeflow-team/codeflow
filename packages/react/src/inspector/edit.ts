@@ -18,7 +18,7 @@
  * Pure and DOM-free — this is the unit-test surface of the editing path.
  */
 
-import type { FieldValue } from "@codeflow-team/core";
+import type { FieldValue, Schema } from "@codeflow-team/core";
 import type { InspectorField } from "./fields.js";
 
 /** Control the inspector renders for a field. */
@@ -37,6 +37,20 @@ export interface FieldEditorSpec {
 export type EncodeResult =
   | { ok: true; value: FieldValue }
   | { ok: false; message: string };
+
+export interface EncodeOptions {
+  /**
+   * The field being encoded. It carries the schema (so a `number` field commits
+   * a number, 06 §3), whether the property can be removed at all, and the label
+   * a refusal names — none of which the control's `kind` knows on its own.
+   */
+  field?: InspectorField;
+  /**
+   * The user asked for an emptied field to be saved as empty text rather than
+   * removed. Two gestures, two results — never the same one (06 §3).
+   */
+  keepEmpty?: boolean;
+}
 
 const INTERPOLATION = /\{\{[\s\S]*?\}\}/;
 
@@ -127,10 +141,48 @@ function emptySpec(field: InspectorField): FieldEditorSpec {
   if (field.editor === "code") {
     return { kind: "code", value: "", checked: false, hint: "Code, saved into the file exactly as typed." };
   }
-  const schema = typeof field.schema === "string" ? field.schema : null;
-  if (schema === "number") return { kind: "number", value: "", checked: false, hint: null };
-  if (schema === "boolean") return { kind: "checkbox", value: "", checked: false, hint: null };
+  const declared = declaredTypeOf(field.schema);
+  if (declared === "number") return { kind: "number", value: "", checked: false, hint: null };
+  if (declared === "boolean") return { kind: "checkbox", value: "", checked: false, hint: null };
   return { kind: "text", value: "", checked: false, hint: null };
+}
+
+/* -------------------------------------------------------------------------- */
+/* what the schema says the field holds — 06 §3                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The primitive type a field's schema declares, or `null` when it declares none.
+ *
+ * Both shapes a `Schema` can take are read: the TypeScript ref (`"number"`, the
+ * form a tool's `inputSchema: { maxTickets: "number" }` produces) and JSON
+ * Schema (`{ type: "number" }`). A union, an enum of mixed types, or no schema
+ * at all answers `null` — and `null` means "keep the old behaviour", never "it
+ * is probably a string".
+ */
+export type DeclaredType = "string" | "number" | "boolean";
+
+export function declaredTypeOf(schema: Schema | undefined): DeclaredType | null {
+  if (schema === undefined || schema === null) return null;
+  const name =
+    typeof schema === "string"
+      ? schema.trim()
+      : typeof (schema as Record<string, unknown>)["type"] === "string"
+        ? String((schema as Record<string, unknown>)["type"])
+        : null;
+  if (name === null) return null;
+  if (name === "string") return "string";
+  if (name === "number" || name === "integer") return "number";
+  if (name === "boolean") return "boolean";
+  return null;
+}
+
+/** The word the refusal uses — `integer` is a number to everyone but the schema. */
+function typeWord(schema: Schema | undefined, declared: DeclaredType): string {
+  if (schema === undefined || schema === null) return declared;
+  const raw =
+    typeof schema === "string" ? schema.trim() : String((schema as Record<string, unknown>)["type"] ?? declared);
+  return raw === "integer" ? "whole number" : declared;
 }
 
 /**
@@ -145,28 +197,48 @@ function emptySpec(field: InspectorField): FieldEditorSpec {
  * | `template`   | `{ kind: "template", text }` — `{{ e }}` becomes `${e}`       |
  * | `code`       | `{ kind: "expression", text }` — the box *is* the source      |
  *
- * Clearing a field is `{ kind: "remove" }`: the property goes away and the node
- * says it needs configuration, which is what 06 §3 prescribes — never a silent
- * empty string in place of a value.
+ * Two things the control's `kind` cannot decide on its own, and which therefore
+ * come from `options.field`:
+ *
+ * - **the declared type.** A field whose schema says `number` commits `50`, not
+ *   `"50"`; one whose schema says `boolean` commits `true`. Text that does not
+ *   parse as the declared type is refused *here*, naming the type, rather than
+ *   being written and reported back afterwards as a type mismatch. A field with
+ *   no declared type behaves exactly as it always did;
+ * - **what empty means.** Clearing a field is `{ kind: "remove" }`: the property
+ *   goes away and the node says it needs configuration, which is what 06 §3
+ *   prescribes — never a silent empty string in place of a value. `""` is still
+ *   reachable for a `string` field, through `keepEmpty`, because it is a real
+ *   value; and a positional argument, which core cannot remove without shifting
+ *   every argument after it, is refused with that reason.
  */
 export function encodeFieldValue(
   kind: FieldEditorKind,
   input: string,
   checked = false,
+  options: EncodeOptions = {},
 ): EncodeResult {
+  const field = options.field;
+  const declared = declaredTypeOf(field?.schema);
+  const empty = input.trim().length === 0;
+
   switch (kind) {
-    case "text":
+    case "text": {
+      // A text box is where a `number`/`boolean` field ends up whenever its
+      // JSON Schema is an object rather than a bare type ref, and where every
+      // untyped field lives. The schema is on the field, so the type is checked
+      // *here* rather than being written and reported back as a mismatch.
+      if (empty) return emptied(field, options.keepEmpty === true, declared, "");
+      if (declared === "number") return numberValue(input, field, declared);
+      if (declared === "boolean") return booleanValue(input, field);
       // A bare string is resolved against the original form by the patcher:
       // string literal → string literal, template → template body.
       return { ok: true, value: input };
+    }
 
     case "number": {
-      if (input.trim().length === 0) return { ok: true, value: { kind: "remove" } };
-      const parsed = Number(input);
-      if (!Number.isFinite(parsed)) {
-        return { ok: false, message: `"${input}" is not a number — clear the field to remove it instead.` };
-      }
-      return { ok: true, value: parsed };
+      if (empty) return emptied(field, options.keepEmpty === true, declared, { kind: "remove" });
+      return numberValue(input, field, declared);
     }
 
     case "checkbox":
@@ -174,13 +246,144 @@ export function encodeFieldValue(
 
     case "expression":
     case "code": {
-      if (input.trim().length === 0) return { ok: true, value: { kind: "remove" } };
+      if (empty) return emptied(field, options.keepEmpty === true, declared, { kind: "remove" });
       return { ok: true, value: { kind: "expression", text: input.trim() } };
     }
 
     case "template":
       return { ok: true, value: { kind: "template", text: templateBodyFromDisplay(input) } };
   }
+}
+
+function numberValue(input: string, field: InspectorField | undefined, declared: DeclaredType | null): EncodeResult {
+  const parsed = Number(input.trim());
+  if (!Number.isFinite(parsed)) {
+    return { ok: false, message: mismatch(input, field, "number", declared) };
+  }
+  if (typeWord(field?.schema, "number") === "whole number" && !Number.isInteger(parsed)) {
+    return { ok: false, message: mismatch(input, field, "whole number", declared) };
+  }
+  return { ok: true, value: parsed };
+}
+
+function booleanValue(input: string, field: InspectorField | undefined): EncodeResult {
+  const text = input.trim().toLowerCase();
+  if (text === "true" || text === "yes") return { ok: true, value: true };
+  if (text === "false" || text === "no") return { ok: true, value: false };
+  return { ok: false, message: mismatch(input, field, "boolean", "boolean") };
+}
+
+/**
+ * Refused *before* anything is written, naming what the field expects.
+ *
+ * The app already flagged "Argument type mismatch" after the fact, which means
+ * it knew — it just knew too late. Saying it here, with the declared type in the
+ * sentence, is the same fact delivered while the user can still act on it
+ * (07 §5).
+ */
+function mismatch(
+  input: string,
+  field: InspectorField | undefined,
+  expected: string,
+  declared: DeclaredType | null,
+): string {
+  const name = field === undefined ? "This setting" : `“${field.label}”`;
+  const article = expected === "boolean" ? "a" : "a";
+  const tail =
+    expected === "boolean"
+      ? " Type `true` or `false`."
+      : declared === null
+        ? ""
+        : field?.removable === true
+          ? " Type a value of that type, or clear the field to remove the setting."
+          : " Type a value of that type.";
+  return `${name} expects ${article} ${expected}, and “${input.trim()}” is not one.${tail}`;
+}
+
+/**
+ * What an emptied control means.
+ *
+ * Three different things, and they must not be confused (06 §3):
+ *
+ * - **removed** — the property goes away; the default, because a value that is
+ *   not there is what "no value" means in the source, and `""` is a value;
+ * - **empty text** — a legitimate value for a `string` field, reachable only by
+ *   asking for it (`keepEmpty`), so the two gestures never collapse into one;
+ * - **refused** — a positional argument cannot be removed at all (core would
+ *   refuse: removing one shifts every argument after it), so the UI says why
+ *   instead of writing `""` in its place.
+ */
+function emptied(
+  field: InspectorField | undefined,
+  keepEmpty: boolean,
+  declared: DeclaredType | null,
+  /** What an empty control meant before there was a field to ask — unchanged. */
+  fallback: FieldValue,
+): EncodeResult {
+  // No field context: the encoder knows nothing about the property, so it
+  // cannot decide between removing it and blanking it. Unchanged from before.
+  if (field === undefined) return { ok: true, value: fallback };
+  if (keepEmpty) {
+    if (declared === null || declared === "string") return { ok: true, value: "" };
+    return {
+      ok: false,
+      message: `“${field.label}” holds a ${typeWord(field.schema, declared)}, so empty text is not a value it can take — clear it to remove the setting instead.`,
+    };
+  }
+  if (!field.removable) {
+    return { ok: false, message: field.unremovableReason ?? NOT_REMOVABLE };
+  }
+  return { ok: true, value: { kind: "remove" } };
+}
+
+const NOT_REMOVABLE =
+  "This setting cannot be removed by the patch engine (06 §2) — give it a value, or edit the statement in the code view.";
+
+/* -------------------------------------------------------------------------- */
+/* clearing, as a gesture the UI can describe before it happens                */
+/* -------------------------------------------------------------------------- */
+
+export type EmptyOutcome =
+  | { kind: "remove"; message: string }
+  | { kind: "blank"; message: string }
+  | { kind: "refused"; message: string };
+
+/**
+ * What will happen when this field is applied with an empty control — the text
+ * the UI shows *while* the box is empty, so "cleared" and "set to empty" are
+ * visibly different before either is committed.
+ */
+export function emptyFieldOutcome(field: InspectorField, keepEmpty = false): EmptyOutcome {
+  const declared = declaredTypeOf(field.schema);
+  if (keepEmpty) {
+    if (declared === null || declared === "string") {
+      return { kind: "blank", message: `“${field.label}” will be saved as empty text (\`""\`), not removed.` };
+    }
+    return {
+      kind: "refused",
+      message: `“${field.label}” holds a ${typeWord(field.schema, declared)}, so empty text is not a value it can take — clear it to remove the setting instead.`,
+    };
+  }
+  if (!field.removable) {
+    return { kind: "refused", message: field.unremovableReason ?? NOT_REMOVABLE };
+  }
+  return {
+    kind: "remove",
+    message: field.required
+      ? `“${field.label}” will be removed from the call. It is required, so this step will come back asking to be set up (06 §3).`
+      : `“${field.label}” will be removed from the call — the property goes away rather than being saved as empty text (06 §3).`,
+  };
+}
+
+/**
+ * Whether the field is offered an explicit "clear" control.
+ *
+ * Required fields are not: removing one leaves a step that cannot run, and that
+ * is not something to put a button on. They can still be emptied by hand, which
+ * is what 06 §3 describes, and the notice then says what it will do.
+ */
+export function offersUnset(field: InspectorField): boolean {
+  return field.removable && !field.required && field.patch === "field" && field.blockedReason === null;
 }
 
 /**

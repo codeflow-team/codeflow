@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ pr: string }"
+          "schema": {
+            "pr": "string"
+          }
         }
       ],
       "data": {
@@ -95,6 +97,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ item: files }",
         "arguments": {
           "item": "files"
@@ -146,6 +149,7 @@
         }
       ],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ pr: input.pr }",
         "arguments": {
           "pr": "input.pr"
@@ -258,6 +262,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: \"#security\", message: files[0] }",
         "arguments": {
           "channel": "\"#security\"",

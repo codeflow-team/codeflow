@@ -114,6 +114,7 @@ while (attempts < 3) {
 ### 2.10 Trigger and Output
 
 - The `trigger` node is built from the type of the `input` parameter plus `TriggerMetadata` when supplied ([03-data-model.md](03-data-model.md) §9).
+- Its output port carries that type as a **schema**, and the annotation decides which of the two shapes ([03-data-model.md](03-data-model.md) §11): an inline **object type literal** (`{ ticketsPath: string; user: { id: string } }`) resolves to a named-fields map — its members are in the syntax tree, so no type checker is needed and the UI can offer `input.ticketsPath` as its own draggable row. Anything whose members live behind the checker — a type *name*, an array of one, an intersection, a union, a mapped or conditional type, or a literal carrying a member this rule cannot name (an index signature, a method) — stays the **type-ref string** it was written as. A partial answer here would be a wrong one (I6).
 - A flow with no explicit `return` → a synthetic `output` node at the end of the function body.
 
 ### 2.11 Fallback

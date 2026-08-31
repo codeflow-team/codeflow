@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ amount: number }"
+          "schema": {
+            "amount": "number"
+          }
         }
       ],
       "data": {
@@ -100,6 +102,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{\n    channel: \"#billing\",\n    message: `${charge} ${receipt} ${ready}`\n  }",
         "arguments": {
           "channel": "\"#billing\"",
@@ -233,9 +236,15 @@
       ],
       "outputs": [],
       "data": {
+        "argumentPositions": {
+          "input": 0
+        },
+        "argumentStyle": "positional",
         "argumentText": "input",
-        "arguments": null,
-        "argumentsEditable": false,
+        "arguments": {
+          "input": "input"
+        },
+        "argumentsEditable": true,
         "argumentsHaveSpread": false,
         "awaited": false,
         "branch": 2,
@@ -279,6 +288,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ amount: input.amount }",
         "arguments": {
           "amount": "input.amount"
@@ -325,6 +335,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ amount: input.amount }",
         "arguments": {
           "amount": "input.amount"

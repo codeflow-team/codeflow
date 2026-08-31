@@ -113,10 +113,12 @@ describe("what is visible at a node", () => {
   it("carries the declared output schema when there is exactly one origin", () => {
     expect(find(graph, "flow/for[0]/call:slack.send[0]", "prs").schema).toBe("PullRequest[]");
     expect(find(graph, "flow/for[0]/call:slack.send[0]", "files").schema).toBe("File[]");
-    // The trigger's port carries the annotated type of `input`.
-    expect(find(graph, "flow/call:github.getNewPRs[0]", "input").schema).toBe(
-      "{ repository: string }",
-    );
+    // The trigger's port carries the annotated type of `input` — as a *shape*
+    // when the annotation is an object type literal, so the UI can offer
+    // `input.repository` as a row of its own (analyzer/type-schema.ts).
+    expect(find(graph, "flow/call:github.getNewPRs[0]", "input").schema).toEqual({
+      repository: "string",
+    });
   });
 
   it("resolves an import to its kind rather than dropping it", () => {

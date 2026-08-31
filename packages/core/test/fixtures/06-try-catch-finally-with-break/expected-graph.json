@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ amounts: number[] }"
+          "schema": {
+            "amounts": "number[]"
+          }
         }
       ],
       "data": {
@@ -169,6 +171,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ amount }",
         "arguments": {
           "amount": "amount"
@@ -249,6 +252,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: \"#alerts\", message: `Charge failed: ${err}` }",
         "arguments": {
           "channel": "\"#alerts\"",
@@ -295,6 +299,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ item: amount }",
         "arguments": {
           "item": "amount"

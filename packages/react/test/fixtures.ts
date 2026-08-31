@@ -4,6 +4,8 @@
  * adapters can be tested without depending on the analyzer's internals.
  */
 
+import type { InspectorField } from "../src/inspector/fields.js";
+import { formatFieldValue } from "../src/inspector/expression.js";
 import type {
   NodeCapabilities,
   NodePort,
@@ -199,4 +201,30 @@ export function tryGraph(): WorkflowGraph {
       source: alert.source,
     },
   ]);
+}
+
+/**
+ * One `InspectorField`, with the boring half filled in.
+ *
+ * The model has grown the answers to "may this be removed?" and "which
+ * positional slot is this?", and a test that spells all of them out every time
+ * hides the one property it is actually about.
+ */
+export function field(spec: Partial<InspectorField> & { name: string }): InspectorField {
+  const raw = spec.raw ?? null;
+  return {
+    label: spec.name,
+    editor: "text",
+    display: formatFieldValue(raw),
+    declaredEditable: true,
+    blockedReason: null,
+    missing: false,
+    patch: "field",
+    required: false,
+    removable: true,
+    unremovableReason: null,
+    position: null,
+    ...spec,
+    raw,
+  };
 }

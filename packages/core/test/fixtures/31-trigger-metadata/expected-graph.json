@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ at: string }"
+          "schema": {
+            "at": "string"
+          }
         }
       ],
       "data": {
@@ -103,6 +105,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: \"#daily\", message: input.at }",
         "arguments": {
           "channel": "\"#daily\"",

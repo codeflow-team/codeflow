@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ urgent: boolean }"
+          "schema": {
+            "urgent": "boolean"
+          }
         }
       ],
       "data": {
@@ -100,6 +102,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel, message: \"routed\" }",
         "arguments": {
           "channel": "channel",

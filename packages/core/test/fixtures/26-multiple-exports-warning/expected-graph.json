@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ channel: string }"
+          "schema": {
+            "channel": "string"
+          }
         }
       ],
       "data": {
@@ -100,6 +102,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: input.channel, message: helper(\"  hi  \") }",
         "arguments": {
           "channel": "input.channel",

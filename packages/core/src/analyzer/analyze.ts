@@ -31,6 +31,7 @@ import { addNode, connectAll } from "./builder.js";
 import { materializeScopes } from "./scopes.js";
 import { checkFlowContract, type FlowFunction } from "./flow-contract.js";
 import { emitSequence } from "./emit.js";
+import { namedFieldsFromTypeNode } from "./type-schema.js";
 
 export const DEFAULT_ANALYZE_FILE = "flow.ts";
 
@@ -231,7 +232,14 @@ function emitTrigger(
   const parameters = flow.getParameters();
   const inputParameter = parameters[0];
   const inputName = inputParameter?.getName() ?? "input";
-  const inputType = inputParameter?.getTypeNode()?.getText() ?? null;
+  const inputTypeNode = inputParameter?.getTypeNode();
+  const inputType = inputTypeNode?.getText() ?? null;
+  // An inline object type literal is a *shape* the syntax states outright, so
+  // the port carries the shape rather than one opaque string: without it the
+  // most obvious thing to drag in the whole flow — `input.ticketsPath` — has no
+  // children to drag (analyzer/type-schema.ts). A type name resolves to nothing
+  // and the port keeps the string, exactly as before.
+  const inputFields = namedFieldsFromTypeNode(inputTypeNode);
 
   // The trigger maps to the flow signature — the construct that produced it (03 §4).
   const body = flow.getBody();
@@ -268,9 +276,11 @@ function emitTrigger(
       inputParameter === undefined
         ? []
         : [
-            inputType === null
-              ? { id: inputName, label: inputName }
-              : { id: inputName, label: inputName, schema: inputType },
+            inputFields !== undefined
+              ? { id: inputName, label: inputName, schema: inputFields }
+              : inputType === null
+                ? { id: inputName, label: inputName }
+                : { id: inputName, label: inputName, schema: inputType },
           ],
     data: {
       paramName: inputName,

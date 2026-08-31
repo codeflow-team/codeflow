@@ -55,7 +55,21 @@ export interface AiStatus {
 const KEY_STORAGE = "codeflow.demo.openrouter-key";
 
 /** Default for BYOK. Free on OpenRouter, and the model the evals were run on. */
-export const BYOK_DEFAULT_MODEL = "stealth/ox-alpha";
+/**
+ * Default model for a visitor's own key.
+ *
+ * `openrouter/free` is a *router* across whatever free models exist right now,
+ * not one model id. That matters more than it sounds: the previous default,
+ * `stealth/ox-alpha`, was retired from OpenRouter and every AI feature in this
+ * demo started failing against a model that no longer existed — a dead constant
+ * nothing could have caught, because the id stayed perfectly valid-looking.
+ * A router cannot rot the same way.
+ *
+ * It routes to reasoning models, so the token cap must stay generous: too small
+ * a cap comes back `content: null` with the whole budget spent on reasoning,
+ * and no error at all.
+ */
+export const BYOK_DEFAULT_MODEL = "openrouter/free";
 
 const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 /** Same budget the dev proxy uses — too small a cap returns `content: null`. */

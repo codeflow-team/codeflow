@@ -41,6 +41,18 @@ Changing `channel` may patch only that one property.
 - a shorthand property (`{ channel }`) → editing the value rewrites it to longhand (`channel: "#eng"`) — this is **defined as correct behaviour** (it is the expected diff in the fixture), and the resulting disappearance of the data edge from the `channel` variable is semantically accurate;
 - a field whose schema is a TS ref (not JSON Schema) → the inspector cannot build a validating form, so it uses the **expression editor** ([03-data-model.md](03-data-model.md) §11).
 
+**A library function is the other shape, and it is editable too.** A tool is called with one object; a library function is called with a **parameter list**, and the *n*-th key of its `inputSchema` names the *n*-th parameter ([05-registry.md](05-registry.md) §4). That is a bridge, not a guess, so the patch engine edits argument *n* in place (`positionalEdits`) and the analyzer says so on the node:
+
+```ts
+data.argumentStyle: "object" | "positional" | "opaque"
+```
+
+- `object` — one visible object literal, the case the bullets above describe. `data.arguments` maps property name → source text;
+- `positional` — the call's arguments line up one-for-one with the schema's field names. `data.arguments` maps **field name → the argument's source text** (the same shape, so one inspector path renders both) and `data.argumentPositions` maps field name → its 0-based position;
+- `opaque` — nothing here can be named: a spread, a variable standing in for the whole object, an arity that does not match the schema (which parameter was skipped is not knowable — I6), or a callee with no registered schema at all, such as a local function. Fields are not editable; the code view is the honest answer.
+
+`argumentsEditable` is the same fact as a boolean (`argumentStyle !== "opaque"`). **Removing** a positional argument stays refused whatever the style: removing argument 2 of 3 turns argument 3 into argument 2 (§2).
+
 ## 2. Supported edits (MVP)
 
 - primitive arguments (string/number/boolean literals);

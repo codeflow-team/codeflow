@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ amount: number }"
+          "schema": {
+            "amount": "number"
+          }
         }
       ],
       "data": {
@@ -166,6 +168,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ amount: input.amount }",
         "arguments": {
           "amount": "input.amount"

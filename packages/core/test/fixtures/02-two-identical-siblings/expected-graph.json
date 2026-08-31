@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ repository: string }"
+          "schema": {
+            "repository": "string"
+          }
         }
       ],
       "data": {
@@ -100,6 +102,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: \"#security\", message: \"Auth change detected\" }",
         "arguments": {
           "channel": "\"#security\"",
@@ -151,6 +154,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: \"#security\", message: \"Auth change detected\" }",
         "arguments": {
           "channel": "\"#security\"",

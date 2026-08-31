@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ repository: string }"
+          "schema": {
+            "repository": "string"
+          }
         }
       ],
       "data": {
@@ -101,6 +103,7 @@
         }
       ],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ repo: input.repository }",
         "arguments": {
           "repo": "input.repository"

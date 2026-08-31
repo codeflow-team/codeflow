@@ -22,7 +22,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ channel: string }"
+          "schema": {
+            "channel": "string"
+          }
         }
       ],
       "data": {

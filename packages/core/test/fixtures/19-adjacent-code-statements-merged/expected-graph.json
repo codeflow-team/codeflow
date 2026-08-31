@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ repository: string }"
+          "schema": {
+            "repository": "string"
+          }
         }
       ],
       "data": {
@@ -100,6 +102,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: \"#audit\", message: parts[0] }",
         "arguments": {
           "channel": "\"#audit\"",

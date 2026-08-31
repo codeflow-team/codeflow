@@ -25,6 +25,7 @@ import {
   ArrowRightLeft,
   ChevronRight,
   Code,
+  Eraser,
   MousePointerClick,
   RotateCcw,
   SlidersHorizontal,
@@ -54,10 +55,12 @@ import {
   IMPLICIT_TEMPLATE_REFUSAL,
   changesFor,
   editorSpecFor,
+  emptyFieldOutcome,
   encodeAsTemplate,
   encodeFieldValue,
   hasInterpolation,
   mergeChanges,
+  offersUnset,
   type FieldEditorSpec,
 } from "./edit.js";
 
@@ -87,9 +90,15 @@ interface DraftState {
   checked: Record<string, boolean>;
   /** Fields the user explicitly promoted from string literal to template (06 §3). */
   template: Record<string, boolean>;
+  /**
+   * Fields the user emptied and then asked to keep as empty text rather than
+   * remove. Clearing and setting-to-empty are two gestures with two results, so
+   * the choice is state, not an inference from the box being blank (06 §3).
+   */
+  keepEmpty: Record<string, boolean>;
 }
 
-const EMPTY_DRAFT: DraftState = { text: {}, checked: {}, template: {} };
+const EMPTY_DRAFT: DraftState = { text: {}, checked: {}, template: {}, keepEmpty: {} };
 
 /**
  * DOM id for one form control of this inspector.
@@ -286,7 +295,10 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
         continue;
       }
 
-      const encoded = encodeFieldValue(spec.kind, text, checked);
+      const encoded = encodeFieldValue(spec.kind, text, checked, {
+        field,
+        keepEmpty: draft.keepEmpty[field.name] === true,
+      });
       if (!encoded.ok) return { ok: false, message: encoded.message };
       parts.push(changesFor(field, encoded.value));
     }
@@ -580,6 +592,7 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
                   text={draft.text[field.name] ?? spec.value}
                   checked={draft.checked[field.name] ?? spec.checked}
                   template={draft.template[field.name] === true}
+                  keepEmpty={draft.keepEmpty[field.name] === true}
                   disabled={!editingEnabled || busy}
                   disabledReason={editingEnabled ? null : editingDisabledReason}
                   advanced={advanced}
@@ -591,6 +604,16 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
                   }}
                   onTemplate={(value) => {
                     setDraft((current) => ({ ...current, template: { ...current.template, [field.name]: value } }));
+                  }}
+                  onKeepEmpty={(value) => {
+                    setDraft((current) => ({ ...current, keepEmpty: { ...current.keepEmpty, [field.name]: value } }));
+                  }}
+                  onClear={() => {
+                    setDraft((current) => ({
+                      ...current,
+                      text: { ...current.text, [field.name]: "" },
+                      keepEmpty: { ...current.keepEmpty, [field.name]: false },
+                    }));
                   }}
                 />
               );
@@ -859,6 +882,8 @@ interface FieldRowProps {
   text: string;
   checked: boolean;
   template: boolean;
+  /** The user chose "keep it as empty text" for this emptied field (06 §3). */
+  keepEmpty: boolean;
   disabled: boolean;
   disabledReason: string | null;
   /** Show the schema type and the patch-operation tag (power user and above). */
@@ -866,6 +891,8 @@ interface FieldRowProps {
   onText: (value: string) => void;
   onChecked: (value: boolean) => void;
   onTemplate: (value: boolean) => void;
+  onKeepEmpty: (value: boolean) => void;
+  onClear: () => void;
 }
 
 function FieldRow(props: FieldRowProps): ReactNode {
@@ -881,6 +908,15 @@ function FieldRow(props: FieldRowProps): ReactNode {
   const unset = field.missing || props.text.trim() === "undefined";
   const placeholder = unset ? "Not set yet" : "";
   const wantsTemplate = spec.kind === "text" && hasInterpolation(props.text);
+  /**
+   * The box is empty and it was not empty before — so something is about to be
+   * *unset*, and the two things that could mean must not look the same. The
+   * outcome is computed, named and shown before Apply, never inferred from the
+   * result afterwards (06 §3, 07 §5).
+   */
+  const emptied = !blocked && spec.value.trim().length > 0 && props.text.trim().length === 0 && spec.kind !== "checkbox";
+  const outcome = emptied ? emptyFieldOutcome(field, props.keepEmpty) : null;
+  const canUnset = offersUnset(field) && spec.kind !== "checkbox" && props.text.trim().length > 0;
   const mono = spec.kind === "expression" || spec.kind === "code" || spec.kind === "template";
   const id = controlId(props.nodeId, `field-${field.name}`);
   const title = reason ?? undefined;
@@ -901,8 +937,25 @@ function FieldRow(props: FieldRowProps): ReactNode {
         {props.advanced && field.schema !== undefined && typeof field.schema === "string" ? (
           <span className="font-mono text-[10.5px] font-normal text-ink-faint">{field.schema}</span>
         ) : null}
+        {props.advanced && field.position !== null ? (
+          <Badge title="Passed by position, not by name — it cannot be removed on its own">
+            arg {props.field.position === null ? "" : String(props.field.position + 1)}
+          </Badge>
+        ) : null}
         {props.advanced && !field.declaredEditable ? <Badge>not declared editable</Badge> : null}
         {props.advanced && !field.display.friendly ? <Badge tone="accent">code</Badge> : null}
+        {canUnset && !props.disabled ? (
+          <button
+            type="button"
+            data-testid={`clear-${field.name}`}
+            title="Remove this setting from the call — the property goes away, it is not saved as empty text"
+            className="ml-auto inline-flex items-center gap-1 rounded-md border-0 bg-transparent px-1 py-0.5 text-[11px] font-medium text-ink-faint outline-none transition-colors hover:text-danger focus-visible:ring-2 focus-visible:ring-ring/70"
+            onClick={props.onClear}
+          >
+            <Eraser className="size-3" />
+            Clear
+          </button>
+        ) : null}
       </FieldLabel>
 
       {spec.kind === "checkbox" ? (
@@ -970,6 +1023,37 @@ function FieldRow(props: FieldRowProps): ReactNode {
             : splitSpecRefs(IMPLICIT_TEMPLATE_REFUSAL).text}
         </Notice>
       ) : null}
+
+      {/*
+        Emptying a box is an edit with three possible meanings, so it says which
+        one it has before Apply rather than after. `""` stays reachable — it is a
+        real value for a string field — but only by asking for it, which is the
+        whole point of separating the two gestures (06 §3).
+      */}
+      {outcome === null ? null : (
+        <Notice
+          tone={outcome.kind === "refused" ? "warn" : outcome.kind === "blank" ? "info" : "muted"}
+          data-testid={`empty-${field.name}`}
+          refs={splitSpecRefs(outcome.message).refs}
+          actions={
+            outcome.kind === "refused" && props.keepEmpty ? (
+              <Button variant="secondary" size="xs" onClick={() => { props.onKeepEmpty(false); }}>
+                Remove it instead
+              </Button>
+            ) : outcome.kind === "blank" ? (
+              <Button variant="ghost" size="xs" onClick={() => { props.onKeepEmpty(false); }}>
+                Remove it instead
+              </Button>
+            ) : outcome.kind === "remove" ? (
+              <Button variant="secondary" size="xs" onClick={() => { props.onKeepEmpty(true); }}>
+                Keep it as empty text
+              </Button>
+            ) : undefined
+          }
+        >
+          {splitSpecRefs(outcome.message).text}
+        </Notice>
+      )}
 
       {blockedSplit !== null ? <FieldHint tone="warn">{blockedSplit.text}</FieldHint> : null}
       {blockedSplit === null && unset ? (

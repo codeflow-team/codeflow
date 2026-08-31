@@ -26,7 +26,7 @@ import { checkFlowContract } from "../analyzer/flow-contract.js";
 import type { Diagnostic, Schema, WorkflowGraph, WorkflowNode } from "../model/index.js";
 import { isNamedFieldsSchema, isTsTypeRef } from "../model/schema.js";
 import type { RegistryLookup } from "../registry/lookup.js";
-import { inputSchemaFieldNames } from "../registry/validate.js";
+import { fieldRequiredness, inputSchemaFieldNames } from "../registry/validate.js";
 import { canonicalJson } from "../util/canonical-json.js";
 import type { TextEdit } from "./edits.js";
 import {
@@ -395,16 +395,37 @@ function planFields(input: PlanInput): PatchPlan {
     guard(name, resolveValue(name, fieldValue, location.shorthand ? "none" : formOf(location.value)));
     edits.push(...setPropertyEdit(object, location, name, fieldValue, input.style, input.source));
 
-    // Clearing a field the schema knows about leaves the node unconfigured —
-    // said out loud rather than left to be discovered at run time (06 §3).
+    // Clearing a *required* field leaves the node unconfigured — said out loud
+    // rather than left to be discovered at run time (06 §3).
+    //
+    // Only required. Removing an optional property is a legitimate edit that
+    // returns the call to its default, and warning "the node needs
+    // configuration" there states something the schema does not say. A warning
+    // that cries on a correct edit is a warning people learn to skip past, and
+    // then it is not there for the one that matters.
     const removes = typeof fieldValue === "object" && fieldValue !== null && fieldValue.kind === "remove";
-    if (removes && schemaFields !== null && schemaFields.includes(name)) {
-      diagnostics.push({
-        severity: "warning",
-        code: "needs-configuration",
-        message: `\`${name}\` was removed from "${definition.label}" — the node needs configuration before the flow runs (06 §3).`,
-        source: input.node.source,
-      });
+    if (removes && definition.inputSchema !== undefined) {
+      const requiredness = fieldRequiredness(definition.inputSchema, name);
+      if (requiredness === "required") {
+        diagnostics.push({
+          severity: "warning",
+          code: "needs-configuration",
+          message: `\`${name}\` is required by "${definition.label}" and was removed — fill it in before the flow runs (06 §3).`,
+          source: input.node.source,
+        });
+      } else if (requiredness === "unknown" && schemaFields !== null && schemaFields.includes(name)) {
+        // The schema knows the field but not whether the call needs it. Saying
+        // "the node needs configuration" here would assert something nobody
+        // declared; saying nothing would hide the removal of the one property a
+        // call cannot work without. So the warning names the gap instead — and
+        // the gap is fixable, by declaring `required` in the registry.
+        diagnostics.push({
+          severity: "warning",
+          code: "needs-configuration",
+          message: `\`${name}\` was removed from "${definition.label}", which does not declare which of its inputs are required — check the call is still complete (05 §1, 06 §3).`,
+          source: input.node.source,
+        });
+      }
     }
   }
 

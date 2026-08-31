@@ -16,7 +16,7 @@ import { EVAL_INTENTS, conformanceRates, extractFlowSource, runIntent } from "./
 declare const process: { env: Record<string, string | undefined> };
 
 const apiKey = process.env["OPENROUTER_API_KEY"];
-const model = process.env["OPENROUTER_MODEL"] ?? "stealth/ox-alpha";
+const model = process.env["OPENROUTER_MODEL"] ?? "openrouter/free";
 
 describe("eval harness (offline parts)", () => {
   it("strips the markdown fences a model wraps its answer in", () => {

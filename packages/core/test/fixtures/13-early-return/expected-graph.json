@@ -22,7 +22,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ id: string }"
+          "schema": {
+            "id": "string"
+          }
         }
       ],
       "data": {
@@ -70,6 +72,7 @@
         }
       ],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ id: input.id }",
         "arguments": {
           "id": "input.id"
@@ -120,6 +123,7 @@
       ],
       "outputs": [],
       "data": {
+        "argumentStyle": "object",
         "argumentText": "{ channel: \"#security\", message: `${pr.title}` }",
         "arguments": {
           "channel": "\"#security\"",

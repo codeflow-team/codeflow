@@ -82,9 +82,27 @@ function portsFromSchema(schema: Schema | undefined): NodePort[] {
   });
 }
 
+/**
+ * How a call passes its arguments — the fact the inspector needs before it can
+ * decide whether there is anything to edit (06 §1).
+ *
+ *  - `object` — one visible object literal, the shape a **tool** is called with;
+ *    its properties are the fields, and `patcher/plan.ts` edits them in place.
+ *  - `positional` — a **library function**'s parameter list, lined up with the
+ *    field names of its registered `inputSchema` (05 §4). `positionalEdits` in
+ *    plan.ts patches argument *n* by name, so this is editable too — the graph
+ *    said otherwise for every one of the everyday steps, and the UI believed it.
+ *  - `opaque` — a spread, a single variable standing in for the whole object,
+ *    an arity that does not match the schema, a local function with no declared
+ *    schema at all. Nothing here can be named, so nothing here is edited: the
+ *    honest answer is the code view (06 §1).
+ */
+export type ArgumentStyle = "object" | "positional" | "opaque";
+
 /** Argument shape of a call, for the inspector (06 §1) — read-only at this phase. */
 interface ArgumentInfo {
   text: string;
+  style: ArgumentStyle;
   editable: boolean;
   hasSpread: boolean;
   /**
@@ -95,6 +113,12 @@ interface ArgumentInfo {
   hasOpaqueKey: boolean;
   fields: Record<string, string> | null;
   /**
+   * Position of each field in the argument list — present only for a
+   * `positional` call, where a field name alone does not say which argument it
+   * is. The UI renders a named field per argument from `fields` + this.
+   */
+  positions: Record<string, number> | null;
+  /**
    * Fields whose value is the literal placeholder `undefined` — what the
    * palette writes for a required input it has no value for (06 §2). Their
    * presence is what puts a node in **needs-configuration**.
@@ -102,19 +126,35 @@ interface ArgumentInfo {
   placeholders: string[];
 }
 
-function describeArguments(call: Node): ArgumentInfo {
-  if (!Node.isCallExpression(call)) {
-    return { text: "", editable: false, hasSpread: false, hasOpaqueKey: false, fields: null, placeholders: [] };
-  }
+function opaqueArguments(text: string, hasSpread = false): ArgumentInfo {
+  return {
+    text,
+    style: "opaque",
+    editable: false,
+    hasSpread,
+    hasOpaqueKey: false,
+    fields: null,
+    positions: null,
+    placeholders: [],
+  };
+}
+
+/**
+ * `positionalNames` is the ordered field list of the callee's registered input
+ * schema, and passing it is what says "this callee is called positionally"
+ * (a library function — 05 §4). `null` means the callee takes one object
+ * argument (a tool), or that nothing names its parameters at all.
+ */
+function describeArguments(call: Node, positionalNames: readonly string[] | null): ArgumentInfo {
+  if (!Node.isCallExpression(call)) return opaqueArguments("");
   const args = call.getArguments();
   const text = args.map((a) => a.getText()).join(", ");
-  if (args.length !== 1) {
-    return { text, editable: false, hasSpread: false, hasOpaqueKey: false, fields: null, placeholders: [] };
-  }
+
+  if (positionalNames !== null) return describePositional(args, text, positionalNames);
+
+  if (args.length !== 1) return opaqueArguments(text);
   const only = unwrap(args[0]);
-  if (only === undefined || !Node.isObjectLiteralExpression(only)) {
-    return { text, editable: false, hasSpread: false, hasOpaqueKey: false, fields: null, placeholders: [] };
-  }
+  if (only === undefined || !Node.isObjectLiteralExpression(only)) return opaqueArguments(text);
   const fields: Record<string, string> = {};
   const placeholders: string[] = [];
   let hasSpread = false;
@@ -142,7 +182,65 @@ function describeArguments(call: Node): ArgumentInfo {
       fields[name] = name;
     }
   }
-  return { text, editable: true, hasSpread, hasOpaqueKey, fields, placeholders };
+  return {
+    text,
+    style: "object",
+    editable: true,
+    hasSpread,
+    hasOpaqueKey,
+    fields,
+    positions: null,
+    placeholders,
+  };
+}
+
+/**
+ * One named field per positional argument (05 §4).
+ *
+ * The n-th key of the input schema names the n-th parameter — the same bridge
+ * `positionalEdits` crosses when it patches. Two things void it, and both are
+ * refusals the patcher would make anyway, said here so the UI never offers the
+ * edit at all:
+ *
+ *  - a **spread** (`limitRecords(...args)`): the arguments are not visible, so
+ *    no position can be named;
+ *  - an **arity mismatch**: `foo(a, b)` against a three-field schema does not
+ *    say which parameter was skipped, and picking one would be a guess (I6).
+ *    An optional parameter simply has to be written out to be editable — the
+ *    same rule `positionalEdits` states when it refuses to append one.
+ */
+function describePositional(
+  args: readonly Node[],
+  text: string,
+  names: readonly string[],
+): ArgumentInfo {
+  const hasSpread = args.some((argument) => Node.isSpreadElement(argument));
+  // No names at all: a local function, or a name the registry does not know.
+  // There is no field → position bridge, so there is nothing to edit — and
+  // saying "editable, with no fields" would be a different kind of lie.
+  if (names.length === 0) return opaqueArguments(text, hasSpread);
+  if (hasSpread || args.length !== names.length) return opaqueArguments(text, hasSpread);
+
+  const fields: Record<string, string> = {};
+  const positions: Record<string, number> = {};
+  const placeholders: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const name = names[index];
+    const value = args[index].getText();
+    fields[name] = value;
+    positions[name] = index;
+    if (value === "undefined") placeholders.push(name);
+  }
+  return {
+    text,
+    style: "positional",
+    editable: true,
+    hasSpread: false,
+    hasOpaqueKey: false,
+    fields,
+    positions,
+    placeholders,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -511,6 +609,30 @@ function emitCall(
 }
 
 /**
+ * The ordered parameter names of a callee that is called positionally, or
+ * `null` for one that takes a single object argument.
+ *
+ * Tools take an object (06 §1) — the property names come from the source, not
+ * from the registry, so an unregistered tool still shows its fields. A library
+ * function takes a parameter list whose only naming is its registered
+ * `inputSchema`, in declaration order (05 §4, `inputSchemaFieldNames` — the one
+ * source of that ordering; re-deriving it anywhere else is how the inspector
+ * and the patcher come to disagree about which argument is which).
+ */
+function positionalNamesFor(ctx: AnalysisContext, resolution: CalleeResolution): string[] | null {
+  if (resolution.kind === "tool") return null;
+  if (resolution.kind === "library-function") {
+    const schema = ctx.registry.getFunction(resolution.functionName)?.inputSchema;
+    return schema === undefined ? [] : (inputSchemaFieldNames(schema) ?? []);
+  }
+  // A local function's parameters are named in the file, but nothing registers
+  // an input schema for them, so the patcher has no field → position bridge
+  // (plan.ts refuses with "has no input field"). An empty list matches only a
+  // zero-argument call, which is exactly the set of calls with nothing to edit.
+  return [];
+}
+
+/**
  * Build the node for one resolved call. `owner` is the AST range the node maps
  * to — the whole statement for a statement call, the element expression for a
  * `Promise.all` branch.
@@ -524,7 +646,13 @@ function createCallNode(
   awaited: boolean,
   resolution: CalleeResolution,
 ): WorkflowNode {
-  const args = describeArguments(call);
+  // Which parameter list, if any, names this callee's arguments. A *function*
+  // node is patched positionally by `planFields` whatever its call looks like
+  // (05 §4), so its argument names can only come from the registered schema —
+  // when there is none (a local function, an unregistered name), nothing names
+  // the arguments and the node says `opaque` instead of showing fields that
+  // every patch would refuse.
+  const args = describeArguments(call, positionalNamesFor(ctx, resolution));
   const declaredNames = owner === statement ? declaredBindings(statement) : [];
   const declared = new Set(declaredNames.map((d) => d.name));
 
@@ -546,7 +674,13 @@ function createCallNode(
         awaited,
         arguments: args.fields,
         argumentText: args.text,
+        // How the arguments are passed, and therefore what the inspector can
+        // offer: one object literal, a named parameter list, or nothing it can
+        // name (06 §1). `argumentsEditable` is the same fact as a boolean, kept
+        // because it is what every existing consumer reads.
+        argumentStyle: args.style,
         argumentsEditable: args.editable,
+        ...(args.positions === null ? {} : { argumentPositions: args.positions }),
         argumentsHaveSpread: args.hasSpread,
         // Only present when true: it is a rare degradation flag, and every
         // node's `data` is a reviewed fixture snapshot (11 §3.2).
@@ -581,7 +715,13 @@ function createCallNode(
         awaited,
         arguments: args.fields,
         argumentText: args.text,
+        // How the arguments are passed, and therefore what the inspector can
+        // offer: one object literal, a named parameter list, or nothing it can
+        // name (06 §1). `argumentsEditable` is the same fact as a boolean, kept
+        // because it is what every existing consumer reads.
+        argumentStyle: args.style,
         argumentsEditable: args.editable,
+        ...(args.positions === null ? {} : { argumentPositions: args.positions }),
         argumentsHaveSpread: args.hasSpread,
         // Only present when true: it is a rare degradation flag, and every
         // node's `data` is a reviewed fixture snapshot (11 §3.2).
@@ -605,7 +745,13 @@ function createCallNode(
         awaited,
         arguments: args.fields,
         argumentText: args.text,
+        // How the arguments are passed, and therefore what the inspector can
+        // offer: one object literal, a named parameter list, or nothing it can
+        // name (06 §1). `argumentsEditable` is the same fact as a boolean, kept
+        // because it is what every existing consumer reads.
+        argumentStyle: args.style,
         argumentsEditable: args.editable,
+        ...(args.positions === null ? {} : { argumentPositions: args.positions }),
         argumentsHaveSpread: args.hasSpread,
         // Only present when true: it is a rare degradation flag, and every
         // node's `data` is a reviewed fixture snapshot (11 §3.2).

@@ -5,6 +5,16 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+/**
+ * The model the demo asks for when nothing overrides it.
+ *
+ * A *router* over whatever free models exist right now, not one model id. The
+ * previous default, `stealth/ox-alpha`, was retired from OpenRouter and every
+ * AI feature here began failing against a model that no longer existed — a dead
+ * constant nothing could catch, because the id stayed perfectly valid-looking.
+ */
+const DEFAULT_MODEL = "openrouter/free";
+
 const REPO_ROOT = resolve(HERE, "..", "..");
 
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
@@ -39,7 +49,7 @@ const STALL_MS = 180_000;
  */
 function aiProxy(env: Record<string, string>): Plugin {
   const apiKey = env["OPENROUTER_API_KEY"] ?? "";
-  const model = env["OPENROUTER_MODEL"] ?? "stealth/ox-alpha";
+  const model = env["OPENROUTER_MODEL"] ?? DEFAULT_MODEL;
 
   return {
     name: "codeflow:ai-proxy",

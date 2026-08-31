@@ -53,7 +53,9 @@
         {
           "id": "input",
           "label": "input",
-          "schema": "{ pr: string }"
+          "schema": {
+            "pr": "string"
+          }
         }
       ],
       "data": {

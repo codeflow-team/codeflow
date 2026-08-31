@@ -80,7 +80,7 @@ OpenRouter. Put a key in a repo-root `.env`:
 
 ```
 OPENROUTER_API_KEY=sk-or-v1-…
-OPENROUTER_MODEL=stealth/ox-alpha
+OPENROUTER_MODEL=openrouter/free
 ```
 
 The key is read by the Vite dev server and never reaches the browser bundle.

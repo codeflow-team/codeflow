@@ -19,7 +19,7 @@ import {
 } from "../src/inspector/edit.js";
 import { resolveInspectorFields, type InspectorField } from "../src/inspector/fields.js";
 import { localFunctionBody } from "../src/code/region.js";
-import { canonicalGraph } from "./fixtures.js";
+import { canonicalGraph, field } from "./fixtures.js";
 
 function registry() {
   return createRegistry({
@@ -131,33 +131,13 @@ describe("editorSpecFor", () => {
   });
 
   it("falls back to code when the friendly form would be ambiguous (06 §3)", () => {
-    const field: InspectorField = {
-      name: "channel",
-      label: "Channel",
-      editor: "text",
-      raw: '"{{ literal }}"',
-      display: { kind: "string", text: "{{ literal }}", friendly: false, raw: '"{{ literal }}"' },
-      declaredEditable: true,
-      blockedReason: null,
-      missing: false,
-      patch: "field",
-    };
-    expect(editorSpecFor(field)).toMatchObject({ kind: "code", value: '"{{ literal }}"' });
+    const ambiguous = field({ name: "channel", label: "Channel", raw: '"{{ literal }}"' });
+    expect(ambiguous.display.friendly).toBe(false);
+    expect(editorSpecFor(ambiguous)).toMatchObject({ kind: "code", value: '"{{ literal }}"' });
   });
 
   it("uses the schema type for a field the call does not set", () => {
-    const missing: InspectorField = {
-      name: "amount",
-      label: "Amount",
-      editor: "text",
-      raw: null,
-      display: { kind: "empty", text: "", friendly: true, raw: "" },
-      schema: "number",
-      declaredEditable: true,
-      blockedReason: null,
-      missing: true,
-      patch: "field",
-    };
+    const missing = field({ name: "amount", label: "Amount", schema: "number", missing: true, required: true });
     expect(editorSpecFor(missing).kind).toBe("number");
   });
 });

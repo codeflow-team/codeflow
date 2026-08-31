@@ -94,18 +94,31 @@ jobs:
           mkdir -p "$RUNNER_TEMP/consumer"
           cp "$RUNNER_TEMP"/tarballs/*.tgz "$RUNNER_TEMP/consumer/"
           cat > "$RUNNER_TEMP/make-consumer.mjs" <<'JS'
-          // Derive the file: specifiers from whatever was packed, so a version
-          // bump never breaks this job. `overrides` forces the nested
-          // @codeflow-team/core dependency of the other packages onto the local
+          // Derive the file: specifiers from whatever was packed, so neither a
+          // version bump nor a scope rename breaks this job. `overrides` forces
+          // the nested core dependency of the other packages onto the local
           // tarball instead of the registry.
+          //
+          // The name is read out of each tarball's own manifest, not guessed
+          // from its filename. Guessing is what this job did until the scope
+          // moved to @codeflow-team and `codeflow-team-core-0.1.0.tgz` started
+          // parsing as `@codeflow-team/team-core` — a package that does not
+          // exist, and an install that failed for a reason nowhere near the
+          // real one.
           import { readdirSync, writeFileSync } from "node:fs";
+          import { execFileSync } from "node:child_process";
           import { join } from "node:path";
           const dir = process.argv[2];
           const deps = {};
+          let coreName = null;
           for (const f of readdirSync(dir).filter((f) => f.endsWith(".tgz"))) {
-            const name = "@codeflow-team/" + f.replace(/^codeflow-/, "").replace(/-\d.*$/, "");
-            deps[name] = `file:./${f}`;
+            const manifest = JSON.parse(
+              execFileSync("tar", ["-xzOf", join(dir, f), "package/package.json"], { encoding: "utf8" }),
+            );
+            deps[manifest.name] = `file:./${f}`;
+            if (manifest.name.endsWith("/core")) coreName = manifest.name;
           }
+          if (coreName === null) throw new Error("no core tarball found among: " + Object.keys(deps).join(", "));
           writeFileSync(
             join(dir, "package.json"),
             JSON.stringify(
@@ -115,7 +128,7 @@ jobs:
                 type: "module",
                 dependencies: { ...deps, react: "^19.2.0", "react-dom": "^19.2.0" },
                 devDependencies: { typescript: "^5.7.2", "@types/react": "^19", "@types/react-dom": "^19" },
-                overrides: { "@codeflow-team/core": deps["@codeflow-team/core"] },
+                overrides: { [coreName]: deps[coreName] },
               },
               null,
               2,

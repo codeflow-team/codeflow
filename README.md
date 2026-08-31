@@ -25,7 +25,7 @@ pnpm test           # 1,640 tests
 pnpm dev            # the demo at http://localhost:5173
 ```
 
-Requires Node 20+ (the CLI needs 22.18+ or 23.6+, where Node strips TypeScript types from `codeflow.config.ts` without a flag) and pnpm 9.
+Requires Node 20+ and pnpm 9. Two things want more: the CLI needs 22.18+ or 23.6+, and so does `pnpm dev` — both load a `.ts` file through Node itself, which strips TypeScript types without a flag only from those versions. Everything that ships, including `pnpm build` and `pnpm test`, runs on Node 20; CI proves it on every push.
 
 Analyzing a flow takes three calls — a registry of the tools that exist, a session, and `analyze`:
 

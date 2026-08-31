@@ -299,38 +299,48 @@ function aiProxy(env: Record<string, string>): Plugin {
   };
 }
 
-export default defineConfig(async ({ mode }) => {
+export default defineConfig(async ({ command, mode }) => {
   // No prefix filter: OPENROUTER_* is a server-side secret and must never be
   // exposed through `import.meta.env`, so it is read here and used here only.
   const env = loadEnv(mode, REPO_ROOT, "");
 
   /*
-   * The run endpoint is imported at *runtime*, not bundled into this config.
+   * The server-shaped plugins are imported at *runtime*, not bundled into this
+   * config, and only when there is a server to configure.
    *
    * Vite loads a TypeScript config by pre-bundling it with esbuild, which would
    * pull `server/**` into that bundle along with `typescript` and the MCP SDK.
    * A dynamic import keeps the whole runner in Node's own module graph, where
    * its `.ts` files are type-stripped natively and `new Worker("…/worker.ts")`
    * resolves to a file that actually exists.
+   *
+   * Guarded by `command === "serve"` because native type stripping is Node
+   * 22.18+/23.6+, and on Node 20 the import fails with a bare
+   * ERR_UNKNOWN_FILE_EXTENSION that takes the whole build down. Both plugins
+   * are `configureServer`-only — they add two dev endpoints and have no build
+   * hooks — so a production build never wanted them, and skipping it makes
+   * `vite build` work everywhere the published packages do. It also stops the
+   * static bundle's "the runner is not available here" story from depending on
+   * an import that merely happened not to matter.
    */
-  const { runPlugin } = (await import(
-    new URL("./server/run-plugin.ts", import.meta.url).href
-  )) as typeof import("./server/run-plugin.js");
+  const serverPlugins: Plugin[] = [];
+  if (command === "serve") {
+    const { runPlugin } = (await import(
+      new URL("./server/run-plugin.ts", import.meta.url).href
+    )) as typeof import("./server/run-plugin.js");
 
-  // Same reason, same shape: `/api/mcp/discover` owns the MCP SDK's transports,
-  // which is what lets a visitor point the demo at a server of their own.
-  const { mcpPlugin } = (await import(
-    new URL("./server/mcp-discover.ts", import.meta.url).href
-  )) as typeof import("./server/mcp-discover.js");
+    // Same reason, same shape: `/api/mcp/discover` owns the MCP SDK's
+    // transports, which is what lets a visitor point the demo at a server of
+    // their own.
+    const { mcpPlugin } = (await import(
+      new URL("./server/mcp-discover.ts", import.meta.url).href
+    )) as typeof import("./server/mcp-discover.js");
+
+    serverPlugins.push(runPlugin({ appDir: HERE }) as Plugin, mcpPlugin() as Plugin);
+  }
 
   return {
-    plugins: [
-      react(),
-      tailwindcss(),
-      aiProxy(env),
-      runPlugin({ appDir: HERE }) as Plugin,
-      mcpPlugin() as Plugin,
-    ],
+    plugins: [react(), tailwindcss(), aiProxy(env), ...serverPlugins],
     server: { port: 5173, strictPort: true },
     build: {
       // Monaco is large; the demo is a dev harness, not a shipped bundle.

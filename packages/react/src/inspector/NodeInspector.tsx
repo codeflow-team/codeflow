@@ -27,6 +27,7 @@ import {
   Code,
   MousePointerClick,
   RotateCcw,
+  SlidersHorizontal,
   Trash2,
   X,
 } from "lucide-react";
@@ -36,7 +37,7 @@ import { nodeCaption } from "../flow/summary.js";
 import type { DataLink, NodeDataLinks } from "../flow/data-links.js";
 import { NodeGlyph } from "../flow/glyphs.js";
 import { nodeVisual } from "../flow/visual.js";
-import { diagnosticHeadline, errorHeadline, splitSpecRefs } from "../copy.js";
+import { diagnosticHeadline, errorHeadline, humanFieldLabel, splitSpecRefs } from "../copy.js";
 import { cn } from "../ui/cn.js";
 import { Button } from "../ui/button.js";
 import { Badge } from "../ui/badge.js";
@@ -213,6 +214,7 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
     canReanalyze,
     dataLinks,
     selectNode,
+    openNodeEditor,
   } = useCodeFlow();
 
   const nodeId = props.nodeId === undefined ? selectedNodeId : props.nodeId;
@@ -419,6 +421,21 @@ export function NodeInspector(props: NodeInspectorProps): ReactNode {
           </h2>
           <p className="m-0 mt-1 text-[12px] leading-none text-ink-dim">{nodeCaption(node, "expanded") ?? node.type}</p>
         </div>
+        {/*
+          The way into the three-pane editor, where a value from an earlier step
+          is dragged onto a setting instead of typed. Same patches, same diff
+          preview — a different way of aiming them (07 §4).
+        */}
+        <Button
+          variant="secondary"
+          size="xs"
+          data-testid="open-node-editor"
+          title="Open this step with the values from earlier steps beside it"
+          onClick={() => { openNodeEditor(node.id); }}
+        >
+          <SlidersHorizontal />
+          Open editor
+        </Button>
         {props.onClose === undefined ? null : (
           <Button variant="ghost" size="icon-sm" aria-label="Close panel" onClick={props.onClose}>
             <X />
@@ -851,12 +868,6 @@ interface FieldRowProps {
   onTemplate: (value: boolean) => void;
 }
 
-/** Field labels come from tool schemas: `channel` reads better as "Channel". */
-function humanLabel(label: string): string {
-  const spaced = label.replace(/[_-]+/g, " ").replace(/([a-z\d])([A-Z])/g, "$1 $2");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-}
-
 function FieldRow(props: FieldRowProps): ReactNode {
   const { field, spec } = props;
   const blocked = field.patch === null || field.blockedReason !== null;
@@ -881,7 +892,7 @@ function FieldRow(props: FieldRowProps): ReactNode {
       {/* `cf-field__label` is load-bearing: the a11y suite asserts the visible
           label element is the one carrying the field name. */}
       <FieldLabel className="cf-field__label" htmlFor={id}>
-        {humanLabel(field.label)}
+        {humanFieldLabel(field.label)}
         {unset ? (
           <Badge tone="warn" title="This value has to be filled in">
             needs a value

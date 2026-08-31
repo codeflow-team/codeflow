@@ -39,6 +39,8 @@ import { buildIndex, diagnosticsByNode, nodeAtOffset } from "../graph/index.js";
 import { buildDataLinks, resolveDataEdgeMode, type DataEdgeMode } from "../flow/data-links.js";
 import { autoCollapse, buildCollapseView, expandFor, isSameFlow } from "../flow/collapse.js";
 import { EDITING_DISABLED_REASON } from "./types.js";
+import { NodeEditor } from "../editor/NodeEditor.js";
+import type { PreviewRenderer } from "../editor/preview.js";
 import type {
   CodeFlowContextValue,
   RunView,
@@ -103,8 +105,19 @@ export interface CodeFlowProviderProps {
    * thing from "the run reached nothing".
    */
   run?: RunView | null;
+  /**
+   * Host renderers for emit payloads and observed values, in priority order —
+   * the `previewRenderers` half of the renderer seam (`editor/preview.ts`).
+   *
+   * The library ships exactly one built-in (readable JSON/text) and uses it as
+   * the fallback, so a value always renders even with this left unset.
+   */
+  previewRenderers?: readonly PreviewRenderer[];
   children: ReactNode;
 }
+
+/** Stable identity, so an unset `previewRenderers` never re-renders consumers. */
+const EMPTY_RENDERERS: readonly PreviewRenderer[] = [];
 
 function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
@@ -126,6 +139,7 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
   const [patchError, setPatchError] = useState<PatchFailure | null>(null);
   const [lastPatch, setLastPatch] = useState<PatchSuccess | null>(null);
   const [changedNodeIds, setChangedNodeIds] = useState<Set<string>>(() => new Set());
+  const [editorNodeId, setEditorNodeId] = useState<string | null>(null);
 
   const selectedNodeId = props.selectedNodeId === undefined ? internalSelected : props.selectedNodeId;
   const mode = props.mode ?? internalMode;
@@ -383,6 +397,33 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
     }
   }, []);
 
+  /* --- the node editor --------------------------------------------------- */
+
+  /**
+   * Opening the editor selects the step too.
+   *
+   * The editor and the canvas are two views of one thing, and a user who closes
+   * the editor should find the step they were configuring still selected —
+   * otherwise the diagram silently disagrees with what they were just doing.
+   */
+  const openNodeEditor = useCallback(
+    (nodeId: string) => {
+      setEditorNodeId(nodeId);
+      setInternalSelected(nodeId);
+      onSelectNode?.(nodeId);
+    },
+    [onSelectNode],
+  );
+  const closeNodeEditor = useCallback(() => { setEditorNodeId(null); }, []);
+
+  // A re-analysis can retire the node the editor is open on (03 §5): closing is
+  // the honest response — an editor pointed at nothing would show stale fields.
+  useEffect(() => {
+    if (editorNodeId !== null && !index.nodeById.has(editorNodeId)) setEditorNodeId(null);
+  }, [index, editorNodeId]);
+
+  const previewRenderers = props.previewRenderers ?? EMPTY_RENDERERS;
+
   const clearPatchError = useCallback(() => { setPatchError(null); }, []);
   const requestReanalyze = useCallback(() => {
     setPatchError(null);
@@ -426,6 +467,10 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       requestReanalyze,
       canReanalyze: onReanalyze !== undefined,
       run: props.run ?? null,
+      editorNodeId,
+      openNodeEditor,
+      closeNodeEditor,
+      previewRenderers,
     }),
     [
       graph,
@@ -460,8 +505,24 @@ export function CodeFlowProvider(props: CodeFlowProviderProps): ReactNode {
       requestReanalyze,
       onReanalyze,
       props.run,
+      editorNodeId,
+      openNodeEditor,
+      closeNodeEditor,
+      previewRenderers,
     ],
   );
 
-  return <CodeFlowContext.Provider value={value}>{props.children}</CodeFlowContext.Provider>;
+  return (
+    <CodeFlowContext.Provider value={value}>
+      {props.children}
+      {/*
+        The node editor is mounted here, not by the host.
+
+        It is the surface a non-developer connects two steps in, and a feature
+        that only appears when an app remembers to render it is a feature most
+        apps ship without. Nothing is drawn until a step's editor is opened.
+      */}
+      <NodeEditor />
+    </CodeFlowContext.Provider>
+  );
 }

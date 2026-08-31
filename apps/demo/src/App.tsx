@@ -406,8 +406,13 @@ export function App() {
       activeNodeId: run.activeNodeId,
       untraced: run.untraced,
       tracked: run.tracked,
+      // Without this the library has no way to tell a current run from one that
+      // predates an edit, so it has to hedge on every value it shows. The
+      // comparison is already made here for the toolbar; the picture gets the
+      // same answer rather than a second, weaker one.
+      match: traceMatch,
     };
-  }, [run]);
+  }, [run, traceMatch]);
 
   const running = run.status === "starting" || run.status === "running";
 

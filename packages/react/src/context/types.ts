@@ -16,10 +16,12 @@ import type {
   RegistryLookup,
   SourceMapping,
   TextPatch,
+  TraceMatch,
   WorkflowGraph,
   WorkflowNode,
 } from "@codeflow/core";
 import type { GraphIndex } from "../graph/index.js";
+import type { PreviewRenderer } from "../editor/preview.js";
 import type { DisclosureMode } from "../flow/summary.js";
 import type { DataEdgeMode, NodeDataLinks } from "../flow/data-links.js";
 import type { CollapseView } from "../flow/collapse.js";
@@ -89,6 +91,19 @@ export interface RunView {
    * invented fact, so it is left unmarked instead.
    */
   tracked: Set<string> | null;
+  /**
+   * Whether this trace still describes the graph on screen — core's
+   * `traceMatches(trace, graph)`.
+   *
+   * Absent means `unknown`, and `unknown` is rendered as uncertainty, never as
+   * `current` (09 §1): node ids survive patches by design (I5), so a value from
+   * an earlier version of the flow re-attaches silently to the node whose code
+   * just changed. A host that records `graphId`/`sourceHash` on its traces —
+   * `traceIdentity(graph)` hands over both — gets the confident caption; a host
+   * that does not is told, honestly, that nothing establishes these values are
+   * current.
+   */
+  match?: TraceMatch;
 }
 
 export interface CodeFlowContextValue {
@@ -179,6 +194,27 @@ export interface CodeFlowContextValue {
 
   /** The current (or last) run, when the host has a runtime. `null` otherwise. */
   run: RunView | null;
+
+  /* --- the node editor (07 §4, §5) --------------------------------------- */
+
+  /**
+   * The step whose editor is open, or `null`.
+   *
+   * The editor is mounted by the provider itself, so a host gets it by
+   * rendering `<CodeFlowProvider>` and nothing else — double-clicking a step on
+   * the canvas, or the button in the inspector, is all the wiring there is.
+   */
+  editorNodeId: string | null;
+  openNodeEditor: (nodeId: string) => void;
+  closeNodeEditor: () => void;
+
+  /**
+   * Host renderers for values — emit payloads and observed results.
+   *
+   * Ordered: the first whose `match` returns true draws the value; when none
+   * does, the built-in JSON/text renderer draws it. See `editor/preview.ts`.
+   */
+  previewRenderers: readonly PreviewRenderer[];
 }
 
 export const EDITING_DISABLED_REASON =

@@ -29,7 +29,7 @@ import {
 } from "../graph/index.js";
 import type { DisclosureMode } from "./summary.js";
 import type { LayoutBox } from "../layout/elk-graph.js";
-import { measureNode } from "../layout/measure.js";
+import { measureNode, type Measurer } from "../layout/measure.js";
 import {
   EMPTY_DATA_LINKS,
   buildDataLinks,
@@ -105,6 +105,14 @@ export interface ToReactFlowOptions {
   dataLinks?: Map<string, NodeDataLinks>;
   /** Folded containers — see `flow/collapse.ts`. Nothing folded by default. */
   collapse?: CollapseView;
+  /**
+   * How a node is sized when ELK has not produced a box for it yet.
+   *
+   * Defaults to `measureNode`. The canvas passes `rendererMeasurer(registry)`
+   * so a node drawn by a registered renderer (`flow/renderer.ts`) gets the same
+   * size here that layout gave it — one measurer, two callers, no drift.
+   */
+  measure?: Measurer;
 }
 
 /**
@@ -183,6 +191,7 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
   const dataEdges = options.dataEdges ?? "selected";
   const dataLinks = options.dataLinks ?? buildDataLinks(graph, index);
   const collapse = options.collapse ?? EMPTY_COLLAPSE;
+  const measure = options.measure ?? measureNode;
 
   const nodes: CodeFlowRFNode[] = orderedNodes(graph, index)
     // Everything inside a folded container: not drawn, because the box it is in
@@ -195,7 +204,7 @@ export function toReactFlow(graph: WorkflowGraph, options: ToReactFlowOptions): 
     const collapsedInner = folded ? collapse.innerCount.get(node.id) ?? 0 : null;
     const box = boxes?.get(node.id);
     const links = dataLinks.get(node.id) ?? EMPTY_DATA_LINKS;
-    const fallback = measureNode(node, options.mode, links, collapsedInner);
+    const fallback = measure(node, options.mode, links, collapsedInner);
 
     const rfNode: CodeFlowRFNode = {
       id: node.id,

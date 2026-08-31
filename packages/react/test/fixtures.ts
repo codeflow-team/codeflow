@@ -77,6 +77,9 @@ export function graphOf(nodes: WorkflowNode[], edges: WorkflowEdge[], diagnostic
     nodes,
     edges,
     diagnostics,
+    // Hand-built graphs carry no scope table (03 §6): these fixtures exercise
+    // rendering, and an empty table is what a host that drops it looks like.
+    scopes: {},
   };
 }
 

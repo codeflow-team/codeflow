@@ -67,6 +67,34 @@ const FILEISH = new Set(["file", "manifest", "doc", "readme", "config", "plan"])
 const OUTISH = new Set(["out", "output", "dest", "destination", "target", "ledger", "rejects", "report", "result", "summary", "artifact"]);
 
 /**
+ * Documents the scratch workspace is seeded with, matchable by their own name.
+ *
+ * `seedWorkspace` in `runner.ts` writes these; the list is here because this is
+ * the module that has to decide what `ticketsPath` means, and a rule that
+ * pointed it at `README.md` is why a flow whose whole job is reading tickets
+ * answered `status: "unreadable"` on its first run — honestly, and uselessly.
+ *
+ * `test/workspace-seed.test.ts` requires every name here to be a file the
+ * runner actually creates, so the two cannot drift into a default that names a
+ * document nobody wrote.
+ */
+export const WORKSPACE_DOCUMENTS = ["orders.json", "tickets.json"];
+
+/**
+ * The seeded document a parameter name is asking for, if it names one.
+ *
+ * Matched on the file's own stem, in singular or plural, so `ticketsPath`,
+ * `ticketPath` and `tickets` all reach `tickets.json` while `summaryPath` — a
+ * file to write — reaches none of them.
+ */
+function documentFor(parts: readonly string[]): string | undefined {
+  return WORKSPACE_DOCUMENTS.find((file) => {
+    const stem = file.slice(0, file.lastIndexOf("."));
+    return parts.some((word) => word === stem || `${word}s` === stem);
+  });
+}
+
+/**
  * A path-shaped name gets a real path — and the distinction between a
  * *directory* and a *file* is not cosmetic. `manifestPath` pointed at the
  * scratch directory made the first real MCP call in `doc-freshness-audit` fail
@@ -86,6 +114,11 @@ function stringFor(name: string, context: InputContext): string {
     return `${context.scratch}/${parts.join("-")}.${extension}`;
   }
 
+  // A name that says which document it wants gets that document. `ticketsPath`
+  // means `tickets.json`, not "some file that exists".
+  const document = documentFor(parts);
+  if (document !== undefined) return `${context.scratch}/${document}`;
+
   if (parts.some((word) => FILEISH.has(word))) {
     const json = parts.some((word) => word === "manifest" || word === "package" || word === "json" || word === "plan");
     return `${context.scratch}/${json ? "package.json" : "README.md"}`;
@@ -96,6 +129,11 @@ function stringFor(name: string, context: InputContext): string {
   if (lower.includes("channel")) return "#demo";
   if (lower.includes("url") || lower.includes("href")) return "https://example.invalid/demo";
   if (lower.includes("query") || lower.includes("search")) return "model context protocol";
+  // A flow that filters on a status wants a status something in the workspace
+  // actually has. `demo status` matched nothing, so the digest flow read four
+  // orders, kept none, and reported `no-totals` — true, and a demonstration of
+  // nothing.
+  if (lower.includes("status")) return "paid";
   if (lower.includes("package")) return "@codeflow/demo";
   if (lower.includes("branch")) return "main";
   if (lower.includes("pattern") || lower.includes("glob")) return "*.txt";
@@ -137,6 +175,10 @@ export function explainDefault(name: string, kind: "string" | "number" | "boolea
   if (parts.some((word) => OUTISH.has(word))) {
     return "a fresh file inside the run's scratch folder, because the name reads as somewhere to write — and a path the flow writes must not be one it also reads";
   }
+  const document = documentFor(parts);
+  if (document !== undefined) {
+    return `\`${document}\` in the run's scratch folder, because the name asks for that document and the folder is seeded with one`;
+  }
   if (parts.some((word) => FILEISH.has(word)) || parts.includes("path")) {
     return "a file the scratch folder is seeded with, because the name reads as a file and a first tool call on a missing one fails before the flow does anything";
   }
@@ -145,6 +187,7 @@ export function explainDefault(name: string, kind: "string" | "number" | "boolea
   if (lower.includes("channel")) return "a channel-shaped name";
   if (lower.includes("url") || lower.includes("href")) return "a URL on the reserved `.invalid` domain, which cannot resolve to anyone's real host";
   if (lower.includes("query") || lower.includes("search")) return "a search phrase with results in the seeded workspace";
+  if (lower.includes("status")) return "a status the seeded orders document actually uses, so a filter on it keeps something";
   if (lower.includes("package")) return "this workspace's own package name";
   if (lower.includes("branch")) return "the usual default branch";
   if (lower.includes("pattern") || lower.includes("glob")) return "a glob that matches the seeded files";

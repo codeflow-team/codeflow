@@ -36,6 +36,7 @@ import {
   type CodeFlowRFNode,
 } from "../flow/to-react-flow.js";
 import { useElkLayout } from "../layout/use-layout.js";
+import { rendererMeasurer } from "../flow/renderer.js";
 import type { LayoutDirection } from "../layout/elk-graph.js";
 
 const nodeTypes: NodeTypes = {
@@ -169,11 +170,23 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
     collapse,
     expandAll,
     collapseAll,
+    registry,
+    openNodeEditor,
   } = useCodeFlow();
   const mode = props.mode ?? providerMode;
   const direction = props.direction ?? "DOWN";
 
-  const { layout, pending, error } = useElkLayout(graph, { mode, direction, collapse });
+  /*
+   * One measurer for layout and for the React Flow mapping.
+   *
+   * It is the `NodeDefinition.renderer` seam reaching the canvas: a node type a
+   * host registered a renderer for is laid out at the height that renderer
+   * declared, so the box ELK produces is the box the card is drawn in. Memoised
+   * on the registry because a fresh function identity is a fresh layout run.
+   */
+  const measure = useMemo(() => rendererMeasurer(registry), [registry]);
+
+  const { layout, pending, error } = useElkLayout(graph, { mode, direction, collapse, measure });
 
   const mapped = useMemo(() => {
     if (graph === null) return { nodes: [] as CodeFlowRFNode[], edges: [] as CodeFlowRFEdge[] };
@@ -186,6 +199,7 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
       dataEdges: dataEdgeMode,
       dataLinks,
       collapse,
+      measure,
     });
     return { nodes, edges };
     /*
@@ -198,7 +212,7 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
      * view switch should do to a view.
      */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graph, mode, layout, nodeDiagnostics, index, dataLinks, collapse]);
+  }, [graph, mode, layout, nodeDiagnostics, index, dataLinks, collapse, measure]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<CodeFlowRFNode>(mapped.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<CodeFlowRFEdge>(mapped.edges);
@@ -357,6 +371,21 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
     selectNode(null);
   }, [selectNode]);
 
+  /**
+   * Double-click opens the step's editor.
+   *
+   * The canvas is where a step is *found*; the editor is where it is wired up.
+   * Mounting it in the provider and opening it from here means a host gets the
+   * whole gesture by rendering `<CodeFlowProvider>` and `<WorkflowCanvas>` —
+   * there is no third component to remember.
+   */
+  const onNodeDoubleClick = useCallback<NodeMouseHandler<CodeFlowRFNode>>(
+    (_event, node) => {
+      openNodeEditor(node.id);
+    },
+    [openNodeEditor],
+  );
+
   /*
    * Which way round the fold control reads.
    *
@@ -399,6 +428,7 @@ function CanvasInner(props: WorkflowCanvasProps): ReactNode {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
+          onNodeDoubleClick={onNodeDoubleClick}
           onPaneClick={onPaneClick}
           fitView={props.fitView ?? true}
           fitViewOptions={{ ...FIT, padding: 0.15 }}

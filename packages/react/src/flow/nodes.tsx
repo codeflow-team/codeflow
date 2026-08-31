@@ -21,6 +21,8 @@ import { developerLines, hasNodeBody, nodeCaption, nodeSummaryRows, nodeTitle } 
 import { isMinorNode } from "../layout/measure.js";
 import { insideLabel } from "./collapse.js";
 import { slotHandleId, type CodeFlowRFNode } from "./to-react-flow.js";
+import { resolveNodeRenderer, type ResolvedNodeRenderer } from "./renderer.js";
+import { runBadgeKind } from "./run-badge.js";
 
 /**
  * Renders a display value, giving `{{ … }}` interpolations their own treatment.
@@ -375,8 +377,38 @@ function NodeHeader({
   );
 }
 
-function NodeBody({ data, tight = false }: { data: CodeFlowRFNode["data"]; tight?: boolean }): ReactNode {
+function NodeBody({
+  data,
+  tight = false,
+  custom = null,
+}: {
+  data: CodeFlowRFNode["data"];
+  tight?: boolean;
+  /** Host renderer for this node type, when the registry declares one. */
+  custom?: ResolvedNodeRenderer | null;
+}): ReactNode {
   if (data.mode === "compact") return null;
+
+  /*
+   * A host-registered renderer draws the body instead of the summary rows —
+   * `NodeDefinition.renderer` (05 §1), resolved through `flow/renderer.ts`.
+   *
+   * The inner box is exactly the height the renderer declared (the height
+   * `measureNode` was told about), and it clips: a card is drawn inside the box
+   * ELK was given, so a renderer that overflows loses the overflow rather than
+   * pushing the card past its own frame.
+   */
+  if (custom !== null) {
+    const Body = custom.component;
+    return (
+      <div className={cn("px-3", tight ? "pb-2" : "pb-3")} data-node-renderer="custom">
+        <div className="overflow-hidden" style={{ height: custom.height }}>
+          <Body node={data.node} mode={data.mode} />
+        </div>
+      </div>
+    );
+  }
+
   // `pb-3` is the card's bottom padding, matched to the header's `pt-3`; `pb-2`
   // is what the body takes when something else (a folded box's summary) is the
   // last block and owes the padding instead.
@@ -485,54 +517,93 @@ function useRunMark(nodeId: string): RunMark {
 
   const runs = state.runs > 1 ? <span className="cf-run-badge__count">×{state.runs}</span> : null;
 
-  if (nodeId === run.activeNodeId) {
-    return {
-      className: " cf-run--running",
-      badge: (
-        <span className="cf-run-badge cf-run-badge--running" title="Running now">
-          running{runs}
-        </span>
-      ),
-    };
-  }
+  // The branch itself lives in `run-badge.ts` so it can be tested without a DOM
+  // — see that module for why the two "nothing was reported" states exist.
+  switch (runBadgeKind(state, nodeId === run.activeNodeId)) {
+    case "emitted-only":
+    case "reported-nothing": {
+      const emitted = (state.emits?.length ?? 0) > 0;
+      return {
+        className: " cf-run--reported",
+        badge: (
+          <span
+            className="cf-run-badge cf-run-badge--untraced"
+            title={
+              emitted
+                ? "This step sent something while the flow ran, but the run never reported the step itself starting or finishing."
+                : "The run mentions this step without saying whether it started or finished."
+            }
+          >
+            {emitted ? "sent output" : "no run reported"}
+          </span>
+        ),
+      };
+    }
 
-  if (state.status === "failed") {
-    return {
-      className: " cf-run--failed",
-      badge: (
-        <span className="cf-run-badge cf-run-badge--failed" title={state.error?.message ?? "This step failed."}>
-          failed{runs}
-        </span>
-      ),
-    };
-  }
+    case "skipped":
+      // The runtime saying it will not report on this step — not that the step
+      // did nothing. This used to fall through to the duration badge below and
+      // draw as a completed step that took 0ms.
+      return {
+        className: " cf-run--untraced",
+        badge: (
+          <span
+            className="cf-run-badge cf-run-badge--untraced"
+            title="The run said it could not report on this step, which is not the same as the step not running."
+          >
+            not traced{runs}
+          </span>
+        ),
+      };
 
-  if (state.status === "running") {
-    // Started, not finished, but something deeper is the active step — this is
-    // a container waiting on its own body.
-    return {
-      className: " cf-run--running cf-run--container",
-      badge: (
-        <span className="cf-run-badge cf-run-badge--running" title="Waiting on the steps inside it">
-          in progress{runs}
-        </span>
-      ),
-    };
-  }
+    case "running":
+      return {
+        className: " cf-run--running",
+        badge: (
+          <span className="cf-run-badge cf-run-badge--running" title="Running now">
+            running{runs}
+          </span>
+        ),
+      };
 
-  const ms = state.runs > 1 ? state.totalMs : state.durationMs ?? state.totalMs;
-  return {
-    className: " cf-run--ok",
-    badge: (
-      <span
-        className="cf-run-badge cf-run-badge--ok"
-        title={state.runs > 1 ? `${String(state.runs)} runs, ${String(ms)}ms in total` : `${String(ms)}ms`}
-      >
-        {ms < 1 ? "<1ms" : `${String(ms)}ms`}
-        {runs}
-      </span>
-    ),
-  };
+    case "failed":
+      return {
+        className: " cf-run--failed",
+        badge: (
+          <span className="cf-run-badge cf-run-badge--failed" title={state.error?.message ?? "This step failed."}>
+            failed{runs}
+          </span>
+        ),
+      };
+
+    case "container":
+      // Started, not finished, but something deeper is the active step — a
+      // container waiting on its own body.
+      return {
+        className: " cf-run--running cf-run--container",
+        badge: (
+          <span className="cf-run-badge cf-run-badge--running" title="Waiting on the steps inside it">
+            in progress{runs}
+          </span>
+        ),
+      };
+
+    case "ok": {
+      const ms = state.runs > 1 ? state.totalMs : state.durationMs ?? state.totalMs;
+      return {
+        className: " cf-run--ok",
+        badge: (
+          <span
+            className="cf-run-badge cf-run-badge--ok"
+            title={state.runs > 1 ? `${String(state.runs)} runs, ${String(ms)}ms in total` : `${String(ms)}ms`}
+          >
+            {ms < 1 ? "<1ms" : `${String(ms)}ms`}
+            {runs}
+          </span>
+        ),
+      };
+    }
+  }
 }
 
 /** Leaf node — every non-container type. */
@@ -540,6 +611,8 @@ export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>):
   const type = data.node.type;
   const changed = useChangedClass(id);
   const { className: runClass } = useRunMark(id);
+  const cf = useOptionalCodeFlow();
+  const custom = resolveNodeRenderer(cf?.registry, String(type));
   const attention = data.diagnostics.some((diagnostic) => diagnostic.code === "needs-configuration");
   return (
     <div
@@ -558,8 +631,12 @@ export function CodeFlowNode({ id, data, selected }: NodeProps<CodeFlowRFNode>):
       data-node-type={type}
     >
       <Handle type="target" position={Position.Top} className="cf-handle" />
-      <NodeHeader data={data} selected={selected === true} last={!hasNodeBody(data.node, data.mode, data.links)} />
-      <NodeBody data={data} />
+      <NodeHeader
+        data={data}
+        selected={selected === true}
+        last={custom === null && !hasNodeBody(data.node, data.mode, data.links)}
+      />
+      <NodeBody data={data} custom={custom} />
       <Handle type="source" position={Position.Bottom} className="cf-handle" />
     </div>
   );

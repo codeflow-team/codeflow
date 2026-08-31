@@ -197,7 +197,7 @@ function writeModule(
  *
  * All of it is created fresh per run and deleted with the run.
  */
-function seedWorkspace(workspace: string): void {
+export function seedWorkspace(workspace: string): void {
   const files: Record<string, string> = {
     "README.md": "# Demo workspace\n\nCreated for one CodeFlow run, and deleted after it.\n",
     // Scoped dependency names on their own lines: the flows that read a

@@ -31,6 +31,40 @@
 /* ========================================================================== */
 
 @layer components {
+  /*
+   * The node editor's three panes — available here · configure · result.
+   *
+   * Written as a component rule rather than as `grid-cols-1 lg:grid-cols-[…]`
+   * because those two utilities live in the same cascade layer as the *host's*
+   * Tailwind build: a host that uses `grid-cols-1` anywhere emits an unqualified
+   * copy of it after ours, which then beats our media-qualified one and folds
+   * the three panes into one column. Measured in the demo, not theorised. A
+   * class of our own cannot be outranked that way.
+   */
+  .cf-editor__panes {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .cf-editor__panes > * + * {
+    border-block-start: 1px solid var(--cf-border);
+  }
+
+  @media (width >= 64rem) {
+    .cf-editor__panes {
+      /* Reading order left to right: where a value comes from, where it goes,
+         what came out. The middle pane is the one that grows. */
+      grid-template-columns: 17rem minmax(0, 1fr) 20rem;
+    }
+
+    .cf-editor__panes > * + * {
+      border-block-start: 0;
+      border-inline-start: 1px solid var(--cf-border);
+    }
+  }
+
   /* --- node body — 07 §3 ------------------------------------------------- */
 
   /*
@@ -157,6 +191,16 @@
   .cf-container.cf-run--untraced {
     border-style: dashed;
     border-color: var(--cf-border-strong);
+  }
+
+  /* The run mentions this step but never said it started or finished — it may
+     have emitted something mid-flight. Neither lit as running nor dimmed as
+     unreached: the run has no opinion, so neither does the card. Both palettes
+     get it for free, since every colour here is a token. */
+  .cf-node.cf-run--reported,
+  .cf-container.cf-run--reported {
+    border-style: dashed;
+    border-color: var(--cf-border);
   }
 
   .cf-run-badge {

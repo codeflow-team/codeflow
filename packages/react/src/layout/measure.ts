@@ -159,10 +159,21 @@ export function measureNode(
   mode: DisclosureMode,
   links?: NodeDataLinks | null,
   collapsedInner?: number | null,
+  /**
+   * Height of a registered renderer's body, when one draws this node
+   * (`flow/renderer.ts`). It *replaces* the summary rows — the renderer owns
+   * the block under the header — and it is a declared number rather than a
+   * measured one, because nothing here can measure a host's component.
+   */
+  customBodyHeight?: number | null,
 ): NodeSize {
   const minor = isMinorNode(node, mode);
   const width = measureWidth(node, mode, links);
-  const body = bodyHeight(node, mode, links);
+  const custom =
+    customBodyHeight === undefined || customBodyHeight === null || mode === "compact"
+      ? null
+      : customBodyHeight;
+  const body = custom ?? bodyHeight(node, mode, links);
 
   if (collapsedInner === undefined || collapsedInner === null) {
     return {
@@ -273,4 +284,5 @@ export type Measurer = (
   mode: DisclosureMode,
   links?: NodeDataLinks | null,
   collapsedInner?: number | null,
+  customBodyHeight?: number | null,
 ) => NodeSize;

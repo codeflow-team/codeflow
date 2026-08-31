@@ -10,7 +10,7 @@
 import { Node, SyntaxKind } from "ts-morph";
 import type { Expression, Statement } from "ts-morph";
 import type { NodePort, Schema, WorkflowNode } from "../model/index.js";
-import { isNamedFieldsSchema } from "../model/schema.js";
+import { isJsonSchema, isNamedFieldsSchema } from "../model/schema.js";
 import { inputSchemaFieldNames } from "../registry/validate.js";
 import { staticPropertyName } from "../util/property-names.js";
 import {
@@ -861,6 +861,58 @@ function emitCondition(
 /* loop — 04 §2.5, §2.8                                                        */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Schema of one item of `iterable`, when the iterable declares one.
+ *
+ * `for (const pr of prs)` gives `pr` a shape the analyzer already knows: `prs`
+ * was written by a step whose output schema says `array of {…}`, and the item
+ * type of an array is `items`. Without this the most useful drag target inside
+ * a loop — the current item's own fields — has no schema at all, and the UI
+ * would have to re-derive it from the graph, which is a second analyzer.
+ *
+ * Deliberately narrow. Only a **bare identifier** iterable resolves: `prs` is
+ * the binding, `prs.slice()` and `Object.keys(x)` are calls whose result this
+ * module does not model, and a TS type reference (`"File[]"`) is a string, not
+ * a schema to index into. Only a **single** writer resolves: a `let` reassigned
+ * in two branches may hold two different shapes, and picking one would be a
+ * guess. Anything else yields nothing, which is the honest answer — a missing
+ * schema costs the user a tree they can still reach by typing, a wrong one
+ * costs them a field that does not exist (I6).
+ */
+function itemSchemaOf(ctx: AnalysisContext, frame: Frame, iterable: Node): Schema | undefined {
+  if (!Node.isIdentifier(iterable)) return undefined;
+  const binding = frame.scope.lookup(iterable.getText());
+  if (binding === null || binding.kind !== "value") return undefined;
+  if (binding.writers.length !== 1) return undefined;
+  const writer = binding.writers[0];
+  const source = ctx.nodes.find((candidate) => candidate.id === writer.nodeId);
+  if (source === undefined) return undefined;
+  const port =
+    writer.port === undefined
+      ? source.outputs.length === 1
+        ? source.outputs[0]
+        : undefined
+      : source.outputs.find((candidate) => candidate.id === writer.port);
+  const schema = port?.schema;
+  if (schema === undefined || !isJsonSchema(schema)) return undefined;
+  const type = schema["type"];
+  const isArray = type === "array" || (Array.isArray(type) && type.includes("array"));
+  const items = schema["items"];
+  if (!isArray || typeof items !== "object" || items === null || Array.isArray(items)) {
+    return undefined;
+  }
+  return items as Schema;
+}
+
+/** One destructured item property’s schema, from the item schema. */
+function propertyOf(item: Schema | undefined, property: string): Schema | undefined {
+  if (item === undefined || !isJsonSchema(item)) return undefined;
+  const properties = item["properties"];
+  if (typeof properties !== "object" || properties === null) return undefined;
+  const found = (properties as Record<string, unknown>)[property];
+  return typeof found === "object" && found !== null ? (found as Schema) : undefined;
+}
+
 function emitLoop(
   ctx: AnalysisContext,
   frame: Frame,
@@ -883,18 +935,30 @@ function emitLoop(
     const initializer = loop.getInitializer();
     const iterable = loop.getExpression();
     let variableText = initializer.getText();
+    // `whole` is true when the item is bound under one name (`for (const pr of
+    // prs)`), so the item schema belongs to that name. A destructuring pattern
+    // binds properties of the item instead, and each takes its own.
+    let whole = false;
     if (Node.isVariableDeclarationList(initializer)) {
       const declaration = initializer.getDeclarations()[0];
-      variableText = declaration.getNameNode().getText();
-      for (const bound of bindingNames(declaration.getNameNode())) {
+      const nameNode = declaration.getNameNode();
+      variableText = nameNode.getText();
+      whole = Node.isIdentifier(nameNode);
+      for (const bound of bindingNames(nameNode)) {
         loopBindings.push({ name: bound.name, port: bound.property ?? bound.name });
       }
     }
+    const itemSchema = itemSchemaOf(ctx, frame, iterable);
     node = addNode(ctx, frame, {
       type: "loop",
       label: `For Each ${variableText} in ${iterable.getText()}`,
       mapping,
-      outputs: loopBindings.map((bound) => ({ id: bound.port, label: bound.name })),
+      outputs: loopBindings.map((bound) => {
+        const schema = whole ? itemSchema : propertyOf(itemSchema, bound.port);
+        return schema === undefined
+          ? { id: bound.port, label: bound.name }
+          : { id: bound.port, label: bound.name, schema };
+      }),
       data: {
         kind: isAwait ? "forAwaitOf" : "forOf",
         variable: variableText,

@@ -66,6 +66,49 @@ export type { CodeFlowTheme } from "./controls/theme.js";
 
 export { CodeFlowNode, CodeFlowContainerNode } from "./flow/nodes.js";
 
+/* --- the node editor (07 §4) ---------------------------------------------
+ * The three-pane editor is mounted by `<CodeFlowProvider>` itself, so a host
+ * needs no wiring: double-click a step on the canvas, or press "Open editor" in
+ * the inspector. It is exported anyway for a host that wants to drive it (open
+ * it from its own chrome, or render it against a fixed node).
+ */
+
+export { NodeEditor } from "./editor/NodeEditor.js";
+export type { NodeEditorProps } from "./editor/NodeEditor.js";
+export { PreviewValue } from "./editor/PreviewValue.js";
+export type { PreviewValueProps } from "./editor/PreviewValue.js";
+
+export {
+  scopeRows,
+  groupScope,
+  describeSchema,
+  sampleForSchema,
+  rowValueText,
+} from "./editor/scope-rows.js";
+export type { ScopeRow, ScopeRowsOptions, ScopeGroups, ValueSource } from "./editor/scope-rows.js";
+export { dropInto, canDrop, rootNameOf } from "./editor/drop.js";
+export type { DropOutcome, DropRefusal, DropResult, DropOptions, DropCheck } from "./editor/drop.js";
+export {
+  resultItems,
+  iterationLabel,
+  traceNotice,
+  observedAt,
+  unwrapPreview,
+  previewOrigin,
+  declaredOutput,
+  LATEST_LABEL,
+} from "./editor/result.js";
+export type { ResultItem, TraceNotice, DeclaredOutput } from "./editor/result.js";
+export { pickPreviewRenderer, previewText, mediaTypeOf } from "./editor/preview.js";
+export type { PreviewRenderer, PreviewContext } from "./editor/preview.js";
+
+/* --- the node renderer seam (`NodeDefinition.renderer`, 05 §1) ------------ */
+
+export { resolveNodeRenderer, rendererMeasurer, DEFAULT_NODE_BODY_HEIGHT } from "./flow/renderer.js";
+export { runBadgeKind, isCompleted } from "./flow/run-badge.js";
+export type { RunBadgeKind } from "./flow/run-badge.js";
+export type { NodeBodyProps, NodeBodySpec, NodeBodyRenderer, ResolvedNodeRenderer } from "./flow/renderer.js";
+
 /* --- design system -------------------------------------------------------
  * shadcn-shaped components over Base UI primitives. Exported so a host app can
  * build its own chrome (top bar, panels, empty states) out of the same buttons,
@@ -97,7 +140,7 @@ export type { NoticeProps, NoticeTone } from "./ui/notice.js";
 export { ToastHost } from "./ui/toast.js";
 export { useToast } from "./ui/use-toast.js";
 
-export { diagnosticHeadline, errorHeadline, nodeTypeName, splitSpecRefs } from "./copy.js";
+export { diagnosticHeadline, errorHeadline, humanFieldLabel, nodeTypeName, splitSpecRefs } from "./copy.js";
 export type { SplitMessage } from "./copy.js";
 
 export { NodeGlyph, RegistryGlyph } from "./flow/glyphs.js";

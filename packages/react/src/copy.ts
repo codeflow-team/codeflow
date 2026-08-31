@@ -89,6 +89,17 @@ export function diagnosticHeadline(code: string): string {
   }
 }
 
+/**
+ * Field labels come from tool schemas: `channel` reads better as "Channel".
+ *
+ * Shared by the inspector and the node editor so one field is never called two
+ * different things depending on which surface is showing it.
+ */
+export function humanFieldLabel(label: string): string {
+  const spaced = label.replace(/[_-]+/g, " ").replace(/([a-z\d])([A-Z])/g, "$1 $2");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 /** Plain-language name of a node type, for labels and empty states. */
 export function nodeTypeName(type: string): string {
   switch (type) {

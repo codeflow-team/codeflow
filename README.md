@@ -183,5 +183,6 @@ What remains unsupported is structural relocation: moving a step into or out of 
 
 - **Design docs** — [`docs/`](docs/README.md). Twelve documents written before the implementation: the flow contract, the analyzer rules, the data model and identity guarantees, the patch engine, the UI, the AI codegen ladder, the testing invariants. Start with [`docs/00-overview.md`](docs/00-overview.md).
 - **Build journal** — [`NOTES.md`](NOTES.md) (in Vietnamese): what was decided, what broke, and what each bug hunt actually found.
+- **Releasing** — [`RELEASING.md`](RELEASING.md). A release is a version bump merged to `main`; publishing runs on npm trusted publishing (OIDC), so there is no long-lived token in the repository after the first release.
 - **Contributing** — there is no contribution guide yet. The house rules are visible in the test suite: every bug found becomes a permanent offline regression test, and anything the MVP cannot do is a visible refusal rather than a silent approximation.
 - **License** — [GNU AGPL v3 or later](LICENSE).

@@ -28,7 +28,7 @@ import {
 declare const process: { env: Record<string, string | undefined> };
 
 const apiKey = process.env["OPENROUTER_API_KEY"];
-const model = process.env["OPENROUTER_MODEL"] ?? "stealth/ox-alpha";
+const model = process.env["OPENROUTER_MODEL"] ?? "openrouter/free";
 
 describe("real-MCP eval harness (offline)", () => {
   it("builds a registry of real MCP tools from the committed captures", () => {

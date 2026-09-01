@@ -385,7 +385,7 @@ export interface ModelConfig {
   apiKey: string;
   model: string;
   /**
-   * `stealth/ox-alpha` is a reasoning model with a 131k window. Small flows fit
+   * `openrouter/free` routes to reasoning models. Small flows fit
    * under 32k; a 300-line flow plus the reasoning that precedes it does not, and
    * a low cap returns `content: null` with `finish_reason: "length"`. 48k is the
    * default here for exactly that reason.
@@ -432,7 +432,7 @@ function sleep(ms: number): Promise<void> {
  */
 export async function callModel(messages: ChatMessage[], config: ModelConfig): Promise<ModelCall> {
   const endpoint = config.endpoint ?? "https://openrouter.ai/api/v1/chat/completions";
-  // The free tier of `stealth/ox-alpha` shares one upstream pool, and a
+  // The free tier shares one upstream pool across callers, and a
   // feature-sized generation sits in it for minutes; 429 is routine rather than
   // exceptional. Eight attempts with a backoff that reaches a minute is what it
   // takes for a seven-intent run to finish without holes in the data.

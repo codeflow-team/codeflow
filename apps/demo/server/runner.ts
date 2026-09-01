@@ -267,6 +267,51 @@ export function seedWorkspace(workspace: string): void {
       null,
       2,
     ),
+    /*
+     * The test plan `browser-qa-runner` reads.
+     *
+     * Seeded because that example is shipped and could not demonstrate
+     * anything without it — `planPath` used to resolve to `package.json`,
+     * since `plan` sat in the same word list as `package`, and the flow failed
+     * parsing test cases out of a manifest. Both halves are fixed: the wrong
+     * synonym is gone from `input.ts`, and the document it should have been
+     * pointing at now exists.
+     *
+     * Shaped to exercise the flow rather than to look tidy: one critical case
+     * and one that is not, so `isBlockingFailure` has both answers to give, and
+     * a step whose target is absent from the page so a failure really happens.
+     */
+    "plan.json": JSON.stringify(
+      {
+        cases: [
+          {
+            id: "QA-1",
+            url: "https://example.invalid/checkout",
+            critical: true,
+            steps: [
+              { action: "click", target: "#basket" },
+              { action: "type", target: "#coupon", value: "SPRING" },
+              { action: "expect", target: "#total" },
+            ],
+          },
+          {
+            id: "QA-2",
+            url: "https://example.invalid/search",
+            critical: false,
+            steps: [
+              { action: "type", target: "#q", value: "model context protocol" },
+              { action: "press", target: "Enter" },
+              // Nothing renders this, so the suite has a real failure to
+              // report — a plan where everything passes tests the reporter's
+              // happy path and nothing else.
+              { action: "expect", target: "#no-such-result-panel" },
+            ],
+          },
+        ],
+      },
+      null,
+      2,
+    ),
     "tickets.json": JSON.stringify(
       {
         tickets: [

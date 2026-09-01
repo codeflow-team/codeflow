@@ -1,0 +1,959 @@
+{
+  "results": [
+    {
+      "intent": "csv-ledger",
+      "repetition": 1,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 110,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "try",
+        "jump",
+        "early-return"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction getLines(text: string): string[] {\n  return text.split(\"\\n\");\n}\n\nfunction getTrimmedLine(line: string): string {\n  return line.trim();\n}\n\nfunction extractDropFiles(dirContent: string): string[] {\n  const lines = getLines(dirContent);\n  const result: string[] = [];\n  for (const line of lines) {\n    const trimmed = getTrimmedLine(line);\n    if (trimmed.startsWith(\"[FILE] \")) {\n      const filename = trimmed.slice(7);\n      if (filename.startsWith(\"drop-\") && filename.endsWith(\".csv\")) {\n        result.push(filename);\n      }\n    }\n  }\n  return result;\n}\n\nfunction isHeaderOrEmpty(line: string, index: number): boolean {\n  return getTrimmedLine(line) === \"\" || index === 0;\n}\n\nfunction parseCsvRow(line: string): { id: string; region: string; amount: string } | null {\n  const parts = line.split(\",\");\n  if (parts.length < 3) {\n    return null;\n  }\n  return {\n    id: parts[0].trim(),\n    region: parts[1].trim(),\n    amount: parts[2].trim()\n  };\n}\n\nfunction validateRow(\n  parsed: { id: string; region: string; amount: string } | null\n): { valid: true; region: string; amount: number } | { valid: false; id: string; reason: string } {\n  if (parsed === null) {\n    return { valid: false, id: \"unknown\", reason: \"malformed-row\" };\n  }\n  if (parsed.region === \"\") {\n    return { valid: false, id: parsed.id, reason: \"empty-region\" };\n  }\n  const amountNum = Number(parsed.amount);\n  if (isNaN(amountNum)) {\n    return { valid: false, id: parsed.id, reason: \"invalid-amount\" };\n  }\n  return { valid: true, region: parsed.region, amount: amountNum };\n}\n\nfunction getSortedRegions(foldedAmounts: Record<string, number>): string[] {\n  return Object.keys(foldedAmounts).sort();\n}\n\nasync function processDropFile(\n  fileName: string,\n  root: string,\n  tools: Tools,\n  foldedAmounts: Record<string, number>,\n  rejectedRows: Array<{ id: string; reason: string }>,\n  maxRows: number,\n  alreadyFolded: number\n): Promise<number> {\n  const remaining = maxRows - alreadyFolded;\n  if (remaining <= 0) {\n    return 0;\n  }\n  const fileContent = await tools.fs.readTextFile({ path: `${root}/${fileName}` });\n  const lines = getLines(fileContent.content);\n  let foldedInFile = 0;\n  for (let i = 0; i < lines.length; i++) {\n    const line = lines[i];\n    if (isHeaderOrEmpty(line, i)) {\n      continue;\n    }\n    const parsed = parseCsvRow(line);\n    const validated = validateRow(parsed);\n    if (validated.valid) {\n      if (foldedInFile < remaining) {\n        const region = validated.region;\n        const amount = validated.amount;\n        if (foldedAmounts[region] === undefined) {\n          foldedAmounts[region] = 0;\n        }\n        foldedAmounts[region] += amount;\n        foldedInFile += 1;\n      } else {\n        break;\n      }\n    } else {\n      rejectedRows.push({ id: validated.id, reason: validated.reason });\n    }\n    if (foldedInFile >= remaining) {\n      break;\n    }\n  }\n  return foldedInFile;\n}\n\nexport default async function flow(\n  input: { root: string; maxRows: number },\n  tools: Tools\n) {\n  const [dirListing] = await Promise.all([\n    tools.fs.listDirectory({ path: input.root })\n  ]);\n  const dirContent = dirListing.content;\n  const dropFiles = extractDropFiles(dirContent);\n  if (dropFiles.length === 0) {\n    return { folded: 0, reason: \"no-drops\" };\n  }\n  let missingRegions = 0;\n  try {\n    await tools.fs.readTextFile({ path: `${input.root}/drop-north.csv` });\n  } catch {\n    missingRegions += 1;\n  }\n  const foldedAmounts: Record<string, number> = {};\n  const rejectedRows: Array<{ id: string; reason: string }> = [];\n  let foldedCount = 0;\n  for (const dropFile of dropFiles) {\n    if (foldedCount >= input.maxRows) {\n      break;\n    }\n    const foldedInFile = await processDropFile(\n      dropFile,\n      input.root,\n      tools,\n      foldedAmounts,\n      rejectedRows,\n      input.maxRows,\n      foldedCount\n    );\n    foldedCount += foldedInFile;\n  }\n  const sortedRegions = getSortedRegions(foldedAmounts);\n  let ledgerContent = \"\";\n  for (const region of sortedRegions) {\n    ledgerContent += `- ${region}: ${foldedAmounts[region]}\\n`;\n  }\n  let rejectsContent = \"\";\n  for (const rejected of rejectedRows) {\n    rejectsContent += `${rejected.id}: ${rejected.reason}\\n`;\n  }\n  await tools.fs.writeFile({\n    path: `${input.root}/ledger.md`,\n    content: ledgerContent\n  });\n  await tools.fs.writeFile({\n    path: `${input.root}/rejects.md`,\n    content: rejectsContent\n  });\n  return { folded: foldedCount, rejected: rejectedRows.length, missing: missingRegions };\n}\n",
+          "lines": 161,
+          "level": "L2",
+          "validateRounds": 3,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 114,
+                  "column": 3,
+                  "offset": 3159
+                },
+                "end": {
+                  "line": 114,
+                  "column": 41,
+                  "offset": 3197
+                },
+                "semanticPath": "flow/stmt[1]",
+                "fingerprint": "1bc742dc95f9c89aadb080f89afc9a09d39310ae3b6751894f7f12f5d5bff30a"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 119,
+                  "column": 3,
+                  "offset": 3332
+                },
+                "end": {
+                  "line": 119,
+                  "column": 26,
+                  "offset": 3355
+                },
+                "semanticPath": "flow/stmt[4]",
+                "fingerprint": "a7c4a308ee0c014354d1929e6947cb25e081ccf8efff7c192f9f03d2e1e0837b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 123,
+                  "column": 5,
+                  "offset": 3455
+                },
+                "end": {
+                  "line": 123,
+                  "column": 25,
+                  "offset": 3475
+                },
+                "semanticPath": "flow/try[0]/catch/stmt[0]",
+                "fingerprint": "de8658e649a49eb6e720286ec452995891cb563e0529af7695e6918ddda54537"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 125,
+                  "column": 3,
+                  "offset": 3482
+                },
+                "end": {
+                  "line": 127,
+                  "column": 23,
+                  "offset": 3620
+                },
+                "semanticPath": "flow/stmt[6..8]",
+                "fingerprint": "59319c0b5d7be776702de7fc935016b02afa02d37e33a8c02b6b2aa49867dafd"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 141,
+                  "column": 5,
+                  "offset": 3904
+                },
+                "end": {
+                  "line": 141,
+                  "column": 33,
+                  "offset": 3932
+                },
+                "semanticPath": "flow/for[0]/stmt[2]",
+                "fingerprint": "58d75176290f2a209f1c7bca16f851bd7b910b6cb78eb79a962c3d010b63adb9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 144,
+                  "column": 3,
+                  "offset": 3996
+                },
+                "end": {
+                  "line": 144,
+                  "column": 26,
+                  "offset": 4019
+                },
+                "semanticPath": "flow/stmt[11]",
+                "fingerprint": "9b38952b85d5e281295ca457bfcea9b7b9774aa6f4c33fbdb64a6f2a43747559"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 146,
+                  "column": 5,
+                  "offset": 4064
+                },
+                "end": {
+                  "line": 146,
+                  "column": 64,
+                  "offset": 4123
+                },
+                "semanticPath": "flow/for[1]/stmt[0]",
+                "fingerprint": "a2c2c096bb3d8addf8d2582f3dd27afdb4337542881809a85e99d92d4806bb66"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 148,
+                  "column": 3,
+                  "offset": 4130
+                },
+                "end": {
+                  "line": 148,
+                  "column": 27,
+                  "offset": 4154
+                },
+                "semanticPath": "flow/stmt[13]",
+                "fingerprint": "dc6c1cfd68ec7fb3326c6eeea27f98c7dc2423fcc1118005f8c959110b09c617"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 150,
+                  "column": 5,
+                  "offset": 4200
+                },
+                "end": {
+                  "line": 150,
+                  "column": 62,
+                  "offset": 4257
+                },
+                "semanticPath": "flow/for[2]/stmt[0]",
+                "fingerprint": "f9c0089200988cc34a2797dc856ba435946c0dc95a65a9c19695ffa5f32efe5a"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 30,
+            "edges": 65,
+            "nodeTypes": {
+              "trigger": 1,
+              "parallel": 1,
+              "tool": 4,
+              "merge": 3,
+              "code": 9,
+              "function": 3,
+              "condition": 2,
+              "output": 2,
+              "try": 1,
+              "loop": 3,
+              "jump": 1
+            },
+            "codeNodes": 9,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7,
+            "toolCalls": 4
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "jump",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [
+            "nested-loop"
+          ],
+          "run": {
+            "status": "ok",
+            "ms": 2846,
+            "stepsRun": 24,
+            "stepsTotal": 26,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "folded": 3,
+              "rejected": 2,
+              "missing": 1
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-4Q7HTr/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-4Q7HTr/workspace",
+              "maxRows": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file ledger.md",
+                  "ok": true,
+                  "detail": "28 bytes"
+                },
+                {
+                  "label": "file rejects.md",
+                  "ok": true,
+                  "detail": "38 bytes"
+                }
+              ],
+              "ok": true,
+              "newFiles": [
+                {
+                  "path": "ledger.md",
+                  "bytes": 28
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "rejects.md",
+                  "bytes": 38
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "ledger.md",
+                  "bytes": 28,
+                  "head": "- east: 2080.5\n- west: 2200\n"
+                },
+                {
+                  "path": "rejects.md",
+                  "bytes": 38,
+                  "head": "E-3: invalid-amount\nE-4: empty-region\n"
+                }
+              ]
+            },
+            "passed": true
+          },
+          "errorClass": "none",
+          "errorReason": "",
+          "modelMs": 137941,
+          "usage": {
+            "promptTokens": 8668,
+            "completionTokens": 1434,
+            "totalTokens": 10102
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": true,
+      "finalLevel": "L2",
+      "finalRunPassed": true,
+      "staticRetries": 2,
+      "runtimeRetries": 0,
+      "totalMs": 140939
+    },
+    {
+      "intent": "doc-freshness",
+      "repetition": 1,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 110,
+      "covers": [
+        "loop",
+        "condition",
+        "try",
+        "parallel",
+        "early-return",
+        "function"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/**\n * Parse a timestamp (ms since epoch) out of the textual metadata returned\n * by fs.getFileInfo. Handles ISO 8601 dates and Unix timestamps.\n */\nfunction parseTimestamp(text: string): number {\n  const iso = /(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2}:\\d{2}:\\d{2})(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?/.exec(text);\n  if (iso) {\n    const normalized = `${iso[1]}T${iso[2]}${iso[3] ?? \"\"}${iso[4] ?? \"Z\"}`;\n    const ms = Date.parse(normalized);\n    if (!Number.isNaN(ms)) return ms;\n  }\n  const unix = /\\b(\\d{12,13}|\\d{9,10})\\b/.exec(text);\n  if (unix) {\n    const n = Number(unix[1]);\n    return unix[1].length >= 13 ? n : n * 1000;\n  }\n  return 0;\n}\n\n/**\n * Extract the modification time (ms since epoch) from a getFileInfo content string.\n */\nfunction extractMtime(content: string): number {\n  for (const line of content.split(\"\\n\")) {\n    if (/modif/i.test(line)) {\n      const ts = parseTimestamp(line);\n      if (ts !== 0) return ts;\n    }\n  }\n  return parseTimestamp(content);\n}\n\n/**\n * A doc is stale when it is older than the module it documents.\n */\nfunction isDocStale(moduleContent: string, docContent: string): boolean {\n  return extractMtime(docContent) < extractMtime(moduleContent);\n}\n\n/**\n * Filter the raw list of .ts files returned by searchFiles, keeping only\n * non-test source modules.\n */\nfunction filterModules(raw: string): string[] {\n  return raw\n    .split(\"\\n\")\n    .map((s) => s.trim())\n    .filter((s) => s.length > 0 && s.endsWith(\".ts\") && !s.endsWith(\".test.ts\"));\n}\n\n/**\n * Pick at most maxModules from the filtered list.\n */\nfunction pickModules(modules: string[], maxModules: number): string[] {\n  return modules.slice(0, maxModules);\n}\n\n/**\n * Resolve a relative file path to an absolute one using the given root.\n */\nfunction resolvePath(root: string, raw: string): string {\n  return raw.startsWith(root) ? raw : `${root}/${raw}`;\n}\n\n/**\n * Extract the basename without extension from a file path.\n */\nfunction getBaseNameWithoutExtension(filePath: string): string {\n  return filePath.replace(/.*[\\\\/]/, \"\").replace(/\\.ts$/, \"\");\n}\n\n/**\n * Append a line to the freshness report.\n */\nfunction appendReport(report: string[], modulePath: string, status: \"fresh\" | \"stale\" | \"missing\"): void {\n  report.push(`${modulePath}: ${status}`);\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const search = await tools.fs.searchFiles({ path: input.root, pattern: \"*.ts\" });\n  const filtered = filterModules(search.content);\n\n  if (filtered.length === 0) {\n    return { audited: 0 };\n  }\n\n  const modules = pickModules(filtered, input.maxModules);\n  if (modules.length === 0) {\n    return { audited: 0 };\n  }\n\n  let audited = 0;\n  let stale = 0;\n  let missing = 0;\n  const report: string[] = [];\n\n  for (const raw of modules) {\n    const modulePath = resolvePath(input.root, raw);\n    const basename = getBaseNameWithoutExtension(modulePath);\n    const docPath = `${input.root}/docs/${basename}.md`;\n\n    audited += 1;\n\n    try {\n      const [moduleInfo, docInfo] = await Promise.all([\n        tools.fs.getFileInfo({ path: modulePath }),\n        tools.fs.getFileInfo({ path: docPath })\n      ]);\n\n      if (isDocStale(moduleInfo.content, docInfo.content)) {\n        stale += 1;\n        await tools.memory.createEntities({\n          entities: [{\n            name: docPath,\n            entityType: \"stale-doc\",\n            observations: [modulePath]\n          }]\n        });\n        appendReport(report, modulePath, \"stale\");\n      } else {\n        appendReport(report, modulePath, \"fresh\");\n      }\n    } catch {\n      missing += 1;\n      appendReport(report, modulePath, \"missing\");\n    }\n  }\n\n  await tools.fs.writeFile({\n    path: `${input.root}/freshness.md`,\n    content: report.join(\"\\n\") + \"\\n\"\n  });\n\n  return { audited, stale, missing };\n}\n",
+          "lines": 140,
+          "level": "L2",
+          "validateRounds": 3,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 97,
+                  "column": 3,
+                  "offset": 2728
+                },
+                "end": {
+                  "line": 100,
+                  "column": 31,
+                  "offset": 2811
+                },
+                "semanticPath": "flow/stmt[5..8]",
+                "fingerprint": "e3afed5dbbb7d6bf3d742a4d3262e80541956c5f8989d718b43b667dfc9c8a81"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 105,
+                  "column": 5,
+                  "offset": 2963
+                },
+                "end": {
+                  "line": 107,
+                  "column": 18,
+                  "offset": 3034
+                },
+                "semanticPath": "flow/for[0]/stmt[2..3]",
+                "fingerprint": "52c37045afeb145ad99b62cd5f6996af0c19373a1029338d144ce896e06161dc"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 116,
+                  "column": 9,
+                  "offset": 3282
+                },
+                "end": {
+                  "line": 116,
+                  "column": 20,
+                  "offset": 3293
+                },
+                "semanticPath": "flow/for[0]/try[0]/if[0]/stmt[0]",
+                "fingerprint": "b1453d347e585e7e9f312c448a20e77fcdd88ffcccea9042e1805592c723b12e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 129,
+                  "column": 7,
+                  "offset": 3634
+                },
+                "end": {
+                  "line": 129,
+                  "column": 20,
+                  "offset": 3647
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "f16c0f4a5b9cb9204764fbf4278b8758544f07d9e16b0cb0e67198d27db40735"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 29,
+            "edges": 64,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 5,
+              "function": 7,
+              "condition": 3,
+              "output": 3,
+              "merge": 3,
+              "code": 4,
+              "loop": 1,
+              "try": 1,
+              "parallel": 1
+            },
+            "codeNodes": 4,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8620689655172413,
+            "toolCalls": 5
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 1676,
+            "stepsRun": 20,
+            "stepsTotal": 25,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [
+              {
+                "nodeId": "n_211aba7ffb7f",
+                "label": "Get File Info",
+                "line": 112,
+                "message": "get_file_info: ENOENT: no such file or directory, stat '/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-xSyjNh/workspace/docs/index.md'"
+              }
+            ],
+            "error": null,
+            "result": {
+              "audited": 3,
+              "stale": 0,
+              "missing": 1
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-xSyjNh/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-xSyjNh/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file freshness.md",
+                  "ok": true,
+                  "detail": "312 bytes"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                },
+                {
+                  "label": "memory entityType \"stale-doc\"",
+                  "ok": false,
+                  "detail": "none (types present: —)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "freshness.md",
+                  "bytes": 312
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "freshness.md",
+                  "bytes": 312,
+                  "head": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-xSyjNh/workspace/index.ts: missing\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-xSyjNh/workspace/money.ts: fresh\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-xSyjNh/workspace/orders.ts: fresh\n"
+                }
+              ]
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "memory entities: 0 on disk (wanted ≥ 1); memory entityType \"stale-doc\": none (types present: —)",
+          "modelMs": 263704,
+          "usage": {
+            "promptTokens": 8458,
+            "completionTokens": 1458,
+            "totalTokens": 9916
+          }
+        },
+        {
+          "attempt": 1,
+          "kind": "runtime-fix",
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/**\n * Parse a timestamp (ms since epoch) out of the textual metadata returned\n * by fs.getFileInfo. Handles ISO 8601 dates and Unix timestamps.\n */\nfunction parseTimestamp(text: string): number {\n  const iso = /(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2}:\\d{2}:\\d{2})(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?/.exec(text);\n  if (iso) {\n    const normalized = `${iso[1]}T${iso[2]}${iso[3] ?? \"\"}${iso[4] ?? \"Z\"}`;\n    const ms = Date.parse(normalized);\n    if (!Number.isNaN(ms)) return ms;\n  }\n  const unix = /\\b(\\d{12,13}|\\d{9,10})\\b/.exec(text);\n  if (unix) {\n    const n = Number(unix[1]);\n    return unix[1].length >= 13 ? n : n * 1000;\n  }\n  return 0;\n}\n\n/**\n * Extract the modification time (ms since epoch) from a getFileInfo content string.\n */\nfunction extractMtime(content: string): number {\n  for (const line of content.split(\"\\n\")) {\n    if (/modif/i.test(line)) {\n      const ts = parseTimestamp(line);\n      if (ts !== 0) return ts;\n    }\n  }\n  return parseTimestamp(content);\n}\n\n/**\n * A doc is stale when it is older than the module it documents.\n */\nfunction isDocStale(moduleContent: string, docContent: string): boolean {\n  return extractMtime(docContent) < extractMtime(moduleContent);\n}\n\n/**\n * Filter the raw list of .ts files returned by searchFiles, keeping only\n * non-test source modules.\n */\nfunction filterModules(raw: string): string[] {\n  return raw\n    .split(\"\\n\")\n    .map((s) => s.trim())\n    .filter((s) => s.length > 0 && s.endsWith(\".ts\") && !s.endsWith(\".test.ts\"));\n}\n\n/**\n * Pick at most maxModules from the filtered list.\n */\nfunction pickModules(modules: string[], maxModules: number): string[] {\n  return modules.slice(0, maxModules);\n}\n\n/**\n * Resolve a relative file path to an absolute one using the given root.\n */\nfunction resolvePath(root: string, raw: string): string {\n  return raw.startsWith(root) ? raw : `${root}/${raw}`;\n}\n\n/**\n * Extract the basename without extension from a file path.\n */\nfunction getBaseNameWithoutExtension(filePath: string): string {\n  return filePath.replace(/.*[\\\\/]/, \"\").replace(/\\.ts$/, \"\");\n}\n\n/**\n * Append a line to the freshness report.\n */\nfunction appendReport(report: string[], modulePath: string, status: \"fresh\" | \"stale\" | \"missing\"): void {\n  report.push(`${modulePath}: ${status}`);\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const search = await tools.fs.searchFiles({ path: input.root, pattern: \"*.ts\" });\n  const filtered = filterModules(search.content);\n\n  if (filtered.length === 0) {\n    return { audited: 0 };\n  }\n\n  const modules = pickModules(filtered, input.maxModules);\n  if (modules.length === 0) {\n    return { audited: 0 };\n  }\n\n  let audited = 0;\n  let stale = 0;\n  let missing = 0;\n  const report: string[] = [];\n\n  for (const raw of modules) {\n    const modulePath = resolvePath(input.root, raw);\n    const basename = getBaseNameWithoutExtension(modulePath);\n    const docPath = `${input.root}/docs/${basename}.md`;\n\n    audited += 1;\n\n    try {\n      const [moduleInfo, docInfo] = await Promise.all([\n        tools.fs.getFileInfo({ path: modulePath }),\n        tools.fs.getFileInfo({ path: docPath })\n      ]);\n\n      if (isDocStale(moduleInfo.content, docInfo.content)) {\n        stale += 1;\n        await tools.memory.createEntities({\n          entities: [{\n            name: docPath,\n            entityType: \"stale-doc\",\n            observations: [modulePath]\n          }]\n        });\n        appendReport(report, modulePath, \"stale\");\n      } else {\n        appendReport(report, modulePath, \"fresh\");\n      }\n    } catch {\n      missing += 1;\n      appendReport(report, modulePath, \"missing\");\n    }\n  }\n\n  await tools.fs.writeFile({\n    path: `${input.root}/freshness.md`,\n    content: report.join(\"\\n\") + \"\\n\"\n  });\n\n  return { audited, stale, missing };\n}\n",
+          "lines": 140,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 97,
+                  "column": 3,
+                  "offset": 2728
+                },
+                "end": {
+                  "line": 100,
+                  "column": 31,
+                  "offset": 2811
+                },
+                "semanticPath": "flow/stmt[5..8]",
+                "fingerprint": "e3afed5dbbb7d6bf3d742a4d3262e80541956c5f8989d718b43b667dfc9c8a81"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 105,
+                  "column": 5,
+                  "offset": 2963
+                },
+                "end": {
+                  "line": 107,
+                  "column": 18,
+                  "offset": 3034
+                },
+                "semanticPath": "flow/for[0]/stmt[2..3]",
+                "fingerprint": "52c37045afeb145ad99b62cd5f6996af0c19373a1029338d144ce896e06161dc"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 116,
+                  "column": 9,
+                  "offset": 3282
+                },
+                "end": {
+                  "line": 116,
+                  "column": 20,
+                  "offset": 3293
+                },
+                "semanticPath": "flow/for[0]/try[0]/if[0]/stmt[0]",
+                "fingerprint": "b1453d347e585e7e9f312c448a20e77fcdd88ffcccea9042e1805592c723b12e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 129,
+                  "column": 7,
+                  "offset": 3634
+                },
+                "end": {
+                  "line": 129,
+                  "column": 20,
+                  "offset": 3647
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "f16c0f4a5b9cb9204764fbf4278b8758544f07d9e16b0cb0e67198d27db40735"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 29,
+            "edges": 64,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 5,
+              "function": 7,
+              "condition": 3,
+              "output": 3,
+              "merge": 3,
+              "code": 4,
+              "loop": 1,
+              "try": 1,
+              "parallel": 1
+            },
+            "codeNodes": 4,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8620689655172413,
+            "toolCalls": 5
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 1620,
+            "stepsRun": 20,
+            "stepsTotal": 25,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [
+              {
+                "nodeId": "n_211aba7ffb7f",
+                "label": "Get File Info",
+                "line": 112,
+                "message": "get_file_info: ENOENT: no such file or directory, stat '/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-UDfMPp/workspace/docs/index.md'"
+              }
+            ],
+            "error": null,
+            "result": {
+              "audited": 3,
+              "stale": 0,
+              "missing": 1
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-UDfMPp/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-UDfMPp/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file freshness.md",
+                  "ok": true,
+                  "detail": "312 bytes"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                },
+                {
+                  "label": "memory entityType \"stale-doc\"",
+                  "ok": false,
+                  "detail": "none (types present: —)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "freshness.md",
+                  "bytes": 312
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "freshness.md",
+                  "bytes": 312,
+                  "head": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-UDfMPp/workspace/index.ts: missing\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-UDfMPp/workspace/money.ts: fresh\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-UDfMPp/workspace/orders.ts: fresh\n"
+                }
+              ]
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "memory entities: 0 on disk (wanted ≥ 1); memory entityType \"stale-doc\": none (types present: —)",
+          "modelMs": 94720,
+          "usage": {
+            "promptTokens": 9904,
+            "completionTokens": 4026,
+            "totalTokens": 13930
+          }
+        },
+        {
+          "attempt": 2,
+          "kind": "runtime-fix",
+          "source": "import type { Tools } from \"../generated/tools\";\n\n/**\n * Parse a timestamp (ms since epoch) out of the textual metadata returned\n * by fs.getFileInfo. Handles ISO 8601 dates and Unix timestamps.\n */\nfunction parseTimestamp(text: string): number {\n  const iso = /(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2}:\\d{2}:\\d{2})(\\.\\d+)?(Z|[+-]\\d{2}:?\\d{2})?/.exec(text);\n  if (iso) {\n    const normalized = `${iso[1]}T${iso[2]}${iso[3] ?? \"\"}${iso[4] ?? \"Z\"}`;\n    const ms = Date.parse(normalized);\n    if (!Number.isNaN(ms)) return ms;\n  }\n  const unix = /\\b(\\d{12,13}|\\d{9,10})\\b/.exec(text);\n  if (unix) {\n    const n = Number(unix[1]);\n    return unix[1].length >= 13 ? n : n * 1000;\n  }\n  return 0;\n}\n\n/**\n * Extract the modification time (ms since epoch) from a getFileInfo content string.\n */\nfunction extractMtime(content: string): number {\n  try {\n    const obj = JSON.parse(content);\n    const candidates = [\n      obj.modified, obj.mtime, obj.lastModified,\n      obj.creationTime, obj.created, obj.last_modified,\n      obj.ctime, obj.birthtime\n    ];\n    for (const ts of candidates) {\n      if (ts === null || ts === undefined) continue;\n      const ms = typeof ts === \"number\" ? ts : Date.parse(ts);\n      if (!Number.isNaN(ms) && ms > 0) return ms;\n    }\n  } catch {\n    // not JSON\n  }\n\n  for (const line of content.split(\"\\n\")) {\n    if (/modified|mtime|last.?modified/i.test(line)) {\n      const ts = parseTimestamp(line);\n      if (ts !== 0) return ts;\n    }\n  }\n\n  return parseTimestamp(content);\n}\n\n/**\n * A doc is stale when it is older than the module it documents.\n */\nfunction isDocStale(moduleContent: string, docContent: string): boolean {\n  return extractMtime(docContent) < extractMtime(moduleContent);\n}\n\n/**\n * Filter the raw list of .ts files returned by searchFiles, keeping only\n * non-test source modules.\n */\nfunction filterModules(raw: string): string[] {\n  return raw\n    .split(\"\\n\")\n    .map((s) => s.trim())\n    .filter((s) => s.length > 0 && s.endsWith(\".ts\") && !s.endsWith(\".test.ts\"));\n}\n\n/**\n * Pick at most maxModules from the filtered list.\n */\nfunction pickModules(modules: string[], maxModules: number): string[] {\n  return modules.slice(0, maxModules);\n}\n\n/**\n * Resolve a relative file path to an absolute one using the given root.\n */\nfunction resolvePath(root: string, raw: string): string {\n  return raw.startsWith(root) ? raw : `${root}/${raw}`;\n}\n\n/**\n * Extract the basename without extension from a file path.\n */\nfunction getBaseNameWithoutExtension(filePath: string): string {\n  return filePath.replace(/.*[\\\\/]/, \"\").replace(/\\.ts$/, \"\");\n}\n\n/**\n * Append a line to the freshness report.\n */\nfunction appendReport(report: string[], modulePath: string, status: \"fresh\" | \"stale\" | \"missing\"): void {\n  report.push(`${modulePath}: ${status}`);\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const search = await tools.fs.searchFiles({ path: input.root, pattern: \"*.ts\" });\n  const filtered = filterModules(search.content);\n\n  if (filtered.length === 0) {\n    return { audited: 0 };\n  }\n\n  const modules = pickModules(filtered, input.maxModules);\n  if (modules.length === 0) {\n    return { audited: 0 };\n  }\n\n  let audited = 0;\n  let stale = 0;\n  let missing = 0;\n  const report: string[] = [];\n\n  for (const raw of modules) {\n    const modulePath = resolvePath(input.root, raw);\n    const basename = getBaseNameWithoutExtension(modulePath);\n    const docPath = `${input.root}/docs/${basename}.md`;\n\n    audited += 1;\n\n    try {\n      const [moduleInfo, docInfo] = await Promise.all([\n        tools.fs.getFileInfo({ path: modulePath }),\n        tools.fs.getFileInfo({ path: docPath })\n      ]);\n\n      if (isDocStale(moduleInfo.content, docInfo.content)) {\n        stale += 1;\n        await tools.memory.createEntities({\n          entities: [{\n            name: docPath,\n            entityType: \"stale-doc\",\n            observations: [modulePath]\n          }]\n        });\n        appendReport(report, modulePath, \"stale\");\n      } else {\n        appendReport(report, modulePath, \"fresh\");\n      }\n    } catch {\n      missing += 1;\n      appendReport(report, modulePath, \"missing\");\n    }\n  }\n\n  await tools.fs.writeFile({\n    path: `${input.root}/freshness.md`,\n    content: report.join(\"\\n\") + \"\\n\"\n  });\n\n  return { audited, stale, missing };\n}\n",
+          "lines": 157,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 114,
+                  "column": 3,
+                  "offset": 3206
+                },
+                "end": {
+                  "line": 117,
+                  "column": 31,
+                  "offset": 3289
+                },
+                "semanticPath": "flow/stmt[5..8]",
+                "fingerprint": "e3afed5dbbb7d6bf3d742a4d3262e80541956c5f8989d718b43b667dfc9c8a81"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 122,
+                  "column": 5,
+                  "offset": 3441
+                },
+                "end": {
+                  "line": 124,
+                  "column": 18,
+                  "offset": 3512
+                },
+                "semanticPath": "flow/for[0]/stmt[2..3]",
+                "fingerprint": "52c37045afeb145ad99b62cd5f6996af0c19373a1029338d144ce896e06161dc"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 133,
+                  "column": 9,
+                  "offset": 3760
+                },
+                "end": {
+                  "line": 133,
+                  "column": 20,
+                  "offset": 3771
+                },
+                "semanticPath": "flow/for[0]/try[0]/if[0]/stmt[0]",
+                "fingerprint": "b1453d347e585e7e9f312c448a20e77fcdd88ffcccea9042e1805592c723b12e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "doc-freshness.flow.ts",
+                "start": {
+                  "line": 146,
+                  "column": 7,
+                  "offset": 4112
+                },
+                "end": {
+                  "line": 146,
+                  "column": 20,
+                  "offset": 4125
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "f16c0f4a5b9cb9204764fbf4278b8758544f07d9e16b0cb0e67198d27db40735"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 29,
+            "edges": 64,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 5,
+              "function": 7,
+              "condition": 3,
+              "output": 3,
+              "merge": 3,
+              "code": 4,
+              "loop": 1,
+              "try": 1,
+              "parallel": 1
+            },
+            "codeNodes": 4,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8620689655172413,
+            "toolCalls": 5
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 4390,
+            "stepsRun": 20,
+            "stepsTotal": 25,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [
+              {
+                "nodeId": "n_211aba7ffb7f",
+                "label": "Get File Info",
+                "line": 129,
+                "message": "get_file_info: ENOENT: no such file or directory, stat '/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-fMDyyB/workspace/docs/index.md'"
+              }
+            ],
+            "error": null,
+            "result": {
+              "audited": 3,
+              "stale": 0,
+              "missing": 1
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-fMDyyB/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-fMDyyB/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file freshness.md",
+                  "ok": true,
+                  "detail": "312 bytes"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                },
+                {
+                  "label": "memory entityType \"stale-doc\"",
+                  "ok": false,
+                  "detail": "none (types present: —)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "freshness.md",
+                  "bytes": 312
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "freshness.md",
+                  "bytes": 312,
+                  "head": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-fMDyyB/workspace/index.ts: missing\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-fMDyyB/workspace/money.ts: fresh\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-fMDyyB/workspace/orders.ts: fresh\n"
+                }
+              ]
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "memory entities: 0 on disk (wanted ≥ 1); memory entityType \"stale-doc\": none (types present: —)",
+          "modelMs": 154187,
+          "usage": {
+            "promptTokens": 12005,
+            "completionTokens": 17430,
+            "totalTokens": 29435
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": false,
+      "finalLevel": "L2",
+      "finalRunPassed": false,
+      "staticRetries": 2,
+      "runtimeRetries": 2,
+      "totalMs": 520414
+    }
+  ]
+}

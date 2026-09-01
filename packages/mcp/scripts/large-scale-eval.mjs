@@ -85,7 +85,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const dotenv = loadDotEnv(join(REPO_ROOT, ".env"));
   const apiKey = process.env.OPENROUTER_API_KEY ?? dotenv.OPENROUTER_API_KEY;
-  const model = process.env.OPENROUTER_MODEL ?? dotenv.OPENROUTER_MODEL ?? "stealth/ox-alpha";
+  const model = process.env.OPENROUTER_MODEL ?? dotenv.OPENROUTER_MODEL ?? "openrouter/free";
   if (!apiKey && !args.dry) {
     console.error("OPENROUTER_API_KEY is not set (env or .env).");
     process.exit(1);

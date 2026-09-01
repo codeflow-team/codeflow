@@ -78,7 +78,7 @@ const OUTISH = new Set(["out", "output", "dest", "destination", "target", "ledge
  * runner actually creates, so the two cannot drift into a default that names a
  * document nobody wrote.
  */
-export const WORKSPACE_DOCUMENTS = ["orders.json", "tickets.json"];
+export const WORKSPACE_DOCUMENTS = ["orders.json", "tickets.json", "plan.json"];
 
 /**
  * The seeded document a parameter name is asking for, if it names one.
@@ -120,7 +120,14 @@ function stringFor(name: string, context: InputContext): string {
   if (document !== undefined) return `${context.scratch}/${document}`;
 
   if (parts.some((word) => FILEISH.has(word))) {
-    const json = parts.some((word) => word === "manifest" || word === "package" || word === "json" || word === "plan");
+    // `plan` used to sit in this list, so `planPath` resolved to `package.json`
+    // and the QA example failed trying to read test cases out of a manifest. A
+    // plan is not a package; the words here are the ones that really do name
+    // *this* workspace's `package.json`, and anything else that wants a
+    // specific document earns it by being seeded in WORKSPACE_DOCUMENTS above,
+    // where the match is on the document's own name rather than on a synonym
+    // someone guessed.
+    const json = parts.some((word) => word === "manifest" || word === "package" || word === "json");
     return `${context.scratch}/${json ? "package.json" : "README.md"}`;
   }
   if (parts.includes("path")) return `${context.scratch}/README.md`;

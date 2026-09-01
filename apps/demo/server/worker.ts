@@ -36,6 +36,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 import { createProbe } from "./probe.ts";
 import { preview, sampleFromSchema } from "./sample.ts";
+import { explainStubbedPath, workspacePathsIn } from "./stub-paths.ts";
 import type { McpServerPlan } from "./mcp-servers.ts";
 
 export interface ToolBinding {
@@ -316,6 +317,17 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
       }
 
       // No server: answer from the declared output schema, and say so.
+      //
+      // Remember any workspace path this stub was handed. A stub answers with a
+      // shape and changes nothing, so a tool whose *point* is a side effect —
+      // `browser.snapshot({ filename })` — leaves no file behind, and the next
+      // step, which may be a real server, dies on ENOENT about a path nothing
+      // in the flow looks wrong for. That error is true and tells the reader
+      // nothing; `explainStubbedPath` below turns it into what happened.
+      const promised = workspacePathsIn(args, job.scratch);
+      for (const path of promised.absolute) {
+        if (!stubbedPaths.has(path)) stubbedPaths.set(path, binding.name);
+      }
       const value = binding.outputSchema === undefined ? undefined : sampleFromSchema(binding.outputSchema, method);
       const shown = preview(value, job.maxPreviewChars);
       if (frame !== undefined) {
@@ -323,7 +335,22 @@ function buildTools(): Record<string, Record<string, (args?: unknown) => Promise
         frame.toolValue = value;
         frame.hasToolValue = true;
       }
-      emit({ tool: binding.name, mode: "stub", ms: Date.now() - began, ok: true });
+      // Said at the moment it happens, not when something later trips over it.
+      // A flow that catches its own errors — the QA runner does — never reaches
+      // the worker's top-level handler, so an explanation attached only to a
+      // crash would never be read. This one is attached to the call that made
+      // the promise nobody will keep.
+      emit({
+        tool: binding.name,
+        mode: "stub",
+        ms: Date.now() - began,
+        ok: true,
+        ...(promised.shown.length === 0
+          ? {}
+          : {
+              detail: `answered from its schema, so it wrote nothing: ${promised.shown.join(", ")} ${promised.shown.length === 1 ? "does" : "do"} not exist. A stub can return a shape; it cannot have the side effect the flow is relying on.`,
+            }),
+      });
       return value;
     };
   }
@@ -397,10 +424,15 @@ async function main(): Promise<void> {
   send({ type: "done", status: "ok", ms: now(), result: preview(result, job.maxPreviewChars) });
 }
 
+
+/** Workspace paths a stub was handed, and the tool that was handed them. */
+const stubbedPaths = new Map<string, string>();
+
 main()
   .catch((cause: unknown) => {
+    const raw = cause instanceof Error ? cause.message : String(cause);
     const error = {
-      message: cause instanceof Error ? cause.message : String(cause),
+      message: explainStubbedPath(raw, stubbedPaths) ?? raw,
       ...(cause instanceof Error && cause.stack !== undefined ? { stack: cause.stack } : {}),
     };
     // The innermost open step is the one that threw; everything above it in the

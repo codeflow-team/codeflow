@@ -33,7 +33,7 @@ import {
 declare const process: { env: Record<string, string | undefined> };
 
 const apiKey = process.env["OPENROUTER_API_KEY"];
-const model = process.env["OPENROUTER_MODEL"] ?? "stealth/ox-alpha";
+const model = process.env["OPENROUTER_MODEL"] ?? "openrouter/free";
 
 /**
  * Every construct 01 §2 supports that a brief in this suite asks for, in one

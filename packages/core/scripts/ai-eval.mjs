@@ -162,7 +162,7 @@ if (args.from !== "") {
 }
 const dotEnv = loadDotEnv(join(REPO_ROOT, ".env"));
 const apiKey = process.env.OPENROUTER_API_KEY ?? dotEnv.OPENROUTER_API_KEY;
-const model = process.env.OPENROUTER_MODEL ?? dotEnv.OPENROUTER_MODEL ?? "stealth/ox-alpha";
+const model = process.env.OPENROUTER_MODEL ?? dotEnv.OPENROUTER_MODEL ?? "openrouter/free";
 
 if (!apiKey) {
   console.error("No OPENROUTER_API_KEY in the environment or in .env — nothing to run.");

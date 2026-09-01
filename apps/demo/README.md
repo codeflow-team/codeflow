@@ -29,7 +29,7 @@ Put one in the **repo-root** `.env`:
 
 ```bash
 OPENROUTER_API_KEY=sk-or-…
-OPENROUTER_MODEL=stealth/ox-alpha    # optional; this is the default
+OPENROUTER_MODEL=openrouter/free     # optional; this is the default
 ```
 
 The key is read by the Vite dev-server process and never reaches the browser: the page posts to `/api/ai`, the dev-server middleware adds the credential, the model and the token budget, and hands back the answer. Without a key the panel says so instead of failing at request time.

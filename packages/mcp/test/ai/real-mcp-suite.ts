@@ -151,7 +151,7 @@ export interface ModelConfig {
   apiKey: string;
   model: string;
   /**
-   * `stealth/ox-alpha` is a reasoning model with a 131k context: it spends the
+   * `openrouter/free` routes to reasoning models: one spends the
    * budget on thinking before it writes anything, and a low cap returns
    * `content: null` with `finish_reason: "length"`. 32k leaves room for both.
    */

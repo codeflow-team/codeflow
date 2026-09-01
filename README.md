@@ -16,12 +16,18 @@ n8n, Zapier and friends make the **graph** the truth and generate code from it. 
 
 ## Quick start
 
-The packages are prepared to publish as `@codeflow-team/core`, `@codeflow-team/react`, `@codeflow-team/cli`, `@codeflow-team/mcp` and `@codeflow-team/examples` (v0.1.0, AGPL-3.0-or-later). Until that first release lands, work in the repository:
+Published as `@codeflow-team/core`, `@codeflow-team/react`, `@codeflow-team/cli`, `@codeflow-team/mcp` and `@codeflow-team/examples` (AGPL-3.0-or-later), each with npm provenance linking the tarball to the commit and workflow run that built it:
+
+```bash
+npm install @codeflow-team/core @codeflow-team/react
+```
+
+Or work in the repository:
 
 ```bash
 pnpm install
 pnpm build          # 6 packages
-pnpm test           # 1,640 tests
+pnpm test           # 2,145 tests
 pnpm dev            # the demo at http://localhost:5173
 ```
 
@@ -174,6 +180,8 @@ This is a complete MVP, not a 1.0. It is built against the specs in [`docs/`](do
 **Where the edges still are, stated plainly:** every edit is AST-anchored — insert and delete resolve a real syntax node and use line arithmetic only to place text at a boundary the AST chose. Insert refuses the two shapes where "the line after the anchor" is not "after the anchor's step": a statement that *is* the whole brace-less body of an `if`/loop (inserting there would put the new step outside the branch it was aimed at), and anything after a `break`/`continue`/`return` (nothing runs there). Both are refusals with a reason, because both used to be silent.
 
 What remains unsupported is structural relocation: moving a step into or out of a branch, and wrapping or unwrapping one, are rewrites rather than patches. One conservative edge is left over — appending into an `if` branch falls back to the enclosing container's scope, so it can refuse a reference to something that branch declares.
+
+**One console warning, from upstream, tracked down so nobody has to look again:** hovering a control with a tooltip logs `flushSync was called from inside a lifecycle method`. It is not this project's code and not React Flow's — `@base-ui-components/react` calls `ReactDOM.flushSync` deliberately on hover in `tooltip/store/TooltipStore.js`, with the comment *"we need to flush the state synchronously. This ensures `node.getAnimations()` knows about the new state"*. `1.0.0-rc.0` is the newest release, so there is nothing to upgrade to. Nothing misbehaves as a result — but it is a warning in a console, so it is written down rather than left for the next person to rediscover.
 
 **The demo runner is a demo runner, not a sandbox.** It starts a short allowlist of MCP servers that are harmless on a laptop, points the filesystem server at a scratch directory it deletes afterwards, and gives the worker no network of its own. That is enough to prove a flow really runs; it is not isolation. A real deployment needs a V8 isolate or a container.
 

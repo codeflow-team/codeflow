@@ -954,6 +954,2623 @@
       "staticRetries": 2,
       "runtimeRetries": 2,
       "totalMs": 520414
+    },
+    {
+      "intent": "memory-index",
+      "repetition": 1,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 110,
+      "covers": [
+        "loop",
+        "condition",
+        "while-loop",
+        "function",
+        "try"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction extractExports(content: string): string[] {\n  const exportsSet = new Set<string>();\n  const lines = content.split(/\\r?\\n/);\n  for (const line of lines) {\n    const trimmed = line.trim();\n    if (trimmed.startsWith(\"export \")) {\n      const after = trimmed.slice(7);\n      if (after.startsWith(\"default\")) {\n        const match = after.match(/\\b(\\w+)\\b/);\n        if (match) exportsSet.add(match[1]);\n      } else {\n        const match = after.match(/\\b([a-zA-Z_$][\\w$]*)/);\n        if (match) exportsSet.add(match[1]);\n      }\n    }\n  }\n  return Array.from(exportsSet);\n}\n\nfunction recordFailure(failures: string[], absolutePath: string, error: unknown): void {\n  failures.push(`${absolutePath}: read error - ${String(error)}`);\n}\n\nfunction getLines(content: string): string[] {\n  return content.split(/\\r?\\n/);\n}\n\nfunction addModuleObservation(observations: any[], obs: any): void {\n  observations.push(obs);\n}\n\nfunction pushReportLine(reportLines: string[], line: string): void {\n  reportLines.push(line);\n}\n\nfunction truncateToMax(arr: string[], max: number): string[] {\n  return arr.slice(0, max);\n}\n\nfunction delay(ms: number): Promise<void> {\n  return new Promise(resolve => setTimeout(resolve, ms));\n}\n\nfunction joinReportLines(reportLines: string[]): string {\n  return reportLines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const repoName = input.root;\n\n  await tools.memory.createEntities({\n    entities: [{ name: repoName, entityType: \"repository\", observations: [] }],\n  });\n\n  const filePaths = await tools.fs.searchFiles({\n    path: input.root,\n    pattern: \"*.ts\",\n  });\n\n  const limitedPaths = truncateToMax(filePaths, input.maxModules);\n\n  let indexedModules = 0;\n  let failedModules = 0;\n  const failures: string[] = [];\n  const moduleObservations: any[] = [];\n\n  for (const relPath of limitedPaths) {\n    const absolutePath = `${input.root}/${relPath}`;\n\n    let content: string | null = null;\n    try {\n      const fileContent = await tools.fs.readTextFile({ path: absolutePath });\n      content = fileContent;\n    } catch (e) {\n      failedModules++;\n      recordFailure(failures, absolutePath, e);\n      continue;\n    }\n\n    const lines = getLines(content);\n    const exports = extractExports(content);\n    const lineCount = lines.length;\n\n    await tools.memory.createEntities({\n      entities: [{ name: absolutePath, entityType: \"module\", observations: [String(lineCount), ...exports] }],\n    });\n\n    await tools.memory.createRelations({\n      relations: [{ from: repoName, to: absolutePath, relationType: \"contains\" }],\n    });\n\n    addModuleObservation(moduleObservations, { path: absolutePath, lineCount, exports });\n\n    indexedModules++;\n  }\n\n  let readAttempts = 0;\n  const expectedEntities = 1 + indexedModules;\n  while (readAttempts < 3) {\n    const graph = await tools.memory.readGraph({});\n    readAttempts++;\n    if (graph.entities.length >= expectedEntities) {\n      break;\n    }\n    await delay(200);\n  }\n\n  const reportLines: string[] = [];\n  pushReportLine(reportLines, \"Indexed Modules:\");\n  for (const mo of moduleObservations) {\n    pushReportLine(reportLines, `${mo.path} - ${mo.lineCount} lines`);\n  }\n  if (failures.length > 0) {\n    pushReportLine(reportLines, \"Failures:\");\n    for (const f of failures) {\n      pushReportLine(reportLines, `- ${f}`);\n    }\n  }\n  const reportContent = joinReportLines(reportLines);\n  await tools.fs.writeFile({\n    path: `${input.root}/index-report.md`,\n    content: reportContent,\n  });\n\n  return {\n    indexedModules,\n    failedModules,\n    readAttempts,\n  };\n}\n",
+          "lines": 135,
+          "level": "L2",
+          "validateRounds": 3,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 54,
+                  "column": 3,
+                  "offset": 1467
+                },
+                "end": {
+                  "line": 54,
+                  "column": 31,
+                  "offset": 1495
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "521cc5f579188c4de7f84b88c1110f4d8fc327728fb82a11368ea74d1c45d85b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 67,
+                  "column": 3,
+                  "offset": 1791
+                },
+                "end": {
+                  "line": 70,
+                  "column": 40,
+                  "offset": 1912
+                },
+                "semanticPath": "flow/stmt[4..7]",
+                "fingerprint": "555bf0c22048e22dadcb61ddd3fbb35a73a38b52fd9168ed14f8eb138be8a2e1"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 73,
+                  "column": 5,
+                  "offset": 1958
+                },
+                "end": {
+                  "line": 75,
+                  "column": 39,
+                  "offset": 2046
+                },
+                "semanticPath": "flow/for[0]/stmt[0..1]",
+                "fingerprint": "0fc69733cb2e56ad83808ccdf83c010ce0bba66c28b0b17a27db008b62aa9ce3"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 78,
+                  "column": 7,
+                  "offset": 2142
+                },
+                "end": {
+                  "line": 78,
+                  "column": 29,
+                  "offset": 2164
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[1]",
+                "fingerprint": "03ce81a4e3516daf7f8e53eacc65e4b89d54ed75b77acd16a337d7ed4febb8bd"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 80,
+                  "column": 7,
+                  "offset": 2189
+                },
+                "end": {
+                  "line": 80,
+                  "column": 23,
+                  "offset": 2205
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "5ea615a1be1b6aac79e0df897ccf5f2137f95d93dcc8cd6d344d908f42c9a9f6"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 87,
+                  "column": 5,
+                  "offset": 2363
+                },
+                "end": {
+                  "line": 87,
+                  "column": 36,
+                  "offset": 2394
+                },
+                "semanticPath": "flow/for[0]/stmt[5]",
+                "fingerprint": "efe136e8ca69a23491a713ae4e6ef6c7ca689244d28d81109dc32eea53c6319f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 99,
+                  "column": 5,
+                  "offset": 2784
+                },
+                "end": {
+                  "line": 99,
+                  "column": 22,
+                  "offset": 2801
+                },
+                "semanticPath": "flow/for[0]/stmt[9]",
+                "fingerprint": "8d3a6c408447181fda1fbbfb01e3ee6c17995076b54023c1e549d48761d1d846"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 102,
+                  "column": 3,
+                  "offset": 2809
+                },
+                "end": {
+                  "line": 103,
+                  "column": 47,
+                  "offset": 2877
+                },
+                "semanticPath": "flow/stmt[9..10]",
+                "fingerprint": "0597c7c3ef3a38579a78c683ea27c6d60c9fbde97f61fc71b1815a453b20a96d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 106,
+                  "column": 5,
+                  "offset": 2963
+                },
+                "end": {
+                  "line": 106,
+                  "column": 20,
+                  "offset": 2978
+                },
+                "semanticPath": "flow/while[0]/stmt[1]",
+                "fingerprint": "b7588070e3a2833a6685ad0d6f5d7212d3c897268ec599e2b5e1d157b9387e94"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 113,
+                  "column": 3,
+                  "offset": 3080
+                },
+                "end": {
+                  "line": 113,
+                  "column": 36,
+                  "offset": 3113
+                },
+                "semanticPath": "flow/stmt[12]",
+                "fingerprint": "687fbbb5885ec5534dd9988cf6bced6eb8789efdab978645cb0f83654fe42eaa"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 41,
+            "edges": 94,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 10,
+              "tool": 7,
+              "function": 11,
+              "loop": 4,
+              "try": 1,
+              "jump": 2,
+              "condition": 2,
+              "merge": 2,
+              "output": 1
+            },
+            "codeNodes": 10,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7560975609756098,
+            "toolCalls": 7
+          },
+          "covered": [
+            "condition",
+            "function",
+            "jump",
+            "loop",
+            "try",
+            "while-loop"
+          ],
+          "missing": [],
+          "run": {
+            "status": "failed",
+            "ms": 16438,
+            "stepsRun": 4,
+            "stepsTotal": 38,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [
+              {
+                "nodeId": "n_609b3042b0a1",
+                "label": "truncateToMax",
+                "line": 65,
+                "message": "arr.slice is not a function"
+              }
+            ],
+            "error": {
+              "message": "arr.slice is not a function",
+              "stack": "TypeError: arr.slice is not a function\n    at truncateToMax (file:///private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-lSO8YG/flow.ts:39:14)\n    at Module.flow (file:///private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-lSO8YG/flow.ts:65:49)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (file:///Users/lucas/code/codeflow/apps/demo/server/worker.ts:421:19)"
+            },
+            "result": null,
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-lSO8YG/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-lSO8YG/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file index-report.md",
+                  "ok": false,
+                  "detail": "not written (the run left: orders.json, tickets.json)"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "1 on disk (wanted ≥ 3)"
+                },
+                {
+                  "label": "memory entityType \"module\"",
+                  "ok": false,
+                  "detail": "none (types present: repository)"
+                },
+                {
+                  "label": "memory relations",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 1,
+              "memoryRelations": 0,
+              "evidence": []
+            },
+            "passed": false
+          },
+          "errorClass": "logic",
+          "errorReason": "arr.slice is not a function",
+          "modelMs": 575329,
+          "usage": {
+            "promptTokens": 8551,
+            "completionTokens": 1220,
+            "totalTokens": 9771
+          }
+        },
+        {
+          "attempt": 1,
+          "kind": "runtime-fix",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction extractExports(content: string): string[] {\n  const exportsSet = new Set<string>();\n  const lines = content.split(/\\r?\\n/);\n  for (const line of lines) {\n    const trimmed = line.trim();\n    if (trimmed.startsWith(\"export \")) {\n      const after = trimmed.slice(7);\n      if (after.startsWith(\"default\")) {\n        const match = after.match(/\\b(\\w+)\\b/);\n        if (match) exportsSet.add(match[1]);\n      } else {\n        const match = after.match(/\\b([a-zA-Z_$][\\w$]*)/);\n        if (match) exportsSet.add(match[1]);\n      }\n    }\n  }\n  return Array.from(exportsSet);\n}\n\nfunction recordFailure(failures: string[], absolutePath: string, error: unknown): void {\n  failures.push(`${absolutePath}: read error - ${String(error)}`);\n}\n\nfunction getLines(content: string): string[] {\n  return content.split(/\\r?\\n/);\n}\n\nfunction addModuleObservation(observations: any[], obs: any): void {\n  observations.push(obs);\n}\n\nfunction pushReportLine(reportLines: string[], line: string): void {\n  reportLines.push(line);\n}\n\nfunction parseFilePaths(content: string): string[] {\n  return content.split(/\\r?\\n/).filter((line) => line.trim() !== \"\");\n}\n\nfunction truncateToMax(arr: string[], max: number): string[] {\n  return arr.slice(0, max);\n}\n\nfunction delay(ms: number): Promise<void> {\n  return new Promise(resolve => setTimeout(resolve, ms));\n}\n\nfunction joinReportLines(reportLines: string[]): string {\n  return reportLines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const repoName = input.root;\n\n  await tools.memory.createEntities({\n    entities: [{ name: repoName, entityType: \"repository\", observations: [] }],\n  });\n\n  const filePaths = await tools.fs.searchFiles({\n    path: input.root,\n    pattern: \"*.ts\",\n  });\n\n  const rawPaths = parseFilePaths(filePaths.content);\n  const limitedPaths = truncateToMax(rawPaths, input.maxModules);\n\n  let indexedModules = 0;\n  let failedModules = 0;\n  const failures: string[] = [];\n  const moduleObservations: any[] = [];\n\n  for (const absolutePath of limitedPaths) {\n    let content: string | null = null;\n    try {\n      const fileContent = await tools.fs.readTextFile({ path: absolutePath });\n      content = fileContent;\n    } catch (e) {\n      failedModules++;\n      recordFailure(failures, absolutePath, e);\n      continue;\n    }\n\n    const lines = getLines(content);\n    const exports = extractExports(content);\n    const lineCount = lines.length;\n\n    await tools.memory.createEntities({\n      entities: [{ name: absolutePath, entityType: \"module\", observations: [String(lineCount), ...exports] }],\n    });\n\n    await tools.memory.createRelations({\n      relations: [{ from: repoName, to: absolutePath, relationType: \"contains\" }],\n    });\n\n    addModuleObservation(moduleObservations, { path: absolutePath, lineCount, exports });\n\n    indexedModules++;\n  }\n\n  let readAttempts = 0;\n  const expectedEntities = 1 + indexedModules;\n  while (readAttempts < 3) {\n    const graph = await tools.memory.readGraph({});\n    readAttempts++;\n    if (graph.entities.length >= expectedEntities) {\n      break;\n    }\n    await delay(200);\n  }\n\n  const reportLines: string[] = [];\n  pushReportLine(reportLines, \"Indexed Modules:\");\n  for (const mo of moduleObservations) {\n    pushReportLine(reportLines, `${mo.path} - ${mo.lineCount} lines`);\n  }\n  if (failures.length > 0) {\n    pushReportLine(reportLines, \"Failures:\");\n    for (const f of failures) {\n      pushReportLine(reportLines, `- ${f}`);\n    }\n  }\n  const reportContent = joinReportLines(reportLines);\n  await tools.fs.writeFile({\n    path: `${input.root}/index-report.md`,\n    content: reportContent,\n  });\n\n  return {\n    indexedModules,\n    failedModules,\n    readAttempts,\n  };\n}\n",
+          "lines": 138,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 58,
+                  "column": 3,
+                  "offset": 1593
+                },
+                "end": {
+                  "line": 58,
+                  "column": 31,
+                  "offset": 1621
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "521cc5f579188c4de7f84b88c1110f4d8fc327728fb82a11368ea74d1c45d85b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 72,
+                  "column": 3,
+                  "offset": 1970
+                },
+                "end": {
+                  "line": 75,
+                  "column": 40,
+                  "offset": 2091
+                },
+                "semanticPath": "flow/stmt[5..8]",
+                "fingerprint": "555bf0c22048e22dadcb61ddd3fbb35a73a38b52fd9168ed14f8eb138be8a2e1"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 78,
+                  "column": 5,
+                  "offset": 2142
+                },
+                "end": {
+                  "line": 78,
+                  "column": 39,
+                  "offset": 2176
+                },
+                "semanticPath": "flow/for[0]/stmt[0]",
+                "fingerprint": "2c2263a8b4de84399157821599b300e164ba7eb2796dde1ece38bc42c9d52a12"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 81,
+                  "column": 7,
+                  "offset": 2272
+                },
+                "end": {
+                  "line": 81,
+                  "column": 29,
+                  "offset": 2294
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[1]",
+                "fingerprint": "03ce81a4e3516daf7f8e53eacc65e4b89d54ed75b77acd16a337d7ed4febb8bd"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 83,
+                  "column": 7,
+                  "offset": 2319
+                },
+                "end": {
+                  "line": 83,
+                  "column": 23,
+                  "offset": 2335
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "5ea615a1be1b6aac79e0df897ccf5f2137f95d93dcc8cd6d344d908f42c9a9f6"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 90,
+                  "column": 5,
+                  "offset": 2493
+                },
+                "end": {
+                  "line": 90,
+                  "column": 36,
+                  "offset": 2524
+                },
+                "semanticPath": "flow/for[0]/stmt[4]",
+                "fingerprint": "efe136e8ca69a23491a713ae4e6ef6c7ca689244d28d81109dc32eea53c6319f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 102,
+                  "column": 5,
+                  "offset": 2914
+                },
+                "end": {
+                  "line": 102,
+                  "column": 22,
+                  "offset": 2931
+                },
+                "semanticPath": "flow/for[0]/stmt[8]",
+                "fingerprint": "8d3a6c408447181fda1fbbfb01e3ee6c17995076b54023c1e549d48761d1d846"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 105,
+                  "column": 3,
+                  "offset": 2939
+                },
+                "end": {
+                  "line": 106,
+                  "column": 47,
+                  "offset": 3007
+                },
+                "semanticPath": "flow/stmt[10..11]",
+                "fingerprint": "0597c7c3ef3a38579a78c683ea27c6d60c9fbde97f61fc71b1815a453b20a96d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 109,
+                  "column": 5,
+                  "offset": 3093
+                },
+                "end": {
+                  "line": 109,
+                  "column": 20,
+                  "offset": 3108
+                },
+                "semanticPath": "flow/while[0]/stmt[1]",
+                "fingerprint": "b7588070e3a2833a6685ad0d6f5d7212d3c897268ec599e2b5e1d157b9387e94"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 116,
+                  "column": 3,
+                  "offset": 3210
+                },
+                "end": {
+                  "line": 116,
+                  "column": 36,
+                  "offset": 3243
+                },
+                "semanticPath": "flow/stmt[13]",
+                "fingerprint": "687fbbb5885ec5534dd9988cf6bced6eb8789efdab978645cb0f83654fe42eaa"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 42,
+            "edges": 94,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 10,
+              "tool": 7,
+              "function": 12,
+              "loop": 4,
+              "try": 1,
+              "jump": 2,
+              "condition": 2,
+              "merge": 2,
+              "output": 1
+            },
+            "codeNodes": 10,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7619047619047619,
+            "toolCalls": 7
+          },
+          "covered": [
+            "condition",
+            "function",
+            "jump",
+            "loop",
+            "try",
+            "while-loop"
+          ],
+          "missing": [],
+          "run": {
+            "status": "failed",
+            "ms": 4338,
+            "stepsRun": 12,
+            "stepsTotal": 39,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [
+              {
+                "nodeId": "n_b6d8e70f1e8d",
+                "label": "getLines",
+                "line": 88,
+                "message": "content.split is not a function"
+              }
+            ],
+            "error": {
+              "message": "content.split is not a function",
+              "stack": "TypeError: content.split is not a function\n    at getLines (file:///private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-YwIGM7/flow.ts:27:18)\n    at Module.flow (file:///private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-YwIGM7/flow.ts:88:44)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (file:///Users/lucas/code/codeflow/apps/demo/server/worker.ts:421:19)"
+            },
+            "result": null,
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-YwIGM7/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-YwIGM7/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file index-report.md",
+                  "ok": false,
+                  "detail": "not written (the run left: orders.json, tickets.json)"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "1 on disk (wanted ≥ 3)"
+                },
+                {
+                  "label": "memory entityType \"module\"",
+                  "ok": false,
+                  "detail": "none (types present: repository)"
+                },
+                {
+                  "label": "memory relations",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 1,
+              "memoryRelations": 0,
+              "evidence": []
+            },
+            "passed": false
+          },
+          "errorClass": "logic",
+          "errorReason": "content.split is not a function",
+          "modelMs": 21960,
+          "usage": {
+            "promptTokens": 9743,
+            "completionTokens": 2366,
+            "totalTokens": 12109
+          }
+        },
+        {
+          "attempt": 2,
+          "kind": "runtime-fix",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction extractExports(content: string): string[] {\n  const exportsSet = new Set<string>();\n  const lines = content.split(/\\r?\\n/);\n  for (const line of lines) {\n    const trimmed = line.trim();\n    if (trimmed.startsWith(\"export \")) {\n      const after = trimmed.slice(7);\n      if (after.startsWith(\"default\")) {\n        const match = after.match(/\\b(\\w+)\\b/);\n        if (match) exportsSet.add(match[1]);\n      } else {\n        const match = after.match(/\\b([a-zA-Z_$][\\w$]*)/);\n        if (match) exportsSet.add(match[1]);\n      }\n    }\n  }\n  return Array.from(exportsSet);\n}\n\nfunction recordFailure(failures: string[], absolutePath: string, error: unknown): void {\n  failures.push(`${absolutePath}: read error - ${String(error)}`);\n}\n\nfunction getLines(content: string): string[] {\n  return content.split(/\\r?\\n/);\n}\n\nfunction addModuleObservation(observations: any[], obs: any): void {\n  observations.push(obs);\n}\n\nfunction pushReportLine(reportLines: string[], line: string): void {\n  reportLines.push(line);\n}\n\nfunction parseFilePaths(content: string): string[] {\n  return content.split(/\\r?\\n/).filter((line) => line.trim() !== \"\");\n}\n\nfunction truncateToMax(arr: string[], max: number): string[] {\n  return arr.slice(0, max);\n}\n\nfunction delay(ms: number): Promise<void> {\n  return new Promise(resolve => setTimeout(resolve, ms));\n}\n\nfunction joinReportLines(reportLines: string[]): string {\n  return reportLines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const repoName = input.root;\n\n  await tools.memory.createEntities({\n    entities: [{ name: repoName, entityType: \"repository\", observations: [] }],\n  });\n\n  const filePaths = await tools.fs.searchFiles({\n    path: input.root,\n    pattern: \"*.ts\",\n  });\n\n  const rawPaths = parseFilePaths(filePaths.content);\n  const limitedPaths = truncateToMax(rawPaths, input.maxModules);\n\n  let indexedModules = 0;\n  let failedModules = 0;\n  const failures: string[] = [];\n  const moduleObservations: any[] = [];\n\n  for (const absolutePath of limitedPaths) {\n    let content: string | null = null;\n    try {\n      const fileResult = await tools.fs.readTextFile({ path: absolutePath });\n      content = fileResult.content;\n    } catch (e) {\n      failedModules++;\n      recordFailure(failures, absolutePath, e);\n      continue;\n    }\n\n    const lines = getLines(content);\n    const exports = extractExports(content);\n    const lineCount = lines.length;\n\n    await tools.memory.createEntities({\n      entities: [{ name: absolutePath, entityType: \"module\", observations: [String(lineCount), ...exports] }],\n    });\n\n    await tools.memory.createRelations({\n      relations: [{ from: repoName, to: absolutePath, relationType: \"contains\" }],\n    });\n\n    addModuleObservation(moduleObservations, { path: absolutePath, lineCount, exports });\n\n    indexedModules++;\n  }\n\n  let readAttempts = 0;\n  const expectedEntities = 1 + indexedModules;\n  while (readAttempts < 3) {\n    const graph = await tools.memory.readGraph({});\n    readAttempts++;\n    if (graph.entities.length >= expectedEntities) {\n      break;\n    }\n    await delay(200);\n  }\n\n  const reportLines: string[] = [];\n  pushReportLine(reportLines, \"Indexed Modules:\");\n  for (const mo of moduleObservations) {\n    pushReportLine(reportLines, `${mo.path} - ${mo.lineCount} lines`);\n  }\n  if (failures.length > 0) {\n    pushReportLine(reportLines, \"Failures:\");\n    for (const f of failures) {\n      pushReportLine(reportLines, `- ${f}`);\n    }\n  }\n  const reportContent = joinReportLines(reportLines);\n  await tools.fs.writeFile({\n    path: `${input.root}/index-report.md`,\n    content: reportContent,\n  });\n\n  return {\n    indexedModules,\n    failedModules,\n    readAttempts,\n  };\n}\n",
+          "lines": 138,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 58,
+                  "column": 3,
+                  "offset": 1593
+                },
+                "end": {
+                  "line": 58,
+                  "column": 31,
+                  "offset": 1621
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "521cc5f579188c4de7f84b88c1110f4d8fc327728fb82a11368ea74d1c45d85b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 72,
+                  "column": 3,
+                  "offset": 1970
+                },
+                "end": {
+                  "line": 75,
+                  "column": 40,
+                  "offset": 2091
+                },
+                "semanticPath": "flow/stmt[5..8]",
+                "fingerprint": "555bf0c22048e22dadcb61ddd3fbb35a73a38b52fd9168ed14f8eb138be8a2e1"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 78,
+                  "column": 5,
+                  "offset": 2142
+                },
+                "end": {
+                  "line": 78,
+                  "column": 39,
+                  "offset": 2176
+                },
+                "semanticPath": "flow/for[0]/stmt[0]",
+                "fingerprint": "2c2263a8b4de84399157821599b300e164ba7eb2796dde1ece38bc42c9d52a12"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 81,
+                  "column": 7,
+                  "offset": 2271
+                },
+                "end": {
+                  "line": 81,
+                  "column": 36,
+                  "offset": 2300
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[1]",
+                "fingerprint": "d063b9e66aaf311293cb8496892b43970c25e099f53ade726fefced1875337ea"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 83,
+                  "column": 7,
+                  "offset": 2325
+                },
+                "end": {
+                  "line": 83,
+                  "column": 23,
+                  "offset": 2341
+                },
+                "semanticPath": "flow/for[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "5ea615a1be1b6aac79e0df897ccf5f2137f95d93dcc8cd6d344d908f42c9a9f6"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 90,
+                  "column": 5,
+                  "offset": 2499
+                },
+                "end": {
+                  "line": 90,
+                  "column": 36,
+                  "offset": 2530
+                },
+                "semanticPath": "flow/for[0]/stmt[4]",
+                "fingerprint": "efe136e8ca69a23491a713ae4e6ef6c7ca689244d28d81109dc32eea53c6319f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 102,
+                  "column": 5,
+                  "offset": 2920
+                },
+                "end": {
+                  "line": 102,
+                  "column": 22,
+                  "offset": 2937
+                },
+                "semanticPath": "flow/for[0]/stmt[8]",
+                "fingerprint": "8d3a6c408447181fda1fbbfb01e3ee6c17995076b54023c1e549d48761d1d846"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 105,
+                  "column": 3,
+                  "offset": 2945
+                },
+                "end": {
+                  "line": 106,
+                  "column": 47,
+                  "offset": 3013
+                },
+                "semanticPath": "flow/stmt[10..11]",
+                "fingerprint": "0597c7c3ef3a38579a78c683ea27c6d60c9fbde97f61fc71b1815a453b20a96d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 109,
+                  "column": 5,
+                  "offset": 3099
+                },
+                "end": {
+                  "line": 109,
+                  "column": 20,
+                  "offset": 3114
+                },
+                "semanticPath": "flow/while[0]/stmt[1]",
+                "fingerprint": "b7588070e3a2833a6685ad0d6f5d7212d3c897268ec599e2b5e1d157b9387e94"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "memory-index.flow.ts",
+                "start": {
+                  "line": 116,
+                  "column": 3,
+                  "offset": 3216
+                },
+                "end": {
+                  "line": 116,
+                  "column": 36,
+                  "offset": 3249
+                },
+                "semanticPath": "flow/stmt[13]",
+                "fingerprint": "687fbbb5885ec5534dd9988cf6bced6eb8789efdab978645cb0f83654fe42eaa"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 42,
+            "edges": 94,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 10,
+              "tool": 7,
+              "function": 12,
+              "loop": 4,
+              "try": 1,
+              "jump": 2,
+              "condition": 2,
+              "merge": 2,
+              "output": 1
+            },
+            "codeNodes": 10,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7619047619047619,
+            "toolCalls": 7
+          },
+          "covered": [
+            "condition",
+            "function",
+            "jump",
+            "loop",
+            "try",
+            "while-loop"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 4181,
+            "stepsRun": 32,
+            "stepsTotal": 39,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "indexedModules": 3,
+              "failedModules": 0,
+              "readAttempts": 1
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-XFVAeS/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-XFVAeS/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file index-report.md",
+                  "ok": true,
+                  "detail": "340 bytes"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": true,
+                  "detail": "4 on disk (wanted ≥ 3)"
+                },
+                {
+                  "label": "memory entityType \"module\"",
+                  "ok": true,
+                  "detail": "3, e.g. {\"name\":\"/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-XFVAeS/workspace/index.ts\",\"entityType\":\"module\",\"observations\":[\"5\",\"parseOrder\",\"formatMoney\",\"const\"]}"
+                },
+                {
+                  "label": "memory relations",
+                  "ok": true,
+                  "detail": "3 on disk (wanted ≥ 1)"
+                }
+              ],
+              "ok": true,
+              "newFiles": [
+                {
+                  "path": "index-report.md",
+                  "bytes": 340
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 4,
+              "memoryRelations": 3,
+              "evidence": [
+                {
+                  "path": "index-report.md",
+                  "bytes": 340,
+                  "head": "Indexed Modules:\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-XFVAeS/workspace/index.ts - 5 lines\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-XFVAeS/workspace/money.ts - 4 lines\n/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-XFVAeS/workspace/orders.test.ts - 4 lines"
+                }
+              ]
+            },
+            "passed": true
+          },
+          "errorClass": "none",
+          "errorReason": "",
+          "modelMs": 10193,
+          "usage": {
+            "promptTokens": 11053,
+            "completionTokens": 983,
+            "totalTokens": 12036
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": false,
+      "finalLevel": "L2",
+      "finalRunPassed": true,
+      "staticRetries": 2,
+      "runtimeRetries": 2,
+      "totalMs": 632800
+    },
+    {
+      "intent": "resilient-reader",
+      "repetition": 1,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 90,
+      "covers": [
+        "loop",
+        "condition",
+        "try",
+        "jump",
+        "early-return"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction joinPath(root: string, relative: string): string {\n  return `${root}/${relative}`;\n}\n\nfunction recordRead(\n  reads: { path: string; size: number }[],\n  path: string,\n  size: number\n): void {\n  reads.push({ path, size });\n}\n\nfunction recordMissing(\n  missing: { path: string; reason: string }[],\n  path: string,\n  reason: string\n): void {\n  missing.push({ path, reason });\n}\n\nexport default async function flow(input: { root: string; maxFiles: number }, tools: Tools) {\n  const checklist: string[] = [\n    \"orders.ts\",\n    \"docs/session.md\",\n    \"money.ts\",\n    \"MISSING-ONE.md\",\n    \"session.ts\",\n    \"docs/orders.md\",\n    \"nope/deep/other.md\",\n    \"index.ts\"\n  ];\n\n  if (checklist.length === 0) {\n    return { read: 0 };\n  }\n\n  const reads: { path: string; size: number }[] = [];\n  const missing: { path: string; reason: string }[] = [];\n  let successfulReads = 0;\n\n  for (const relativePath of checklist) {\n    if (successfulReads >= input.maxFiles) {\n      break;\n    }\n\n    const fullPath = joinPath(input.root, relativePath);\n\n    try {\n      const result = await tools.fs.readTextFile({ path: fullPath });\n      const content = result?.content || \"\";\n\n      if (content.trim() === \"\") {\n        continue;\n      }\n\n      recordRead(reads, fullPath, content.length);\n      successfulReads += 1;\n    } catch (error: unknown) {\n      recordMissing(missing, fullPath, String(error));\n    }\n  }\n\n  const report = [\n    \"## read\",\n    ...reads.map((r) => `- ${r.path} — ${r.size} chars`),\n    \"## missing\",\n    ...missing.map((m) => `- ${m.path} — ${m.reason}`)\n  ].join(\"\\n\\n\");\n\n  await tools.fs.writeFile({ path: joinPath(input.root, \"read-report.md\"), content: report });\n\n  const reachedLimit = successfulReads >= input.maxFiles;\n\n  return { read: successfulReads, missing: missing.length, reachedLimit };\n}\n",
+          "lines": 77,
+          "level": "L1",
+          "validateRounds": 3,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 24,
+                  "column": 3,
+                  "offset": 530
+                },
+                "end": {
+                  "line": 33,
+                  "column": 5,
+                  "offset": 723
+                },
+                "semanticPath": "flow/stmt[0]",
+                "fingerprint": "bb1ce6448f87fbc3cae6ffe1e02b6b23ba252a5aaeb64d5c2e23a32a39dc04c6"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 39,
+                  "column": 3,
+                  "offset": 788
+                },
+                "end": {
+                  "line": 41,
+                  "column": 27,
+                  "offset": 924
+                },
+                "semanticPath": "flow/stmt[2..4]",
+                "fingerprint": "987ad42d92da85a5ace4c325c8f979b4d2510d8d2e3f16787eb3be4c8a3643fd"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 52,
+                  "column": 7,
+                  "offset": 1177
+                },
+                "end": {
+                  "line": 52,
+                  "column": 45,
+                  "offset": 1215
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[1]",
+                "fingerprint": "9bf1f63f58db601f326efa503b2ed9094fdf26656d221bf49d8e2c18e70cb375"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 59,
+                  "column": 7,
+                  "offset": 1336
+                },
+                "end": {
+                  "line": 59,
+                  "column": 28,
+                  "offset": 1357
+                },
+                "semanticPath": "flow/for[0]/try[0]/stmt[4]",
+                "fingerprint": "74ef6b222d8e470e41353501d35cbeb04989c0a305a0584996a2a5864e8ae87e"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 65,
+                  "column": 3,
+                  "offset": 1457
+                },
+                "end": {
+                  "line": 70,
+                  "column": 18,
+                  "offset": 1637
+                },
+                "semanticPath": "flow/stmt[6]",
+                "fingerprint": "4ccf07567e526c842fb1b708491139115b2b6d92ac637188b4d1f40573147de6"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 74,
+                  "column": 3,
+                  "offset": 1737
+                },
+                "end": {
+                  "line": 74,
+                  "column": 58,
+                  "offset": 1792
+                },
+                "semanticPath": "flow/stmt[8]",
+                "fingerprint": "5002784303905bcec00ec50c8ce8a920209c8bf2b1e370b94122e2fe5a0b2876"
+              }
+            },
+            {
+              "severity": "warning",
+              "code": "inline-logic-in-code-node",
+              "message": "`[ \"## read\", ...reads.map((r) => `- ${r.path} — ${r.size} chars`), \"## missing\",` runs inside a custom code node, so the step is invisible on the graph. Give the call its own `const x = await …` statement if it is a tool, or move the logic into a named function and call that (01 §3 rules 4–5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 65,
+                  "column": 3,
+                  "offset": 1457
+                },
+                "end": {
+                  "line": 70,
+                  "column": 18,
+                  "offset": 1637
+                },
+                "semanticPath": "flow/stmt[6]",
+                "fingerprint": "4ccf07567e526c842fb1b708491139115b2b6d92ac637188b4d1f40573147de6"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 24,
+            "edges": 50,
+            "nodeTypes": {
+              "trigger": 1,
+              "code": 6,
+              "condition": 3,
+              "output": 2,
+              "merge": 3,
+              "loop": 1,
+              "jump": 2,
+              "function": 3,
+              "try": 1,
+              "tool": 2
+            },
+            "codeNodes": 6,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.75,
+            "toolCalls": 2
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "jump",
+            "loop",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 1982,
+            "stepsRun": 18,
+            "stepsTotal": 20,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "read": 3,
+              "missing": 2,
+              "reachedLimit": true
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-KCHSkj/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-KCHSkj/workspace",
+              "maxFiles": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file read-report.md",
+                  "ok": true,
+                  "detail": "914 bytes"
+                }
+              ],
+              "ok": true,
+              "newFiles": [
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "read-report.md",
+                  "bytes": 914
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "read-report.md",
+                  "bytes": 914,
+                  "head": "## read\n\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-KCHSkj/workspace/orders.ts — 283 chars\n\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-KCHSkj/workspace/money.ts — 96 chars\n\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-KCHSkj/workspace/session.ts — 178 chars\n\n## missing\n\n- /private/var/folders/n0/g9dgh_mn3vj3c333dz"
+                }
+              ]
+            },
+            "passed": true
+          },
+          "errorClass": "none",
+          "errorReason": "",
+          "modelMs": 177656,
+          "usage": {
+            "promptTokens": 10370,
+            "completionTokens": 552,
+            "totalTokens": 10922
+          }
+        }
+      ],
+      "firstLevel": "L1",
+      "firstRunPassed": true,
+      "finalLevel": "L1",
+      "finalRunPassed": true,
+      "staticRetries": 2,
+      "runtimeRetries": 0,
+      "totalMs": 179735
+    },
+    {
+      "intent": "parallel-audit",
+      "repetition": 1,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 110,
+      "covers": [
+        "parallel",
+        "loop",
+        "condition",
+        "function",
+        "try"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\ntype Grade = \"large\" | \"documented\" | \"plain\";\n\nfunction extractPaths(content: string): string[] {\n  return content\n    .split(\"\\n\")\n    .map((line) => line.trim())\n    .filter((line) => line.length > 0 && line.endsWith(\".ts\"));\n}\n\nfunction parseSizeFromInfo(content: string): number {\n  try {\n    const parsed = JSON.parse(content);\n    if (parsed && typeof parsed === \"object\") {\n      if (typeof parsed.size === \"number\") return parsed.size;\n      if (typeof parsed.size === \"string\") return parseInt(parsed.size, 10) || 0;\n    }\n  } catch {\n    // not JSON — fall through to regex\n  }\n  const match = content.match(/size[:\\s]*(\\d+)/i);\n  return match ? parseInt(match[1], 10) : 0;\n}\n\nfunction gradeModule(sizeBytes: number, text: string): Grade {\n  if (sizeBytes > 200) {\n    return \"large\";\n  }\n  if (text.includes(\"/**\")) {\n    return \"documented\";\n  }\n  return \"plain\";\n}\n\nfunction countByGrade(grades: { path: string; grade: Grade }[]): Record<Grade, number> {\n  const counts: Record<Grade, number> = { large: 0, documented: 0, plain: 0 };\n  for (const g of grades) {\n    counts[g.grade] += 1;\n  }\n  return counts;\n}\n\nfunction takeFirst<T>(items: T[], max: number): T[] {\n  return items.slice(0, max);\n}\n\nfunction recordGrade(grades: { path: string; grade: Grade }[], path: string, grade: Grade): void {\n  grades.push({ path, grade });\n}\n\nfunction recordReadFailure(failures: string[], path: string, error: unknown): void {\n  failures.push(`${path}: ${String(error)}`);\n}\n\nfunction buildAuditMd(\n  grades: { path: string; grade: Grade }[],\n  failures: string[],\n  thoughtCount: number\n): string {\n  const lines: string[] = [];\n  lines.push(\"# Repository Audit\");\n  lines.push(\"\");\n  lines.push(\"## Modules\");\n  lines.push(\"\");\n  for (const g of grades) {\n    lines.push(`- \\`${g.path}\\`: ${g.grade}`);\n  }\n  if (failures.length > 0) {\n    lines.push(\"\");\n    lines.push(\"## Read failures\");\n    lines.push(\"\");\n    for (const f of failures) {\n      lines.push(`- ${f}`);\n    }\n  }\n  lines.push(\"\");\n  lines.push(\"## reasoning\");\n  lines.push(\"\");\n  lines.push(`Recorded ${thoughtCount} sequential thoughts (1, 2, 3 of 3).`);\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; maxModules: number },\n  tools: Tools\n) {\n  const [listing, tree, allowed] = await Promise.all([\n    tools.fs.listDirectoryWithSizes({ path: input.root }),\n    tools.fs.directoryTree({ path: input.root }),\n    tools.fs.listAllowedDirectories({})\n  ]);\n\n  const searchResult = await tools.fs.searchFiles({ path: input.root, pattern: \"*.ts\" });\n  const allPaths = extractPaths(searchResult.content);\n  const pathsToAudit = takeFirst(allPaths, input.maxModules);\n\n  const grades: { path: string; grade: Grade }[] = [];\n  const readFailures: string[] = [];\n\n  for (const path of pathsToAudit) {\n    try {\n      const info = await tools.fs.getFileInfo({ path });\n      const sizeBytes = parseSizeFromInfo(info.content);\n      const fileContent = await tools.fs.readTextFile({ path });\n      const grade = gradeModule(sizeBytes, fileContent.content);\n      recordGrade(grades, path, grade);\n    } catch (error) {\n      recordReadFailure(readFailures, path, error);\n    }\n  }\n\n  const counts = countByGrade(grades);\n\n  const thought1 = await tools.reasoning.sequentialThinking({\n    thought: `Repository audit of ${input.root}. Gathered directory listing (${listing.content.length} chars), recursive tree (${tree.content.length} chars), and allowed directories (${allowed.content}). Found ${allPaths.length} TypeScript files; auditing ${pathsToAudit.length}. Initial grade distribution: large=${counts.large}, documented=${counts.documented}, plain=${counts.plain}.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 1,\n    totalThoughts: 3\n  });\n\n  const thought2 = await tools.reasoning.sequentialThinking({\n    thought: `Module-by-module breakdown: ${grades.map((g) => `${g.path}=${g.grade}`).join(\", \")}. Read failures: ${readFailures.length}. Evaluating whether documentation coverage and file sizes are acceptable for release.`,\n    nextThoughtNeeded: true,\n    thoughtNumber: 2,\n    totalThoughts: 3\n  });\n\n  const thought3 = await tools.reasoning.sequentialThinking({\n    thought: `Audit complete. Writing audit.md with ${grades.length} module grades and a reasoning section. Returning grade counts (large=${counts.large}, documented=${counts.documented}, plain=${counts.plain}) and thought count (3).`,\n    nextThoughtNeeded: false,\n    thoughtNumber: 3,\n    totalThoughts: 3\n  });\n\n  const auditContent = buildAuditMd(grades, readFailures, 3);\n  await tools.fs.writeFile({ path: `${input.root}/audit.md`, content: auditContent });\n\n  return {\n    grades: counts,\n    thoughtsRecorded: 3,\n    failures: readFailures\n  };\n}\n",
+          "lines": 144,
+          "level": "L2",
+          "validateRounds": 2,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 98,
+                  "column": 3,
+                  "offset": 2736
+                },
+                "end": {
+                  "line": 99,
+                  "column": 37,
+                  "offset": 2825
+                },
+                "semanticPath": "flow/stmt[4..5]",
+                "fingerprint": "1e78ae69a6ff41032641ea44d5625c3d32f3f54898afeeaa263482566508e30a"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 25,
+            "edges": 62,
+            "nodeTypes": {
+              "trigger": 1,
+              "parallel": 1,
+              "tool": 10,
+              "merge": 1,
+              "function": 8,
+              "code": 1,
+              "loop": 1,
+              "try": 1,
+              "output": 1
+            },
+            "codeNodes": 1,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.96,
+            "toolCalls": 10
+          },
+          "covered": [
+            "function",
+            "loop",
+            "parallel",
+            "try"
+          ],
+          "missing": [
+            "condition"
+          ],
+          "run": {
+            "status": "ok",
+            "ms": 3906,
+            "stepsRun": 22,
+            "stepsTotal": 23,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "grades": {
+                "large": 0,
+                "documented": 0,
+                "plain": 3
+              },
+              "thoughtsRecorded": 3,
+              "failures": []
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-6zqbWH/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-6zqbWH/workspace",
+              "maxModules": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file audit.md",
+                  "ok": true,
+                  "detail": "420 bytes"
+                }
+              ],
+              "ok": true,
+              "newFiles": [
+                {
+                  "path": "audit.md",
+                  "bytes": 420
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "audit.md",
+                  "bytes": 420,
+                  "head": "# Repository Audit\n\n## Modules\n\n- `/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-6zqbWH/workspace/index.ts`: plain\n- `/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-6zqbWH/workspace/money.ts`: plain\n- `/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-6zqbWH/workspace/orders.test.ts`: plain\n\n## reasoning\n\nRecorded 3 sequential thou"
+                }
+              ]
+            },
+            "passed": true
+          },
+          "errorClass": "none",
+          "errorReason": "",
+          "modelMs": 22429,
+          "usage": {
+            "promptTokens": 7249,
+            "completionTokens": 1228,
+            "totalTokens": 8477
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": true,
+      "finalLevel": "L2",
+      "finalRunPassed": true,
+      "staticRetries": 1,
+      "runtimeRetries": 0,
+      "totalMs": 26397
+    },
+    {
+      "intent": "batch-migrate",
+      "repetition": 1,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 130,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "try",
+        "jump",
+        "early-return",
+        "function"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction transformNote(content: string): string {\n  return `<!-- migrated -->\\n${content}`;\n}\n\nfunction recordFailure(failures: { path: string; reason: string }[], path: string, error: unknown) {\n  failures.push({ path, reason: String(error) });\n}\n\nfunction buildArchivePath(root: string, originalPath: string): string {\n  const fileName = originalPath.split(\"/\").pop() ?? originalPath;\n  return `${root}/archive/${fileName}`;\n}\n\nfunction parseSearchResult(content: string): string[] {\n  try {\n    const parsed = JSON.parse(content);\n    return parsed.files ?? parsed ?? [];\n  } catch {\n    return [];\n  }\n}\n\nfunction createBatches(files: string[], batchSize: number): string[][] {\n  const batches: string[][] = [];\n  for (let i = 0; i < files.length; i += batchSize) {\n    batches.push(files.slice(i, i + batchSize));\n  }\n  return batches;\n}\n\nfunction parseReadResult(content: string): { path: string; content: string }[] {\n  try {\n    const parsed = JSON.parse(content);\n    return parsed.files ?? parsed ?? [];\n  } catch {\n    return [];\n  }\n}\n\nfunction buildReport(migrated: number, skipped: number, failures: { path: string; reason: string }[], abandoned: boolean): string {\n  const lines = [\n    \"# Migration Report\",\n    \"\",\n    `Migrated: ${migrated}`,\n    `Skipped: ${skipped}`,\n    `Failed: ${failures.length}`,\n    `Abandoned: ${abandoned}`,\n    \"\"\n  ];\n\n  if (failures.length > 0) {\n    lines.push(\"## Failures\");\n    for (const failure of failures) {\n      lines.push(`- ${failure.path}: ${failure.reason}`);\n    }\n  }\n\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; batchSize: number; maxFailures: number },\n  tools: Tools\n) {\n  await tools.fs.createDirectory({ path: `${input.root}/archive` });\n\n  const searchResult = await tools.fs.searchFiles({\n    path: input.root,\n    pattern: \"**/*.md\"\n  });\n  const mdFiles = parseSearchResult(searchResult.content);\n\n  if (mdFiles.length === 0) {\n    await tools.fs.writeFile({\n      path: `${input.root}/migration-report.md`,\n      content: \"\"\n    });\n    return { migrated: 0, skipped: 0, failed: 0, abandoned: false };\n  }\n\n  const batches = createBatches(mdFiles, input.batchSize);\n\n  let migrated = 0;\n  let skipped = 0;\n  const failures: { path: string; reason: string }[] = [];\n  let abandoned = false;\n\n  for (const batch of batches) {\n    if (failures.length > input.maxFailures) {\n      abandoned = true;\n      break;\n    }\n\n    const readResult = await tools.fs.readMultipleFiles({ paths: batch });\n    const fileContents = parseReadResult(readResult.content);\n\n    for (const file of fileContents) {\n      if (failures.length > input.maxFailures) {\n        abandoned = true;\n        break;\n      }\n\n      const originalPath = file.path;\n      const content = file.content;\n\n      const transformed = transformNote(content);\n      if (transformed.trim() === \"<!-- migrated -->\") {\n        skipped += 1;\n        continue;\n      }\n\n      const archivePath = buildArchivePath(input.root, originalPath);\n\n      try {\n        await tools.fs.writeFile({ path: archivePath, content: transformed });\n      } catch (error) {\n        recordFailure(failures, originalPath, error);\n        continue;\n      }\n\n      try {\n        await tools.memory.createEntities({\n          entities: [\n            {\n              name: originalPath,\n              entityType: \"note\",\n              observations: [`Archived at: ${archivePath}`]\n            }\n          ]\n        });\n      } catch (error) {\n        recordFailure(failures, originalPath, error);\n        continue;\n      }\n\n      migrated += 1;\n    }\n  }\n\n  const reportContent = buildReport(migrated, skipped, failures, abandoned);\n\n  await tools.fs.writeFile({\n    path: `${input.root}/migration-report.md`,\n    content: reportContent\n  });\n\n  return { migrated, skipped, failed: failures.length, abandoned };\n}\n",
+          "lines": 150,
+          "level": "L2",
+          "validateRounds": 2,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 85,
+                  "column": 3,
+                  "offset": 2240
+                },
+                "end": {
+                  "line": 88,
+                  "column": 25,
+                  "offset": 2360
+                },
+                "semanticPath": "flow/stmt[5..8]",
+                "fingerprint": "c7167d74723f65b1b53d542db55bf0820b660462a7507baca4b1f3522272a44b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 92,
+                  "column": 7,
+                  "offset": 2448
+                },
+                "end": {
+                  "line": 92,
+                  "column": 24,
+                  "offset": 2465
+                },
+                "semanticPath": "flow/for[0]/if[0]/stmt[0]",
+                "fingerprint": "7b7e5e117b3a9f6838bb1561735b017c638c24a396fbae23abba5abde3bf7ee9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 101,
+                  "column": 9,
+                  "offset": 2720
+                },
+                "end": {
+                  "line": 101,
+                  "column": 26,
+                  "offset": 2737
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[0]/stmt[0]",
+                "fingerprint": "7b7e5e117b3a9f6838bb1561735b017c638c24a396fbae23abba5abde3bf7ee9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 105,
+                  "column": 7,
+                  "offset": 2768
+                },
+                "end": {
+                  "line": 106,
+                  "column": 36,
+                  "offset": 2835
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[1..2]",
+                "fingerprint": "079e95758969a7dc414260969222a2fddb068635ba2ed67da2aee9b400f49e48"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 110,
+                  "column": 9,
+                  "offset": 2951
+                },
+                "end": {
+                  "line": 110,
+                  "column": 22,
+                  "offset": 2964
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[1]/stmt[0]",
+                "fingerprint": "8741d99862b58990e1ea51367cece78599b26940d42eb8975d80bbf89a6d166f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 138,
+                  "column": 7,
+                  "offset": 3628
+                },
+                "end": {
+                  "line": 138,
+                  "column": 21,
+                  "offset": 3642
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[8]",
+                "fingerprint": "0e4fb335c3d21597839f9718332c4906e09cf2ea8b41591a899226a68155cf00"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 41,
+            "edges": 90,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 7,
+              "function": 8,
+              "condition": 4,
+              "output": 2,
+              "merge": 4,
+              "code": 6,
+              "loop": 2,
+              "jump": 5,
+              "try": 2
+            },
+            "codeNodes": 6,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8536585365853658,
+            "toolCalls": 7
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 2836,
+            "stepsRun": 6,
+            "stepsTotal": 36,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "migrated": 0,
+              "skipped": 0,
+              "failed": 0,
+              "abandoned": false
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-nEUWME/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-nEUWME/workspace",
+              "batchSize": 1,
+              "maxFailures": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file archive/orders.md",
+                  "ok": false,
+                  "detail": "not written (the run left: migration-report.md, orders.json, tickets.json)"
+                },
+                {
+                  "label": "file migration-report.md",
+                  "ok": false,
+                  "detail": "written but only 0 bytes (wanted at least 20)"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                },
+                {
+                  "label": "memory entityType \"note\"",
+                  "ok": false,
+                  "detail": "none (types present: —)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "migration-report.md",
+                  "bytes": 0
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": []
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "file archive/orders.md: not written (the run left: migration-report.md, orders.json, tickets.json); file migration-report.md: written but only 0 bytes (wanted at least 20); memory entities: 0 on disk (wanted ≥ 1); memory entityType \"note\": none (types present: —)",
+          "modelMs": 47046,
+          "usage": {
+            "promptTokens": 7592,
+            "completionTokens": 3306,
+            "totalTokens": 10898
+          }
+        },
+        {
+          "attempt": 1,
+          "kind": "runtime-fix",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction transformNote(content: string): string {\n  return `<!-- migrated -->\\n${content}`;\n}\n\nfunction recordFailure(failures: { path: string; reason: string }[], path: string, error: unknown) {\n  failures.push({ path, reason: String(error) });\n}\n\nfunction buildArchivePath(root: string, originalPath: string): string {\n  const fileName = originalPath.split(\"/\").pop() ?? originalPath;\n  return `${root}/archive/${fileName}`;\n}\n\nfunction parseSearchResult(content: string): string[] {\n  try {\n    const parsed = JSON.parse(content);\n    const files = parsed.files ?? parsed ?? [];\n    return Array.isArray(files) ? files : [];\n  } catch {\n    return [];\n  }\n}\n\nfunction createBatches(files: string[], batchSize: number): string[][] {\n  const batches: string[][] = [];\n  for (let i = 0; i < files.length; i += batchSize) {\n    batches.push(files.slice(i, i + batchSize));\n  }\n  return batches;\n}\n\nfunction parseReadResult(content: string): { path: string; content: string }[] {\n  try {\n    const parsed = JSON.parse(content);\n    const files = parsed.files ?? parsed ?? [];\n    return Array.isArray(files) ? files : [];\n  } catch {\n    return [];\n  }\n}\n\nfunction toAbsolutePaths(root: string, paths: string[]): string[] {\n  return paths.map((p) => (p.startsWith(\"/\") ? p : `${root}/${p}`));\n}\n\nfunction buildReport(migrated: number, skipped: number, failures: { path: string; reason: string }[], abandoned: boolean): string {\n  const lines = [\n    \"# Migration Report\",\n    \"\",\n    `Migrated: ${migrated}`,\n    `Skipped: ${skipped}`,\n    `Failed: ${failures.length}`,\n    `Abandoned: ${abandoned}`,\n    \"\"\n  ];\n\n  if (failures.length > 0) {\n    lines.push(\"## Failures\");\n    for (const failure of failures) {\n      lines.push(`- ${failure.path}: ${failure.reason}`);\n    }\n  }\n\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; batchSize: number; maxFailures: number },\n  tools: Tools\n) {\n  await tools.fs.createDirectory({ path: `${input.root}/archive` });\n\n  const searchResult = await tools.fs.searchFiles({\n    path: input.root,\n    pattern: \"**/*.md\"\n  });\n  const relativeMdFiles = parseSearchResult(searchResult.content);\n  const mdFiles = toAbsolutePaths(input.root, relativeMdFiles);\n\n  if (mdFiles.length === 0) {\n    await tools.fs.writeFile({\n      path: `${input.root}/migration-report.md`,\n      content: \"\"\n    });\n    return { migrated: 0, skipped: 0, failed: 0, abandoned: false };\n  }\n\n  const batches = createBatches(mdFiles, input.batchSize);\n\n  let migrated = 0;\n  let skipped = 0;\n  const failures: { path: string; reason: string }[] = [];\n  let abandoned = false;\n\n  for (const batch of batches) {\n    if (failures.length > input.maxFailures) {\n      abandoned = true;\n      break;\n    }\n\n    const readResult = await tools.fs.readMultipleFiles({ paths: batch });\n    const fileContents = parseReadResult(readResult.content);\n\n    for (const file of fileContents) {\n      if (failures.length > input.maxFailures) {\n        abandoned = true;\n        break;\n      }\n\n      const originalPath = file.path;\n      const content = file.content;\n\n      const transformed = transformNote(content);\n      if (transformed.trim() === \"<!-- migrated -->\") {\n        skipped += 1;\n        continue;\n      }\n\n      const archivePath = buildArchivePath(input.root, originalPath);\n\n      try {\n        await tools.fs.writeFile({ path: archivePath, content: transformed });\n      } catch (error) {\n        recordFailure(failures, originalPath, error);\n        continue;\n      }\n\n      try {\n        await tools.memory.createEntities({\n          entities: [\n            {\n              name: originalPath,\n              entityType: \"note\",\n              observations: [`Archived at: ${archivePath}`]\n            }\n          ]\n        });\n      } catch (error) {\n        recordFailure(failures, originalPath, error);\n        continue;\n      }\n\n      migrated += 1;\n    }\n  }\n\n  const reportContent = buildReport(migrated, skipped, failures, abandoned);\n\n  await tools.fs.writeFile({\n    path: `${input.root}/migration-report.md`,\n    content: reportContent\n  });\n\n  return { migrated, skipped, failed: failures.length, abandoned };\n}\n",
+          "lines": 157,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 92,
+                  "column": 3,
+                  "offset": 2558
+                },
+                "end": {
+                  "line": 95,
+                  "column": 25,
+                  "offset": 2678
+                },
+                "semanticPath": "flow/stmt[6..9]",
+                "fingerprint": "c7167d74723f65b1b53d542db55bf0820b660462a7507baca4b1f3522272a44b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 99,
+                  "column": 7,
+                  "offset": 2766
+                },
+                "end": {
+                  "line": 99,
+                  "column": 24,
+                  "offset": 2783
+                },
+                "semanticPath": "flow/for[0]/if[0]/stmt[0]",
+                "fingerprint": "7b7e5e117b3a9f6838bb1561735b017c638c24a396fbae23abba5abde3bf7ee9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 108,
+                  "column": 9,
+                  "offset": 3038
+                },
+                "end": {
+                  "line": 108,
+                  "column": 26,
+                  "offset": 3055
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[0]/stmt[0]",
+                "fingerprint": "7b7e5e117b3a9f6838bb1561735b017c638c24a396fbae23abba5abde3bf7ee9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 112,
+                  "column": 7,
+                  "offset": 3086
+                },
+                "end": {
+                  "line": 113,
+                  "column": 36,
+                  "offset": 3153
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[1..2]",
+                "fingerprint": "079e95758969a7dc414260969222a2fddb068635ba2ed67da2aee9b400f49e48"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 117,
+                  "column": 9,
+                  "offset": 3269
+                },
+                "end": {
+                  "line": 117,
+                  "column": 22,
+                  "offset": 3282
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[1]/stmt[0]",
+                "fingerprint": "8741d99862b58990e1ea51367cece78599b26940d42eb8975d80bbf89a6d166f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 145,
+                  "column": 7,
+                  "offset": 3946
+                },
+                "end": {
+                  "line": 145,
+                  "column": 21,
+                  "offset": 3960
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[8]",
+                "fingerprint": "0e4fb335c3d21597839f9718332c4906e09cf2ea8b41591a899226a68155cf00"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 42,
+            "edges": 93,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 7,
+              "function": 9,
+              "condition": 4,
+              "output": 2,
+              "merge": 4,
+              "code": 6,
+              "loop": 2,
+              "jump": 5,
+              "try": 2
+            },
+            "codeNodes": 6,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8571428571428571,
+            "toolCalls": 7
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 2636,
+            "stepsRun": 7,
+            "stepsTotal": 37,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "migrated": 0,
+              "skipped": 0,
+              "failed": 0,
+              "abandoned": false
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-HgE9Sj/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-HgE9Sj/workspace",
+              "batchSize": 1,
+              "maxFailures": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file archive/orders.md",
+                  "ok": false,
+                  "detail": "not written (the run left: migration-report.md, orders.json, tickets.json)"
+                },
+                {
+                  "label": "file migration-report.md",
+                  "ok": false,
+                  "detail": "written but only 0 bytes (wanted at least 20)"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                },
+                {
+                  "label": "memory entityType \"note\"",
+                  "ok": false,
+                  "detail": "none (types present: —)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "migration-report.md",
+                  "bytes": 0
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": []
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "file archive/orders.md: not written (the run left: migration-report.md, orders.json, tickets.json); file migration-report.md: written but only 0 bytes (wanted at least 20); memory entities: 0 on disk (wanted ≥ 1); memory entityType \"note\": none (types present: —)",
+          "modelMs": 22657,
+          "usage": {
+            "promptTokens": 8528,
+            "completionTokens": 2564,
+            "totalTokens": 11092
+          }
+        },
+        {
+          "attempt": 2,
+          "kind": "runtime-fix",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction transformNote(content: string): string {\n  return `<!-- migrated -->\\n${content}`;\n}\n\nfunction recordFailure(failures: { path: string; reason: string }[], path: string, error: unknown) {\n  failures.push({ path, reason: String(error) });\n}\n\nfunction buildArchivePath(root: string, originalPath: string): string {\n  const fileName = originalPath.split(\"/\").pop() ?? originalPath;\n  return `${root}/archive/${fileName}`;\n}\n\nfunction getMdFilesFromTree(treeContent: string, root: string): string[] {\n  try {\n    const obj = JSON.parse(treeContent);\n    const result: string[] = [];\n    function walk(node: any, relativePath: string) {\n      if (node.type === \"file\") {\n        if (node.name.endsWith(\".md\")) {\n          result.push(relativePath);\n        }\n      } else if (node.type === \"directory\") {\n        for (const child of node.children ?? []) {\n          walk(child, relativePath ? `${relativePath}/${child.name}` : child.name);\n        }\n      }\n    }\n    walk(obj, \"\");\n    return result.map(p => (p.startsWith(\"/\") ? p : `${root}/${p}`));\n  } catch {\n    return [];\n  }\n}\n\nfunction parseReadMultipleFiles(content: string): { path: string; content: string }[] {\n  try {\n    const parsed = JSON.parse(content);\n    if (Array.isArray(parsed)) {\n      const out: { path: string; content: string }[] = [];\n      for (const item of parsed) {\n        if (typeof item === \"object\" && item !== null && typeof item.path === \"string\" && typeof item.content === \"string\") {\n          out.push({ path: item.path, content: item.content });\n        }\n      }\n      return out;\n    }\n  } catch {\n    const lines = content.split(\"\\n\");\n    const result: { path: string; content: string }[] = [];\n    let currentPath: string | null = null;\n    let currentContent: string[] = [];\n    for (const line of lines) {\n      if (line.startsWith(\"=== \") && line.endsWith(\" ===\")) {\n        if (currentPath !== null) {\n          result.push({ path: currentPath, content: currentContent.join(\"\\n\") });\n        }\n        currentPath = line.slice(4, -4);\n        currentContent = [];\n      } else {\n        if (currentPath !== null) {\n          currentContent.push(line);\n        }\n      }\n    }\n    if (currentPath !== null) {\n      result.push({ path: currentPath, content: currentContent.join(\"\\n\") });\n    }\n    return result;\n  }\n  return [];\n}\n\nfunction chunkFiles(files: string[], batchSize: number): string[][] {\n  const batches: string[][] = [];\n  for (let i = 0; i < files.length; i += batchSize) {\n    batches.push(files.slice(i, i + batchSize));\n  }\n  return batches;\n}\n\nfunction buildReport(migrated: number, skipped: number, failures: { path: string; reason: string }[], abandoned: boolean): string {\n  const lines = [\n    \"# Migration Report\",\n    \"\",\n    `Migrated: ${migrated}`,\n    `Skipped: ${skipped}`,\n    `Failed: ${failures.length}`,\n    `Abandoned: ${abandoned}`,\n    \"\"\n  ];\n  if (failures.length > 0) {\n    lines.push(\"## Failures\");\n    for (const failure of failures) {\n      lines.push(`- ${failure.path}: ${failure.reason}`);\n    }\n  }\n  return lines.join(\"\\n\");\n}\n\nexport default async function flow(\n  input: { root: string; batchSize: number; maxFailures: number },\n  tools: Tools\n) {\n  await tools.fs.createDirectory({ path: `${input.root}/archive` });\n\n  const treeResult = await tools.fs.directoryTree({ path: input.root });\n  const mdFiles = getMdFilesFromTree(treeResult.content, input.root);\n\n  if (mdFiles.length === 0) {\n    await tools.fs.writeFile({\n      path: `${input.root}/migration-report.md`,\n      content: \"\"\n    });\n    return { migrated: 0, skipped: 0, failed: 0, abandoned: false };\n  }\n\n  const batches = chunkFiles(mdFiles, input.batchSize);\n\n  let migrated = 0;\n  let skipped = 0;\n  const failures: { path: string; reason: string }[] = [];\n  let abandoned = false;\n\n  for (const batch of batches) {\n    if (failures.length > input.maxFailures) {\n      abandoned = true;\n      break;\n    }\n\n    const readResult = await tools.fs.readMultipleFiles({ paths: batch });\n    const fileContents = parseReadMultipleFiles(readResult.content);\n\n    for (const file of fileContents) {\n      if (failures.length > input.maxFailures) {\n        abandoned = true;\n        break;\n      }\n\n      const originalPath = file.path;\n      const content = file.content;\n\n      const transformed = transformNote(content);\n      if (transformed.trim() === \"<!-- migrated -->\") {\n        skipped += 1;\n        continue;\n      }\n\n      const archivePath = buildArchivePath(input.root, originalPath);\n\n      try {\n        await tools.fs.writeFile({ path: archivePath, content: transformed });\n      } catch (error) {\n        recordFailure(failures, originalPath, error);\n        continue;\n      }\n\n      try {\n        await tools.memory.createEntities({\n          entities: [\n            {\n              name: originalPath,\n              entityType: \"note\",\n              observations: [`Archived at: ${archivePath}`]\n            }\n          ]\n        });\n      } catch (error) {\n        recordFailure(failures, originalPath, error);\n        continue;\n      }\n\n      migrated += 1;\n    }\n  }\n\n  const reportContent = buildReport(migrated, skipped, failures, abandoned);\n\n  await tools.fs.writeFile({\n    path: `${input.root}/migration-report.md`,\n    content: reportContent\n  });\n\n  return { migrated, skipped, failed: failures.length, abandoned };\n}\n",
+          "lines": 187,
+          "level": "L2",
+          "validateRounds": 2,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 122,
+                  "column": 3,
+                  "offset": 3737
+                },
+                "end": {
+                  "line": 125,
+                  "column": 25,
+                  "offset": 3857
+                },
+                "semanticPath": "flow/stmt[5..8]",
+                "fingerprint": "c7167d74723f65b1b53d542db55bf0820b660462a7507baca4b1f3522272a44b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 129,
+                  "column": 7,
+                  "offset": 3945
+                },
+                "end": {
+                  "line": 129,
+                  "column": 24,
+                  "offset": 3962
+                },
+                "semanticPath": "flow/for[0]/if[0]/stmt[0]",
+                "fingerprint": "7b7e5e117b3a9f6838bb1561735b017c638c24a396fbae23abba5abde3bf7ee9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 138,
+                  "column": 9,
+                  "offset": 4224
+                },
+                "end": {
+                  "line": 138,
+                  "column": 26,
+                  "offset": 4241
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[0]/stmt[0]",
+                "fingerprint": "7b7e5e117b3a9f6838bb1561735b017c638c24a396fbae23abba5abde3bf7ee9"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 142,
+                  "column": 7,
+                  "offset": 4272
+                },
+                "end": {
+                  "line": 143,
+                  "column": 36,
+                  "offset": 4339
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[1..2]",
+                "fingerprint": "079e95758969a7dc414260969222a2fddb068635ba2ed67da2aee9b400f49e48"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 147,
+                  "column": 9,
+                  "offset": 4455
+                },
+                "end": {
+                  "line": 147,
+                  "column": 22,
+                  "offset": 4468
+                },
+                "semanticPath": "flow/for[0]/for[0]/if[1]/stmt[0]",
+                "fingerprint": "8741d99862b58990e1ea51367cece78599b26940d42eb8975d80bbf89a6d166f"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "batch-migrate.flow.ts",
+                "start": {
+                  "line": 175,
+                  "column": 7,
+                  "offset": 5132
+                },
+                "end": {
+                  "line": 175,
+                  "column": 21,
+                  "offset": 5146
+                },
+                "semanticPath": "flow/for[0]/for[0]/stmt[8]",
+                "fingerprint": "0e4fb335c3d21597839f9718332c4906e09cf2ea8b41591a899226a68155cf00"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 41,
+            "edges": 91,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 7,
+              "function": 8,
+              "condition": 4,
+              "output": 2,
+              "merge": 4,
+              "code": 6,
+              "loop": 2,
+              "jump": 5,
+              "try": 2
+            },
+            "codeNodes": 6,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.8536585365853658,
+            "toolCalls": 7
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "jump",
+            "loop",
+            "nested-loop",
+            "try"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 2535,
+            "stepsRun": 6,
+            "stepsTotal": 36,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "migrated": 0,
+              "skipped": 0,
+              "failed": 0,
+              "abandoned": false
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-7MA34x/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-7MA34x/workspace",
+              "batchSize": 1,
+              "maxFailures": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file archive/orders.md",
+                  "ok": false,
+                  "detail": "not written (the run left: migration-report.md, orders.json, tickets.json)"
+                },
+                {
+                  "label": "file migration-report.md",
+                  "ok": false,
+                  "detail": "written but only 0 bytes (wanted at least 20)"
+                },
+                {
+                  "label": "memory entities",
+                  "ok": false,
+                  "detail": "0 on disk (wanted ≥ 1)"
+                },
+                {
+                  "label": "memory entityType \"note\"",
+                  "ok": false,
+                  "detail": "none (types present: —)"
+                }
+              ],
+              "ok": false,
+              "newFiles": [
+                {
+                  "path": "migration-report.md",
+                  "bytes": 0
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": []
+            },
+            "passed": false
+          },
+          "errorClass": "no-effect",
+          "errorReason": "file archive/orders.md: not written (the run left: migration-report.md, orders.json, tickets.json); file migration-report.md: written but only 0 bytes (wanted at least 20); memory entities: 0 on disk (wanted ≥ 1); memory entityType \"note\": none (types present: —)",
+          "modelMs": 82728,
+          "usage": {
+            "promptTokens": 11138,
+            "completionTokens": 1367,
+            "totalTokens": 12505
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": false,
+      "finalLevel": "L2",
+      "finalRunPassed": false,
+      "staticRetries": 2,
+      "runtimeRetries": 2,
+      "totalMs": 160623
+    },
+    {
+      "intent": "status-digest",
+      "repetition": 1,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 100,
+      "covers": [
+        "while-loop",
+        "loop",
+        "condition",
+        "try",
+        "early-return"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\ntype Location = \"New York\" | \"Chicago\" | \"Los Angeles\";\n\nconst locations: Location[] = [\"New York\", \"Chicago\", \"Los Angeles\"];\n\ntype CycleRecord = {\n  attempt: number;\n  location: string;\n  temperature: number | null;\n  conditions: string | null;\n  error: string | null;\n};\n\nfunction recordSuccess(\n  records: CycleRecord[],\n  attempt: number,\n  location: string,\n  temperature: number,\n  conditions: string,\n): void {\n  records.push({ attempt, location, temperature, conditions, error: null });\n}\n\nfunction recordFailure(\n  records: CycleRecord[],\n  attempt: number,\n  location: string,\n  error: unknown,\n): void {\n  records.push({\n    attempt,\n    location,\n    temperature: null,\n    conditions: null,\n    error: String(error),\n  });\n}\n\nfunction buildDigest(\n  records: CycleRecord[],\n  total: number,\n  successes: number,\n  failures: number,\n  average: number,\n): string {\n  const lines = records.map((r) => {\n    if (r.error !== null) {\n      return `Cycle ${r.attempt} | ${r.location} | failed | ${r.error}`;\n    }\n    return `Cycle ${r.attempt} | ${r.location} | ${r.temperature} | ${r.conditions}`;\n  });\n  return `# Status Digest\\n\\n${lines.join(\"\\n\")}\\n\\nTotals: polled=${total}, successful=${successes}, failed=${failures}, average temperature=${average}\\n`;\n}\n\nexport default async function flow(\n  input: { root: string; maxCycles: number },\n  tools: Tools,\n) {\n  if (input.maxCycles < 1) {\n    return { cycles: 0 };\n  }\n\n  let attempt = 0;\n  let successes = 0;\n  let failures = 0;\n  let totalTemp = 0;\n  const records: CycleRecord[] = [];\n\n  while (attempt < input.maxCycles) {\n    attempt += 1;\n    const location = locations[(attempt - 1) % locations.length];\n\n    await tools.everything.echo({\n      message: `Cycle ${attempt} of ${input.maxCycles}: polling ${location}`,\n    });\n\n    try {\n      const payload = await tools.everything.getStructuredContent({ location });\n      totalTemp += payload.temperature;\n      successes += 1;\n      recordSuccess(records, attempt, location, payload.temperature, payload.conditions);\n    } catch (error) {\n      failures += 1;\n      recordFailure(records, attempt, location, error);\n    }\n  }\n\n  const sum = await tools.everything.getSum({ a: successes, b: failures });\n  const total = sum as number;\n  const average = successes > 0 ? totalTemp / successes : 0;\n  const digest = buildDigest(records, total, successes, failures, average);\n\n  await tools.fs.writeFile({ path: `${input.root}/digest.md`, content: digest });\n\n  return { cycles: attempt, failed: failures, average };\n}\n",
+          "lines": 97,
+          "level": "L2",
+          "validateRounds": 1,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 64,
+                  "column": 3,
+                  "offset": 1487
+                },
+                "end": {
+                  "line": 68,
+                  "column": 37,
+                  "offset": 1602
+                },
+                "semanticPath": "flow/stmt[1..5]",
+                "fingerprint": "66ec3e37ba91f0416a49c9b6466adc1725b14de63eb987841efbc756d486d936"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 71,
+                  "column": 5,
+                  "offset": 1646
+                },
+                "end": {
+                  "line": 72,
+                  "column": 66,
+                  "offset": 1725
+                },
+                "semanticPath": "flow/while[0]/stmt[0..1]",
+                "fingerprint": "bdfcfa8b04efa5b2402e5493ab6975b6ee48b8868512af37e306eb27ae6beb6b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 80,
+                  "column": 7,
+                  "offset": 1945
+                },
+                "end": {
+                  "line": 81,
+                  "column": 22,
+                  "offset": 2000
+                },
+                "semanticPath": "flow/while[0]/try[0]/stmt[1..2]",
+                "fingerprint": "acffe68ceb188ef89468bcab95bd58dd9e9170483b5299c04e309fe6b3f91b6b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 84,
+                  "column": 7,
+                  "offset": 2119
+                },
+                "end": {
+                  "line": 84,
+                  "column": 21,
+                  "offset": 2133
+                },
+                "semanticPath": "flow/while[0]/try[0]/catch/stmt[0]",
+                "fingerprint": "ec4bd6a5f13084464624945543c38e564451a972c4c8d81ad5a17045d339c5ba"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 90,
+                  "column": 3,
+                  "offset": 2279
+                },
+                "end": {
+                  "line": 91,
+                  "column": 61,
+                  "offset": 2368
+                },
+                "semanticPath": "flow/stmt[8..9]",
+                "fingerprint": "f80456fb041504de671d3602e25becf06203ea5461a7c06aea866b979085e21d"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 19,
+            "edges": 64,
+            "nodeTypes": {
+              "trigger": 1,
+              "condition": 1,
+              "output": 2,
+              "merge": 1,
+              "code": 5,
+              "loop": 1,
+              "tool": 4,
+              "try": 1,
+              "function": 3
+            },
+            "codeNodes": 5,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7368421052631579,
+            "toolCalls": 4
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "loop",
+            "try",
+            "while-loop"
+          ],
+          "missing": [],
+          "run": {
+            "status": "ok",
+            "ms": 4468,
+            "stepsRun": 14,
+            "stepsTotal": 17,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "cycles": 3,
+              "failed": 0,
+              "average": 47.333333333333336
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-21jH4k/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-21jH4k/workspace",
+              "maxCycles": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file digest.md",
+                  "ok": true,
+                  "detail": "235 bytes"
+                }
+              ],
+              "ok": true,
+              "newFiles": [
+                {
+                  "path": "digest.md",
+                  "bytes": 235
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "digest.md",
+                  "bytes": 235,
+                  "head": "# Status Digest\n\nCycle 1 | New York | 33 | Cloudy\nCycle 2 | Chicago | 36 | Light rain / drizzle\nCycle 3 | Los Angeles | 73 | Sunny / Clear\n\nTotals: polled=[object Object], successful=3, failed=0, average temperature=47.333333333333336\n"
+                }
+              ]
+            },
+            "passed": true
+          },
+          "errorClass": "none",
+          "errorReason": "",
+          "modelMs": 362531,
+          "usage": {
+            "promptTokens": 5909,
+            "completionTokens": 18305,
+            "totalTokens": 24214
+          }
+        }
+      ],
+      "firstLevel": "L2",
+      "firstRunPassed": true,
+      "finalLevel": "L2",
+      "finalRunPassed": true,
+      "staticRetries": 0,
+      "runtimeRetries": 0,
+      "totalMs": 367031
+    },
+    {
+      "intent": "csv-ledger",
+      "repetition": 2,
+      "parameterDocs": false,
+      "toolCount": 37,
+      "systemPromptTokens": 5427,
+      "targetLines": 110,
+      "covers": [
+        "loop",
+        "nested-loop",
+        "condition",
+        "try",
+        "jump",
+        "early-return"
+      ],
+      "attempts": [
+        {
+          "attempt": 0,
+          "kind": "generate",
+          "source": "import type { Tools } from \"../generated/tools\";\n\nfunction splitLines(content: string): string[] {\n  return content.split('\\n');\n}\n\nfunction extractDropFiles(lines: string[]): string[] {\n  return lines\n    .filter((line) => line.startsWith('[FILE] '))\n    .map((line) => line.slice(7).trim())\n    .filter((name) => /^drop-.*\\.csv$/.test(name));\n}\n\nfunction formatRegionTotals(totals: Record<string, number>): string[] {\n  return Object.entries(totals).map(([region, total]) => `${region}: ${total.toFixed(2)}`);\n}\n\nfunction formatRejects(rejects: { id: string; reason: string }[]): string[] {\n  return rejects.map(r => `${r.id}: ${r.reason}`);\n}\n\nfunction getLine(rows: string[], i: number): string {\n  return rows[i].trim();\n}\n\nexport default async function flow(\n  input: { root: string; maxRows: number },\n  tools: Tools\n) {\n  // 1. List directory and extract drop-*.csv filenames\n  const listResult = await tools.fs.listDirectory({ path: input.root });\n  const lines = splitLines(listResult.content);\n  const fileNames = extractDropFiles(lines);\n\n  if (fileNames.length === 0) {\n    return { folded: 0, reason: \"no-drops\" };\n  }\n\n  // Counters\n  let foldedCount = 0;\n  let rejectedCount = 0;\n  let missingRegions = 0;\n\n  // Attempt to read drop-north.csv (missing region is counted on failure)\n  try {\n    await tools.fs.readTextFile({ path: `${input.root}/drop-north.csv` });\n  } catch {\n    missingRegions += 1;\n  }\n\n  // Aggregation structures\n  const regionTotals: Record<string, number> = {};\n  const rejects: { id: string; reason: string }[] = [];\n\n  // Process each drop file\n  outer: for (const file of fileNames) {\n    const filePath = `${input.root}/${file}`;\n    const fileData = await tools.fs.readTextFile({ path: filePath });\n    const rows = splitLines(fileData.content);\n\n    for (let i = 1; i < rows.length; i++) {\n      const line = getLine(rows, i);\n      if (!line) continue;\n\n      const parts = line.split(',');\n      const id = parts[0];\n      const region = parts[1];\n      const amountStr = parts[2];\n\n      if (!region) {\n        rejects.push({ id, reason: \"empty region\" });\n        rejectedCount++;\n        continue;\n      }\n\n      const amount = parseFloat(amountStr);\n      if (isNaN(amount)) {\n        rejects.push({ id, reason: \"invalid amount\" });\n        rejectedCount++;\n        continue;\n      }\n\n      // Valid row\n      regionTotals[region] = (regionTotals[region] || 0) + amount;\n      foldedCount++;\n\n      if (foldedCount >= input.maxRows) {\n        break outer;\n      }\n    }\n  }\n\n  // Write ledger.md\n  const ledgerLines = formatRegionTotals(regionTotals);\n  await tools.fs.writeFile({\n    path: `${input.root}/ledger.md`,\n    content: ledgerLines.join('\\n')\n  });\n\n  // Write rejects.md\n  const rejectsLines = formatRejects(rejects);\n  await tools.fs.writeFile({\n    path: `${input.root}/rejects.md`,\n    content: rejectsLines.join('\\n')\n  });\n\n  return { folded: foldedCount, rejected: rejectedCount, missingRegions };\n}\n",
+          "lines": 108,
+          "level": "L1",
+          "validateRounds": 3,
+          "diagnostics": [
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 40,
+                  "column": 3,
+                  "offset": 1150
+                },
+                "end": {
+                  "line": 42,
+                  "column": 26,
+                  "offset": 1221
+                },
+                "semanticPath": "flow/stmt[4..6]",
+                "fingerprint": "c7011cbe6e5ae9851d7423e68a53848b28323346dbad2f989a71740194a8ac7d"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 48,
+                  "column": 5,
+                  "offset": 1397
+                },
+                "end": {
+                  "line": 48,
+                  "column": 25,
+                  "offset": 1417
+                },
+                "semanticPath": "flow/try[0]/catch/stmt[0]",
+                "fingerprint": "de8658e649a49eb6e720286ec452995891cb563e0529af7695e6918ddda54537"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 52,
+                  "column": 3,
+                  "offset": 1453
+                },
+                "end": {
+                  "line": 53,
+                  "column": 56,
+                  "offset": 1557
+                },
+                "semanticPath": "flow/stmt[8..9]",
+                "fingerprint": "a60be3155d7f02f8e3f275f0477f976c196d1898ab245bb8b9ac85e3142f3558"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 57,
+                  "column": 5,
+                  "offset": 1632
+                },
+                "end": {
+                  "line": 57,
+                  "column": 46,
+                  "offset": 1673
+                },
+                "semanticPath": "flow/for[0]/stmt[0]",
+                "fingerprint": "d0cb3b8ed378b4e214bf388de4aa0e3e3b5daf7783cb12fc52e9fd8ce7c77e3b"
+              }
+            },
+            {
+              "severity": "info",
+              "code": "unsupported-construct",
+              "message": "Custom code is kept verbatim — no semantic projection.",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 61,
+                  "column": 5,
+                  "offset": 1796
+                },
+                "end": {
+                  "line": 90,
+                  "column": 6,
+                  "offset": 2521
+                },
+                "semanticPath": "flow/for[0]/stmt[3]",
+                "fingerprint": "27d106056b3acc5473cd544ff1657cd875f48e50878b7c164e240853a4d988a5"
+              }
+            },
+            {
+              "severity": "warning",
+              "code": "inline-logic-in-code-node",
+              "message": "`getLine(rows, i)` runs inside a custom code node, so the step is invisible on the graph. Give the call its own `const x = await …` statement if it is a tool, or move the logic into a named function and call that (01 §3 rules 4–5).",
+              "source": {
+                "file": "flow.ts",
+                "start": {
+                  "line": 61,
+                  "column": 5,
+                  "offset": 1796
+                },
+                "end": {
+                  "line": 90,
+                  "column": 6,
+                  "offset": 2521
+                },
+                "semanticPath": "flow/for[0]/stmt[3]",
+                "fingerprint": "27d106056b3acc5473cd544ff1657cd875f48e50878b7c164e240853a4d988a5"
+              }
+            }
+          ],
+          "shape": {
+            "nodes": 22,
+            "edges": 51,
+            "nodeTypes": {
+              "trigger": 1,
+              "tool": 5,
+              "function": 5,
+              "condition": 1,
+              "output": 2,
+              "merge": 1,
+              "code": 5,
+              "try": 1,
+              "loop": 1
+            },
+            "codeNodes": 5,
+            "unknownNodes": 0,
+            "meaningfulRatio": 0.7727272727272727,
+            "toolCalls": 5
+          },
+          "covered": [
+            "condition",
+            "early-return",
+            "function",
+            "loop",
+            "try"
+          ],
+          "missing": [
+            "nested-loop",
+            "jump"
+          ],
+          "run": {
+            "status": "ok",
+            "ms": 2704,
+            "stepsRun": 19,
+            "stepsTotal": 20,
+            "mcpCalls": 0,
+            "mcpCallsOk": 0,
+            "stubCalls": 0,
+            "toolsCalled": [],
+            "failedCalls": [],
+            "failedSteps": [],
+            "error": null,
+            "result": {
+              "folded": 3,
+              "rejected": 2,
+              "missingRegions": 1
+            },
+            "workspace": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-rRj0RU/workspace",
+            "input": {
+              "root": "/private/var/folders/n0/g9dgh_mn3vj3c333dz90kj1c0000gn/T/codeflow-run-rRj0RU/workspace",
+              "maxRows": 3
+            },
+            "effects": {
+              "checks": [
+                {
+                  "label": "file ledger.md",
+                  "ok": true,
+                  "detail": "27 bytes"
+                },
+                {
+                  "label": "file rejects.md",
+                  "ok": true,
+                  "detail": "37 bytes"
+                }
+              ],
+              "ok": true,
+              "newFiles": [
+                {
+                  "path": "ledger.md",
+                  "bytes": 27
+                },
+                {
+                  "path": "orders.json",
+                  "bytes": 426
+                },
+                {
+                  "path": "rejects.md",
+                  "bytes": 37
+                },
+                {
+                  "path": "tickets.json",
+                  "bytes": 721
+                }
+              ],
+              "memoryEntities": 0,
+              "memoryRelations": 0,
+              "evidence": [
+                {
+                  "path": "ledger.md",
+                  "bytes": 27,
+                  "head": "east: 2080.50\nwest: 2200.00"
+                },
+                {
+                  "path": "rejects.md",
+                  "bytes": 37,
+                  "head": "E-3: invalid amount\nE-4: empty region"
+                }
+              ]
+            },
+            "passed": true
+          },
+          "errorClass": "none",
+          "errorReason": "",
+          "modelMs": 257734,
+          "usage": {
+            "promptTokens": 8331,
+            "completionTokens": 3674,
+            "totalTokens": 12005
+          }
+        }
+      ],
+      "firstLevel": "L1",
+      "firstRunPassed": true,
+      "finalLevel": "L1",
+      "finalRunPassed": true,
+      "staticRetries": 2,
+      "runtimeRetries": 0,
+      "totalMs": 260557
     }
   ]
 }

@@ -622,7 +622,11 @@ function emitCall(
 function positionalNamesFor(ctx: AnalysisContext, resolution: CalleeResolution): string[] | null {
   if (resolution.kind === "tool") return null;
   if (resolution.kind === "library-function") {
-    const schema = ctx.registry.getFunction(resolution.functionName)?.inputSchema;
+    const definition = ctx.registry.getFunction(resolution.functionName);
+    // An object-style function is called like a tool, so nothing about it is
+    // positional and `null` sends it down the object-literal branch (05 §4).
+    if (definition?.argumentStyle === "object") return null;
+    const schema = definition?.inputSchema;
     return schema === undefined ? [] : (inputSchemaFieldNames(schema) ?? []);
   }
   // A local function's parameters are named in the file, but nothing registers

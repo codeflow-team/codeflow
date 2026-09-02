@@ -45,6 +45,7 @@ export function computeRegistryHash(content: RegistryContent): string {
       icon: fn.icon,
       inputSchema: fn.inputSchema,
       outputSchema: fn.outputSchema,
+      argumentStyle: fn.argumentStyle,
       code: fn.code,
       modulePath: fn.modulePath,
       editableFields: fn.editableFields,

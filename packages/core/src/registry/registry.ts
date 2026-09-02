@@ -86,6 +86,9 @@ export class Registry implements RegistryLookup {
     const registered: RegisteredFunction = {
       ...def,
       editableFields: normalizeEditableFields(def.editableFields),
+      // Said once here so nothing downstream has to re-decide what "unset"
+      // means: a definition that does not choose is called positionally (05 §4).
+      argumentStyle: def.argumentStyle ?? "positional",
     };
     this.functions.set(def.name, registered);
     this.invalidate();

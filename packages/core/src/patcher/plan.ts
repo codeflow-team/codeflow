@@ -277,6 +277,8 @@ function definitionFor(input: PlanInput): {
   inputSchema: Schema | undefined;
   editable: string[];
   label: string;
+  /** Which of the two write paths this call takes (05 §4). */
+  argumentStyle: "object" | "positional";
 } {
   const { node, registry } = input;
   if (node.type === "tool" || node.type === "unknown") {
@@ -285,6 +287,7 @@ function definitionFor(input: PlanInput): {
       inputSchema: tool?.inputSchema,
       editable: (tool?.editableFields ?? []).map((field) => field.name),
       label: node.label,
+      argumentStyle: "object",
     };
   }
   if (node.type === "function") {
@@ -293,9 +296,12 @@ function definitionFor(input: PlanInput): {
       inputSchema: definition?.inputSchema,
       editable: (definition?.editableFields ?? []).map((field) => field.name),
       label: node.label,
+      // An unregistered callee has no object literal to name fields in, so the
+      // positional path is the one that refuses with a message that fits.
+      argumentStyle: definition?.argumentStyle ?? "positional",
     };
   }
-  return { inputSchema: undefined, editable: [], label: node.label };
+  return { inputSchema: undefined, editable: [], label: node.label, argumentStyle: "positional" };
 }
 
 function planFields(input: PlanInput): PatchPlan {
@@ -324,9 +330,11 @@ function planFields(input: PlanInput): PatchPlan {
   const schemaFields = definition.inputSchema === undefined ? null : inputSchemaFieldNames(definition.inputSchema);
   const guard = scopeGuard(input);
 
-  // A function is called with positional parameters; its named schema is the
-  // bridge between an editable field and the argument at that position (05 §4).
-  if (input.node.type === "function") {
+  // A function is called with positional parameters unless it declares
+  // otherwise; its named schema is then the bridge between an editable field
+  // and the argument at that position (05 §4). An object-style function falls
+  // through to the object-literal path below — the same one tools take.
+  if (input.node.type === "function" && definition.argumentStyle === "positional") {
     return {
       edits: [...edits, ...positionalEdits(input, call, definition, schemaFields, fields, guard)],
       diagnostics,
@@ -912,9 +920,14 @@ function planInsert(input: PlanInput): PatchPlan {
     callableName = definition.name;
     awaited = spec.await ?? false;
     const args = buildArguments(schema, spec.arguments ?? {}, style, guard);
-    // A library function takes positional parameters; the named schema is the
-    // bridge between field names and positions (05 §4).
-    const names = schema === undefined ? [] : (inputSchemaFieldNames(schema) ?? []);
+    // A library function takes positional parameters unless it declares
+    // `argumentStyle: "object"`; when it does, `buildArguments` has already
+    // written the one object literal the call needs (05 §4). Otherwise the
+    // named schema is the bridge between field names and positions.
+    const names =
+      definition.argumentStyle === "object" || schema === undefined
+        ? []
+        : (inputSchemaFieldNames(schema) ?? []);
     const positional = names.map((field) => {
       const supplied = (spec.arguments ?? {})[field];
       if (supplied === undefined) {
@@ -931,7 +944,10 @@ function planInsert(input: PlanInput): PatchPlan {
         message: `"${definition.label}" was inserted with placeholders for ${[...new Set(args.placeholders)].join(", ")} — fill them in before running the flow (06 §2).`,
       });
     }
-    callText = `${definition.name}(${positional.join(", ")})`;
+    callText =
+      definition.argumentStyle === "object"
+        ? `${definition.name}(${args.text})`
+        : `${definition.name}(${positional.join(", ")})`;
     edits.push(
       ...ensureImportEdits(input.sourceFile, input.source, definition.modulePath, definition.name, style),
     );

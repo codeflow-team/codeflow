@@ -71,10 +71,25 @@ function renderParameters(parameters: Parameter[]): string {
     .join(", ");
 }
 
+/**
+ * The one object parameter of an object-style function (05 §4). An optional
+ * field is written `name?: T` rather than widened: leaving a property out shifts
+ * nothing, so the reason `renderParameters` widens does not apply here.
+ */
+function renderArgumentObject(parameters: Parameter[]): string {
+  const fields = parameters
+    .map((parameter) => `${parameter.name}${parameter.optional ? "?" : ""}: ${parameter.type}`)
+    .join("; ");
+  return fields === "" ? "args: {}" : `args: { ${fields} }`;
+}
+
 function declaration(def: RegisteredFunction, indent: string): string[] {
+  const parameters = functionParameters(def);
+  const signature =
+    def.argumentStyle === "object" ? renderArgumentObject(parameters) : renderParameters(parameters);
   return [
     ...jsDoc(def.description ?? def.label, indent),
-    `${indent}export function ${def.name}(${renderParameters(functionParameters(def))}): ${schemaToTs(def.outputSchema)};`,
+    `${indent}export function ${def.name}(${signature}): ${schemaToTs(def.outputSchema)};`,
   ];
 }
 

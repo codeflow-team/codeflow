@@ -1,7 +1,7 @@
 {
   "name": "@codeflow-team/react",
-  "version": "0.2.0",
-  "description": "React canvas for CodeFlow graphs \u2014 React Flow nodes with ELK hierarchical layout, node inspector, Monaco code panel and diagnostics, wired to the core patch engine.",
+  "version": "0.3.0",
+  "description": "React canvas for CodeFlow graphs — React Flow nodes with ELK hierarchical layout, node inspector, Monaco code panel and diagnostics, wired to the core patch engine.",
   "keywords": [
     "codeflow",
     "react",

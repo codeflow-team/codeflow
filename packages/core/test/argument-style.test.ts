@@ -35,9 +35,23 @@ import type { WorkflowGraph, WorkflowNode } from "../src/model/index.js";
 const FILE = "flow.ts";
 const LIB = "@flows/lib";
 
-/** The sample registry plus a three-parameter library function to call positionally. */
+/**
+ * The sample registry plus two library functions: one called positionally, one
+ * declared `argumentStyle: "object"` — the two shapes 05 §4 allows.
+ */
 function registryWithSteps(): Registry {
   const registry = createSampleRegistry();
+  registry.registerFunction({
+    name: "imageGen",
+    label: "Image Gen",
+    argumentStyle: "object",
+    inputSchema: { prompt: "string", variants: { type: "number" } },
+    outputSchema: "string[]",
+    code: `export async function imageGen(args: { prompt: string; variants: number }): Promise<string[]> {
+  return [];
+}`,
+    modulePath: LIB,
+  });
   registry.registerFunction({
     name: "limitRecords",
     label: "Limit",
@@ -57,6 +71,7 @@ function registryWithSteps(): Registry {
 }
 
 const IMPORTS = `import { isAuthChange, limitRecords } from "@flows/lib";`;
+const OBJECT_IMPORTS = `import { imageGen } from "@flows/lib";`;
 
 function flowSource(body: string, imports = IMPORTS): string {
   return `import type { Tools } from "../generated/tools";
@@ -125,6 +140,20 @@ describe("argumentStyle", () => {
     });
     // …plus the position, which is the only thing a name does not say here.
     expect(target.data["argumentPositions"]).toEqual({ records: 0, count: 1, keep: 2 });
+  });
+
+  it("is `object` for a library function declared object-style", () => {
+    // A library function may take one object argument instead of a parameter
+    // list (05 §4). Then it is read exactly like a tool call: the keys of the
+    // literal are the fields, and there are no positions to carry.
+    const target = node(
+      analyze(`  const heroes = await imageGen({ prompt: "x", variants: 3 });`, OBJECT_IMPORTS),
+      "flow/call:imageGen[0]",
+    );
+    expect(target.data["argumentStyle"]).toBe("object");
+    expect(target.data["argumentsEditable"]).toBe(true);
+    expect(target.data["arguments"]).toEqual({ prompt: '"x"', variants: "3" });
+    expect(target.data["argumentPositions"]).toBeUndefined();
   });
 
   it("is `opaque` when the argument is a bare variable standing in for the object", () => {
@@ -268,5 +297,61 @@ describe("editing a positional field", () => {
     const target = node(graph, "flow/call:limitRecords[0]");
     const error = await refusal(session.patchNode(target.id, { nope: 1 }));
     expect(error.code).toBe("patch-not-editable");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* writing an object-style function                                            */
+/* -------------------------------------------------------------------------- */
+
+describe("an object-style function call", () => {
+  const BODY = `  const prs = await tools.github.getNewPRs({ repo: input.repository });
+  await tools.slack.send({ channel: "#eng", message: "done" });`;
+
+  it("is inserted as one object literal, with the import it needs", async () => {
+    const { session, graph } = await open(BODY);
+    const anchor = node(graph, "flow/call:github.getNewPRs[0]");
+    const result = await session.patchNode(anchor.id, {
+      $insert: { function: "imageGen", arguments: { prompt: "hero" }, await: true },
+    });
+    // Named fields, not `imageGen("hero", undefined)` — and the field with no
+    // value is the same explicit placeholder a tool insert writes (06 §2).
+    expect(result.source).toMatch(/await imageGen\(\{ prompt: "hero", variants: undefined \}\);/);
+    expect(result.source).toMatch(/import \{[^}]*\bimageGen\b[^}]*\} from "@flows\/lib"/);
+    expect(result.diagnostics.map((d) => d.code)).toContain("needs-configuration");
+    const inserted = node(result.graph, "flow/call:imageGen[0]");
+    expect(inserted.data["argumentStyle"]).toBe("object");
+    expect(inserted.data["placeholders"]).toEqual(["variants"]);
+  });
+
+  it("is patched by editing the property, not the position", async () => {
+    const { session, graph, source } = await open(
+      `  const heroes = await imageGen({ prompt: "x", variants: 3 });`,
+      OBJECT_IMPORTS,
+    );
+    const target = node(graph, "flow/call:imageGen[0]");
+    const result = await session.patchNode(target.id, { variants: { kind: "literal", value: 6 } });
+
+    expect(result.source).toContain("imageGen({ prompt: \"x\", variants: 6 })");
+    expect(result.patches).toHaveLength(1);
+    expect(result.patches[0].oldText).toBe("3");
+    expect(result.patches[0].newText).toBe("6");
+    // Everything outside that one range is byte-identical (I3).
+    const start = result.patches[0].range.start.offset;
+    const end = result.patches[0].range.end.offset;
+    expect(result.source.slice(0, start)).toBe(source.slice(0, start));
+    expect(result.source.slice(start + 1)).toBe(source.slice(end));
+  });
+
+  it("adds a field the call left out, which a positional function cannot do", async () => {
+    // The refusal positional arguments have to make — appending would shift
+    // every later argument — does not apply to a named property.
+    const { session, graph } = await open(
+      `  const heroes = await imageGen({ prompt: "x" });`,
+      OBJECT_IMPORTS,
+    );
+    const target = node(graph, "flow/call:imageGen[0]");
+    const result = await session.patchNode(target.id, { variants: 4 });
+    expect(result.source).toContain("imageGen({ prompt: \"x\", variants: 4 })");
   });
 });

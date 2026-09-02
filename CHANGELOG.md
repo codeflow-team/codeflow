@@ -8,7 +8,34 @@ this repository are versioned together under
 Until `1.0.0`, a minor bump may contain a breaking change. Breaking changes are
 always listed first in their release.
 
-## [0.2.0] — unreleased
+## [0.3.0] — 2026-09-02
+
+A library function can now be called the way a tool is called.
+
+### Added
+
+- **`FunctionDefinition.argumentStyle`** — `"positional"` (the default, and what
+  every existing definition keeps doing) or `"object"`. An object-style function
+  takes ONE object literal whose keys are the input schema's field names, so
+  `imageGen({ prompt, variants })` is read, inserted and patched on exactly the
+  same path as a tool call: the graph reports `argumentStyle: "object"` with the
+  fields filled in and no `argumentPositions`, `$insert` writes
+  `imageGen({ prompt: "hero", variants: undefined })` instead of
+  `imageGen("hero", undefined)`, a field the call left out can be added rather
+  than refused, and `generated/lib.d.ts` declares
+  `export function imageGen(args: { prompt: string; variants: number }): string[];`.
+  Before this, such a function came back `opaque` and the inspector could not
+  edit a single field of it.
+
+### Changed
+
+- **`RegisteredFunction.argumentStyle` is required**, normalized at registration
+  — anything constructing a `RegisteredFunction` literal must supply it.
+- **The registry hash covers `argumentStyle`.** It changes the code that is
+  generated and written back, not only how a call is read, so two registries that
+  differ in it are not the same registry.
+
+## [0.2.0] — 2026-09-01
 
 The release that came out of watching someone use it. Almost everything here
 began as a person opening the demo, trying to do an ordinary thing, and finding

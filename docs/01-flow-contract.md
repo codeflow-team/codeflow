@@ -53,7 +53,7 @@ A step in a flow can call one of four kinds of callable. All become nodes, but t
 | **Local function** — a named function in the flow file itself | `function normalize(x) {...}` then `normalize(data)` | `function` node (schema inferred from the TS signature) or a minimal node | local symbol |
 | **Inline code** — a statement/expression that is none of the above | `const r = x.reduce(...)` | `code` node, source kept verbatim | fallback |
 
-A library function is first-class, on a par with a tool: the user can write a new function (in the UI via Monaco, or AI-generated), declare its input/output and **save it to the function library** — from then on it appears in the node palette like any tool and can be reused in any flow. See [05-registry.md](05-registry.md) §4.
+A library function is first-class, on a par with a tool: the user can write a new function (in the UI via Monaco, or AI-generated), declare its input/output and **save it to the function library** — from then on it appears in the node palette like any tool and can be reused in any flow. By default it is called with a parameter list (`filterAuthChanges(files)`); a function may instead declare `argumentStyle: "object"`, and is then called with one object literal (`imageGen({ prompt, variants })`) and read, inserted and patched exactly like a tool call. See [05-registry.md](05-registry.md) §4.
 
 ## 2. Supported semantics (MVP)
 

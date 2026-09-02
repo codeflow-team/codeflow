@@ -107,6 +107,11 @@ interface FunctionDefinition {
                               // field "files" ↔ the parameter of the same name at that position
   outputSchema: Schema;       // "boolean"
 
+  argumentStyle?: "object" | "positional";
+                              // how the function is called; default "positional".
+                              // "object" = one object literal whose keys are the schema's
+                              // field names, so `code` declares a single `args` parameter
+
   code: string;               // TypeScript source — with the default (file-based) store this
                               // IS the content of the file in the workspace lib/ directory:
                               // the file is the only storage, there is no second copy
@@ -147,6 +152,8 @@ Lifecycle:
 3. **Use**: drag it from the palette into a flow → the patcher inserts `import { isAuthChange } from "@flows/lib"` plus the call statement;
 4. **Edit**: "Edit Code" opens Monaco with the function's source. Changing the signature produces signature-mismatch diagnostics, with a realistic scope: the **currently open** flow shows them immediately (it re-analyzes); other flows show them the next time they are loaded/analyzed (the data model is per-flow, and core keeps no index of "which flow uses which function"); checking the whole workspace in one pass is the job of the CLI `codeflow check`, which walks the `flows/` directory ([10-ai-codegen.md](10-ai-codegen.md) §2);
 5. **In the graph**: it is a `function` node with the schema from the definition — the analyzer never has to look inside the function body.
+
+**Two calling shapes.** By default the named schema is the bridge to a **positional** parameter list: the n-th key names the n-th parameter, which is how the editable field `files` finds the argument to replace. A function may instead declare `argumentStyle: "object"`, meaning it takes ONE object literal whose keys are the schema's field names — `imageGen({ prompt, variants })`. It is then read, inserted and patched on exactly the same path as a tool call: `data.argumentStyle` is `"object"`, there are no `argumentPositions`, the palette writes `imageGen({ prompt: "hero", variants: undefined })`, a field the call left out can be added rather than refused, and `generated/lib.d.ts` declares `export function imageGen(args: { prompt: string; variants: number }): string[];`. The style is part of the registry hash, because it changes the code that is written, not only how it is read. Positional stays the default, so a definition that says nothing behaves as it always did.
 
 It is like a tool in that it has a schema and lives in the palette; it differs from a tool in that its implementation is TypeScript owned and editable by the user, not an external integration. At execution time the library code is bundled with the flow into the sandbox (a runtime concern — [09-future.md](09-future.md)).
 

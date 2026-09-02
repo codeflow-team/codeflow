@@ -45,6 +45,46 @@ declare module "@flows/lib" {
     );
   });
 
+  it("declares one `args` object for an object-style function", () => {
+    // What the function's own source says, so a flow the AI writes against this
+    // declaration compiles against the real `lib/` file (05 §4).
+    const registry = createRegistry();
+    registry.registerFunction({
+      name: "imageGen",
+      label: "Image Gen",
+      argumentStyle: "object",
+      inputSchema: { prompt: "string", variants: { type: "number" } },
+      outputSchema: "string[]",
+      code: "export async function imageGen(args: { prompt: string; variants: number }): Promise<string[]> { return []; }",
+      modulePath: "@flows/lib",
+    });
+    expect(generateLibDts(registry)).toContain(
+      "export function imageGen(args: { prompt: string; variants: number }): string[];",
+    );
+  });
+
+  it("marks an optional field of an object-style function with `?`, not `| undefined`", () => {
+    // Nothing shifts when a property is left out, so the widening a positional
+    // parameter list needs has nothing to protect here.
+    const registry = createRegistry();
+    registry.registerFunction({
+      name: "imageGen",
+      label: "Image Gen",
+      argumentStyle: "object",
+      inputSchema: {
+        type: "object",
+        properties: { prompt: { type: "string" }, model: { type: "string" } },
+        required: ["prompt"],
+      },
+      outputSchema: "string[]",
+      code: "export async function imageGen(args: { prompt: string; model?: string }): Promise<string[]> { return []; }",
+      modulePath: "@flows/lib",
+    });
+    expect(generateLibDts(registry)).toContain(
+      "export function imageGen(args: { prompt: string; model?: string }): string[];",
+    );
+  });
+
   it("marks optional JSON Schema properties, widening rather than reordering", () => {
     const registry = createRegistry();
     registry.registerFunction({

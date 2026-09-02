@@ -41,6 +41,18 @@ export interface FunctionDefinition {
   outputSchema: Schema;
 
   /**
+   * How the function is called, and therefore how its arguments are read,
+   * written and inserted (05 §4). Defaults to `"positional"`.
+   *
+   *  - `"positional"` — a parameter list; the n-th key of `inputSchema` names
+   *    the n-th parameter, which is the bridge between a field and an argument.
+   *  - `"object"` — the function takes ONE object literal whose keys are the
+   *    schema's field names, so it is analyzed, inserted and patched exactly
+   *    like a tool. Its `code` must declare a single `args` parameter.
+   */
+  argumentStyle?: "object" | "positional";
+
+  /**
    * TypeScript source. With the default (file-based) store this IS the content of
    * the file in the workspace `lib/` — the file is the only storage.
    */
@@ -65,13 +77,19 @@ export interface NodeDefinition {
   patcher?: NodePatcher;
 }
 
-/** Stored form: `editableFields` is always normalized to `EditableField[]`. */
+/**
+ * Stored form: `editableFields` is always normalized to `EditableField[]`, and a
+ * function's `argumentStyle` is always spelled out.
+ */
 export interface RegisteredTool extends Omit<ToolDefinition, "editableFields"> {
   editableFields: EditableField[];
 }
 
-export interface RegisteredFunction extends Omit<FunctionDefinition, "editableFields"> {
+export interface RegisteredFunction
+  extends Omit<FunctionDefinition, "editableFields" | "argumentStyle"> {
   editableFields: EditableField[];
+  /** Normalized: a definition that says nothing is positional (05 §4). */
+  argumentStyle: "object" | "positional";
 }
 
 export interface RegisteredNode extends Omit<NodeDefinition, "editableFields"> {
